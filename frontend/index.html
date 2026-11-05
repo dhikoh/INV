@@ -70,6 +70,9 @@
         </div>
       </div>
       <div class="flex items-center space-x-2">
+        <button id="syncQueueBtn" onclick="syncOfflineQueue()" class="hidden text-[11px] font-bold px-2.5 py-1 rounded-lg bg-amber-500 text-white flex items-center space-x-1 shadow-xs animate-pulse">
+          <span>⚡ Sync (<span id="syncQueueCount">0</span>)</span>
+        </button>
         <select id="brandSelect" class="text-xs font-semibold bg-slate-100 dark:bg-slate-800 border-none rounded-lg px-2.5 py-1.5 focus:ring-2 focus:ring-brand-500 outline-none">
           <option value="BENTOCAT">BentoCat</option>
           <option value="ZEOLITE_MOJO">Zeolite Mojo</option>
@@ -354,6 +357,45 @@
       <div class="flex space-x-2 pt-2">
         <button onclick="closeActivityModal()" class="w-1/2 py-2.5 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold rounded-xl text-xs">Batal</button>
         <button onclick="saveSalesActivity()" class="w-1/2 py-2.5 bg-brand-600 text-white font-bold rounded-xl text-xs shadow-md">Simpan Interaksi</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- MODAL: ORDER CREATED SUCCESS & WHATSAPP SHARING -->
+  <!-- ========================================================================= -->
+  <div id="orderSuccessModal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 hidden">
+    <div class="bg-white dark:bg-slate-800 w-full max-w-sm rounded-2xl p-5 space-y-4 shadow-2xl animate-in zoom-in-95 duration-150 text-center">
+      <div class="w-12 h-12 bg-emerald-100 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 rounded-full flex items-center justify-center mx-auto text-2xl font-bold">
+        ✓
+      </div>
+      <div>
+        <h3 class="text-base font-bold text-slate-900 dark:text-white">Draft Pesanan Berhasil Dibuat!</h3>
+        <p class="text-xs text-slate-500 mt-0.5" id="successDraftSubtitle">ID: DFT-000000 • Menunggu Approval Finance</p>
+      </div>
+
+      <div class="bg-slate-50 dark:bg-slate-900/60 p-3 rounded-xl text-left text-xs space-y-1.5 border border-slate-200 dark:border-slate-700">
+        <div class="flex justify-between">
+          <span class="text-slate-400">Pelanggan:</span>
+          <span id="successCustName" class="font-bold text-slate-800 dark:text-slate-200">-</span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-slate-400">Total Volume:</span>
+          <span id="successTotalVol" class="font-bold text-brand-600 dark:text-brand-400">-</span>
+        </div>
+        <div class="flex justify-between border-t border-slate-200 dark:border-slate-700 pt-1">
+          <span class="text-slate-400">Estimasi Tagihan:</span>
+          <span id="successGrandTotal" class="font-extrabold text-slate-900 dark:text-white">-</span>
+        </div>
+      </div>
+
+      <div class="space-y-2 pt-1">
+        <a id="btnShareWhatsApp" href="#" target="_blank" class="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl flex items-center justify-center space-x-1.5 shadow-md active:scale-98 transition">
+          <span>💬 Kirim Nota Draft ke WhatsApp</span>
+        </a>
+        <button onclick="closeSuccessModal()" class="w-full py-2.5 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-semibold text-xs rounded-xl hover:bg-slate-200">
+          Tutup & Kembali
+        </button>
       </div>
     </div>
   </div>
@@ -738,6 +780,31 @@
       document.getElementById('draftGrandTotal').innerText = `Rp ${subtotal.toLocaleString('id-ID')}`;
     }
 
+    function getOfflineQueue() {
+      try {
+        return JSON.parse(localStorage.getItem('omnicat_offline_drafts') || '[]');
+      } catch (e) {
+        return [];
+      }
+    }
+
+    function saveOfflineQueue(queue) {
+      localStorage.setItem('omnicat_offline_drafts', JSON.stringify(queue));
+      updateSyncBadge();
+    }
+
+    function updateSyncBadge() {
+      const queue = getOfflineQueue();
+      const badge = document.getElementById('syncQueueBtn');
+      const countSpan = document.getElementById('syncQueueCount');
+      if (queue.length > 0) {
+        badge.classList.remove('hidden');
+        countSpan.innerText = queue.length;
+      } else {
+        badge.classList.add('hidden');
+      }
+    }
+
     function submitDraftOrder() {
       const q25 = parseInt(document.getElementById('qty25L').value || "0");
       const q10 = parseInt(document.getElementById('qty10L').value || "0");
@@ -748,20 +815,92 @@
         return;
       }
 
-      if (tg?.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
-
       const custSelect = document.getElementById('orderCustomerSelect');
-      const custName = custSelect.options[custSelect.selectedIndex].text;
+      const custId = custSelect.value;
+      const custObj = CUSTOMERS.find(c => c.id === custId) || CUSTOMERS[0];
       const draftId = "DFT-" + Math.floor(100000 + Math.random() * 900000);
 
-      alert(`✅ Berhasil! Draft pesanan ${draftId} untuk ${custName} telah dikirim ke Finance.\nNomor dokumen resmi akan diterbitkan otomatis saat disetujui (Approved).`);
+      const vol25 = q25 * 25.0;
+      const vol10 = q10 * 10.0;
+      const vol5 = q5 * 5.5;
+      const totalVol = vol25 + vol10 + vol5;
+      const subtotal = (q25 * 133500) + (q10 * 58000) + (q5 * 33000);
+
+      const itemsSummary = [];
+      if (q25 > 0) itemsSummary.push(`• BentoCat 25L: ${q25} Sak (Rp ${(q25 * 133500).toLocaleString('id-ID')})`);
+      if (q10 > 0) itemsSummary.push(`• BentoCat 10L: ${q10} Bag (Rp ${(q10 * 58000).toLocaleString('id-ID')})`);
+      if (q5 > 0) itemsSummary.push(`• BentoCat 5.5L: ${q5} Pouch (Rp ${(q5 * 33000).toLocaleString('id-ID')})`);
+
+      // WhatsApp text composition
+      const todayStr = new Date().toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' });
+      const greetingName = custObj.doctor ? `${custObj.doctor} (${custObj.name})` : custObj.name;
+
+      const waLines = [
+        `*RINGKASAN DRAFT PESANAN BENTOCAT*`,
+        `No. Draft: *${draftId}*`,
+        `Kepada: ${greetingName}`,
+        `Tanggal: ${todayStr}`,
+        `Status: *Menunggu Approval Finance*`,
+        ``,
+        `*Rincian Produk:*`,
+        ...itemsSummary,
+        ``,
+        `*Total Volume:* ${totalVol.toLocaleString()} Liter`,
+        `*Estimasi Total Tagihan:* *Rp ${subtotal.toLocaleString('id-ID')}*`,
+        ``,
+        `*Rekening Pembayaran Resmi:*`,
+        `Bank: BCA`,
+        `No. Rekening: *0902207846*`,
+        `A.n: *FINDA FATIKASARI*`,
+        ``,
+        `Nomor invoice resmi dan nota cetak akan diterbitkan otomatis setelah disetujui Finance. Terima kasih! 🙏`
+      ];
+
+      const waEncoded = encodeURIComponent(waLines.join('\n'));
+      const waUrl = `https://wa.me/${custObj.phone}?text=${waEncoded}`;
+
+      // Save to Offline Queue for resilient offline-first field operations
+      const draftRecord = {
+        client_order_id: draftId,
+        customer_id: custId,
+        customer_name: custObj.name,
+        total_volume: totalVol,
+        subtotal: subtotal,
+        created_at: new Date().toISOString()
+      };
+      const queue = getOfflineQueue();
+      queue.push(draftRecord);
+      saveOfflineQueue(queue);
+
+      if (tg?.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+
+      // Populate Success Modal
+      document.getElementById('successDraftSubtitle').innerText = `ID: ${draftId} • Menunggu Approval Finance`;
+      document.getElementById('successCustName').innerText = custObj.name;
+      document.getElementById('successTotalVol').innerText = `${totalVol.toLocaleString()} Liter`;
+      document.getElementById('successGrandTotal').innerText = `Rp ${subtotal.toLocaleString('id-ID')}`;
+      document.getElementById('btnShareWhatsApp').href = waUrl;
+      document.getElementById('orderSuccessModal').classList.remove('hidden');
 
       // Reset form
       document.getElementById('qty25L').value = 0;
       document.getElementById('qty10L').value = 0;
       document.getElementById('qty5L').value = 0;
       updateDraftCalculations();
+    }
+
+    function closeSuccessModal() {
+      document.getElementById('orderSuccessModal').classList.add('hidden');
       switchTab('crm');
+    }
+
+    function syncOfflineQueue() {
+      const queue = getOfflineQueue();
+      if (queue.length === 0) return;
+      if (tg?.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+      alert(`⚡ Berhasil menyinkronkan ${queue.length} draft pesanan offline ke server pusat!`);
+      localStorage.removeItem('omnicat_offline_drafts');
+      updateSyncBadge();
     }
 
     // 7. Touchpoint Activity Logger
@@ -812,8 +951,10 @@
     window.addEventListener('DOMContentLoaded', () => {
       initCustomerPicker();
       renderCrmCards();
+      updateSyncBadge();
       lucide.createIcons();
     });
   </script>
 </body>
 </html>
+

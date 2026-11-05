@@ -266,6 +266,46 @@ class SalesPerformanceReport:
     average_order_value_idr: float
     performance_status: str
 
+@dataclass
+class TmaDraftItemInput:
+    variant_sku: str
+    quantity: int
+    unit_price: Optional[float] = None
+
+@dataclass
+class TmaDraftOrderInput:
+    client_order_id: str
+    customer_id: str
+    brand_id: str
+    items: List[TmaDraftItemInput]
+    order_date: Optional[str] = None
+    notes: Optional[str] = None
+    promo_code: Optional[str] = None
+
+@dataclass
+class TmaDraftOrderResult:
+    client_order_id: str
+    server_order_id: str
+    status: str
+    customer_id: str
+    customer_name: str
+    owner_doctor_name: Optional[str]
+    total_volume_liters: float
+    gross_subtotal_idr: float
+    discount_idr: float
+    net_grand_total_idr: float
+    whatsapp_share_url: str
+    is_synced: bool
+    error_message: Optional[str] = None
+
+@dataclass
+class TmaBatchSyncResult:
+    total_submitted: int
+    synced_count: int
+    failed_count: int
+    results: List[TmaDraftOrderResult] = field(default_factory=list)
+
+
 
 
 

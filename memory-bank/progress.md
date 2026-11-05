@@ -24,7 +24,7 @@
   - [x] Sub-task 4.2: Sales Dashboard & Target Tracking
 - [ ] **Task 5: Telegram Mini App (TMA)** [IN PROGRESS]
   - [x] Sub-task 5.1: TMA Mobile Frontend (React/Tailwind with WebApp SDK harness)
-  - [ ] Sub-task 5.2: TMA Draft Order Flow with offline sync & WhatsApp deep link
+  - [x] Sub-task 5.2: TMA Draft Order Flow with offline sync & WhatsApp deep link
   - [ ] Sub-task 5.3: Delivery Slip (Surat Jalan) Generator
 
 ## Release 3: Ecosystem & Optimization
