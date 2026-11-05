@@ -30,6 +30,7 @@ DEFAULT_VARIANT_PRICES = {
     "BC-PRM-25L": 133500.0,
     "BC-PRM-10L": 58000.0,
     "BC-PRM-5.5L": 33000.0,
+    "ZEO-LITTER": 45000.0,
     "ZEO-MOJ-25KG": 45000.0
 }
 
@@ -60,6 +61,38 @@ class TmaService:
         self.rbac.check_permission(claims, ("SALES", "SUPER_ADMIN", "FINANCE"))
         self.rbac.check_brand_access(claims, draft_in.brand_id)
 
+        # Idempotency check: if client_order_id was already processed, return existing order without duplication
+        if draft_in.client_order_id:
+            conn = self.db.get_connection()
+            cur = conn.cursor()
+            try:
+                cur.execute("""
+                    SELECT o.id, o.status, o.total_order_volume, o.gross_product_subtotal,
+                           o.discount_amount, o.net_invoice_grand_total,
+                           c.id as customer_id, c.name as customer_name, c.owner_doctor_name, c.phone
+                    FROM orders o
+                    JOIN customers c ON o.customer_id = c.id
+                    WHERE o.client_order_id = ?
+                """, (draft_in.client_order_id,))
+                existing = cur.fetchone()
+                if existing:
+                    return TmaDraftOrderResult(
+                        client_order_id=draft_in.client_order_id,
+                        server_order_id=existing["id"],
+                        status=existing["status"],
+                        customer_id=existing["customer_id"],
+                        customer_name=existing["customer_name"],
+                        owner_doctor_name=existing["owner_doctor_name"],
+                        total_volume_liters=existing["total_order_volume"],
+                        gross_subtotal_idr=existing["gross_product_subtotal"],
+                        discount_idr=existing["discount_amount"],
+                        net_grand_total_idr=existing["net_invoice_grand_total"],
+                        whatsapp_share_url="",
+                        is_synced=True
+                    )
+            finally:
+                conn.close()
+
         # 2. Validate Items
         if not draft_in.items:
             raise ValueError("Draft pesanan harus berisi minimal 1 varian produk.")
@@ -80,11 +113,13 @@ class TmaService:
             if not customer:
                 raise ValueError(f"Customer dengan ID '{draft_in.customer_id}' tidak ditemukan.")
 
-            # 4. Resolve Brand Bank Account Details
+            # 4. Resolve Brand Bank Account Details (Enforce 24-Hour Timelock)
             cur.execute("""
                 SELECT bank_name, account_number, account_holder_name
                 FROM brand_bank_accounts
                 WHERE brand_id = ? AND is_primary = 1
+                  AND (timelock_until IS NULL OR timelock_until <= CURRENT_TIMESTAMP)
+                ORDER BY created_at DESC
                 LIMIT 1
             """, (draft_in.brand_id,))
             bank_row = cur.fetchone()
@@ -115,11 +150,19 @@ class TmaService:
                 var_sku = v_row["sku"]
                 var_name = v_row["name"]
 
-                # Price resolution
-                if item.unit_price is not None and item.unit_price > 0:
+                # Price resolution & validation
+                base_price = DEFAULT_VARIANT_PRICES.get(var_sku, 133500.0)
+                if item.unit_price is not None:
+                    if item.unit_price <= 0:
+                        raise ValueError(f"Harga satuan produk '{var_name}' tidak boleh 0 atau negatif.")
+                    if item.unit_price < (base_price * 0.5):
+                        raise ValueError(
+                            f"Harga satuan Rp {item.unit_price:,.0f} untuk '{var_name}' ditolak "
+                            f"(terlalu rendah, di bawah batas minimum 50% dari harga standar Rp {base_price:,.0f})."
+                        )
                     price = item.unit_price
                 else:
-                    price = DEFAULT_VARIANT_PRICES.get(var_sku, 133500.0)
+                    price = base_price
 
                 resolved_order_items.append(OrderItemInput(
                     variant_id=var_id,
@@ -143,7 +186,8 @@ class TmaService:
                 customer_id=draft_in.customer_id,
                 order_date=order_date_val.isoformat(),
                 items=resolved_order_items,
-                notes=draft_in.notes
+                notes=draft_in.notes,
+                client_order_id=draft_in.client_order_id
             )
 
             draft_res: OrderOutput = self.inv_service.create_draft_order(create_input, sales_user_id=claims.user_id)

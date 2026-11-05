@@ -88,12 +88,18 @@ class FinancialClearanceService:
             is_healthy = cm_percent >= min_margin_pct
             requires_override = not is_healthy
 
-            # If margin is unhealthy and user is not SUPER_ADMIN, check if override reason was provided
-            if requires_override and user_role != "SUPER_ADMIN":
-                if not clearance_in.override_reason:
+            # If margin is unhealthy:
+            # 1. Non-Super Admin (Finance) is strictly forbidden from overriding unhealthy margin
+            # 2. Super Admin must provide a meaningful written override reason (>= 5 characters)
+            if requires_override:
+                if user_role != "SUPER_ADMIN":
                     raise PermissionError(
                         f"Margin kontribusi order ({cm_percent}%) berada di bawah ambang batas sehat ({min_margin_pct}%). "
-                        f"Persetujuan membutuhkan izin khusus Super Admin dengan alasan override tertulis."
+                        f"Persetujuan margin tidak sehat membutuhkan otorisasi khusus Super Admin."
+                    )
+                if not clearance_in.override_reason or len(clearance_in.override_reason.strip()) < 5:
+                    raise ValueError(
+                        "Super Admin wajib menyertakan alasan tertulis (minimal 5 karakter) untuk menyetujui pesanan dengan margin tidak sehat."
                     )
 
             # 5. Insert or Update order_financials

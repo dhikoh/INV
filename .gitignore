@@ -15,6 +15,9 @@ dist/
 *.log
 data/*.db
 data/*.sqlite3
+data/generated_catalogs/
+data/generated_invoices/
+data/generated_delivery_slips/
 
 # OS metadata
 .DS_Store

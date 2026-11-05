@@ -48,6 +48,9 @@ class AiExportService:
                     "Akses ini dibatasi ketat khusus untuk SUPER_ADMIN."
                 )
 
+            # Enforce HPP Isolation: only Management/Finance/SuperAdmin may view internal cost & margins
+            has_financial_access = user["role"] in ("SUPER_ADMIN", "FINANCE", "MANAGEMENT_VIEWER")
+
             # 2. Determine Brand Scope
             brand_id = export_input.brand_id
             if brand_id:
@@ -140,9 +143,9 @@ class AiExportService:
                     "total_volume_liters": round(r["volume_liters"], 2),
                     "total_revenue_idr": round(r["revenue_idr"], 2),
                     "transport_billed_idr": round(r["transport_billed_idr"], 2),
-                    "actual_freight_idr": round(r["actual_freight_idr"], 2),
-                    "freight_subsidy_borne_idr": round(r["subsidy_borne_idr"], 2),
-                    "freight_subsidy_ratio_percent": round((r["subsidy_borne_idr"] / r["revenue_idr"] * 100), 2) if r["revenue_idr"] > 0 else 0.0
+                    "actual_freight_idr": round(r["actual_freight_idr"], 2) if has_financial_access else None,
+                    "freight_subsidy_borne_idr": round(r["subsidy_borne_idr"], 2) if has_financial_access else None,
+                    "freight_subsidy_ratio_percent": (round((r["subsidy_borne_idr"] / r["revenue_idr"] * 100), 2) if r["revenue_idr"] > 0 else 0.0) if has_financial_access else None
                 })
 
             # 5. Customer Health & Cadence Analytics (with PDP Redaction)
@@ -231,7 +234,7 @@ class AiExportService:
                     "total_volume_liters": round(vol, 2),
                     "total_sales_idr": round(sales, 2),
                     "volume_share_percent": round(vol / total_volume * 100, 2) if total_volume > 0 else 0.0,
-                    "gross_cogs_idr": round(p["total_cogs_incurred"] or 0.0, 2)
+                    "gross_cogs_idr": round(p["total_cogs_incurred"] or 0.0, 2) if has_financial_access else None
                 })
 
             # 7. Logistics Estafet Optimization Insights
@@ -283,9 +286,9 @@ class AiExportService:
                     "net_invoice_total_idr": round(ord_row["net_invoice_grand_total"] or 0.0, 2),
                     "discount_applied_idr": round(ord_row["discount_amount"] or 0.0, 2),
                     "transport_billed_idr": round(ord_row["transport_fee_billed"] or 0.0, 2),
-                    "contribution_margin_idr": round(ord_row["contribution_margin_amount"] or 0.0, 2),
-                    "contribution_margin_percent": round(ord_row["contribution_margin_percent"] or 0.0, 2),
-                    "is_margin_healthy": bool(ord_row["is_margin_healthy"])
+                    "contribution_margin_idr": round(ord_row["contribution_margin_amount"] or 0.0, 2) if has_financial_access else None,
+                    "contribution_margin_percent": round(ord_row["contribution_margin_percent"] or 0.0, 2) if has_financial_access else None,
+                    "is_margin_healthy": bool(ord_row["is_margin_healthy"]) if has_financial_access else None
                 })
 
             # 9. Assemble Root JSON Structure conforming to JSON Schema v7
@@ -321,11 +324,11 @@ class AiExportService:
                     "net_revenue_idr": total_revenue,
                     "total_volume_liters": total_volume,
                     "average_order_value_idr": aov,
-                    "gross_cogs_idr": total_cogs,
-                    "gross_contribution_margin_idr": total_margin_amount,
-                    "gross_contribution_margin_percent": overall_margin_percent,
-                    "total_actual_freight_idr": total_actual_freight,
-                    "freight_subsidy_leakage_idr": total_subsidy_borne
+                    "gross_cogs_idr": total_cogs if has_financial_access else None,
+                    "gross_contribution_margin_idr": total_margin_amount if has_financial_access else None,
+                    "gross_contribution_margin_percent": overall_margin_percent if has_financial_access else None,
+                    "total_actual_freight_idr": total_actual_freight if has_financial_access else None,
+                    "freight_subsidy_leakage_idr": total_subsidy_borne if has_financial_access else None
                 },
                 "regional_analytics": regional_breakdown,
                 "product_breakdown": products_breakdown,

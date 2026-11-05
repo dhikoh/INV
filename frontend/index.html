@@ -866,6 +866,11 @@
         customer_name: custObj.name,
         total_volume: totalVol,
         subtotal: subtotal,
+        items: [
+          ...(q25 > 0 ? [{ variant_sku: 'BC-PRM-25L', quantity: q25, unit_price: 133500 }] : []),
+          ...(q10 > 0 ? [{ variant_sku: 'BC-PRM-10L', quantity: q10, unit_price: 58000 }] : []),
+          ...(q5 > 0 ? [{ variant_sku: 'BC-PRM-5.5L', quantity: q5, unit_price: 33000 }] : [])
+        ],
         created_at: new Date().toISOString()
       };
       const queue = getOfflineQueue();
@@ -894,13 +899,40 @@
       switchTab('crm');
     }
 
-    function syncOfflineQueue() {
+    async function syncOfflineQueue() {
       const queue = getOfflineQueue();
-      if (queue.length === 0) return;
-      if (tg?.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
-      alert(`⚡ Berhasil menyinkronkan ${queue.length} draft pesanan offline ke server pusat!`);
-      localStorage.removeItem('omnicat_offline_drafts');
-      updateSyncBadge();
+      if (queue.length === 0) {
+        alert("Antrean offline kosong. Semua pesanan telah tersinkron.");
+        return;
+      }
+
+      const token = localStorage.getItem('omnicat_jwt_token') || '';
+      try {
+        const response = await fetch('/api/orders/sync', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+          },
+          body: JSON.stringify({ drafts: queue })
+        });
+
+        if (!response.ok) {
+          const errData = await response.json().catch(() => ({}));
+          throw new Error(errData.detail || `Server error (${response.status})`);
+        }
+
+        const data = await response.json();
+        if (tg?.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+        alert(`⚡ Berhasil menyinkronkan ${data.synced_count} draft pesanan ke server pusat!`);
+        
+        // Remove only upon confirmed server synchronization
+        localStorage.removeItem('omnicat_offline_drafts');
+        updateSyncBadge();
+      } catch (err) {
+        if (tg?.HapticFeedback) tg.HapticFeedback.notificationOccurred('error');
+        alert(`⚠️ Sinkronisasi ditunda: ${err.message}. Draft tetap aman tersimpan offline.`);
+      }
     }
 
     // 7. Touchpoint Activity Logger
@@ -947,12 +979,34 @@
       if (tg?.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
     }
 
+    async function fetchDynamicCustomers() {
+      const token = localStorage.getItem('omnicat_jwt_token');
+      if (!token) return;
+      try {
+        const res = await fetch('/api/customers', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.customers && data.customers.length > 0) {
+            CUSTOMERS.length = 0;
+            data.customers.forEach(c => CUSTOMERS.push(c));
+            renderCrmCards();
+            initCustomerPicker();
+          }
+        }
+      } catch (e) {
+        console.warn("Mode Offline: Menggunakan data lokal.");
+      }
+    }
+
     // Initialize on load
     window.addEventListener('DOMContentLoaded', () => {
       initCustomerPicker();
       renderCrmCards();
       updateSyncBadge();
       lucide.createIcons();
+      fetchDynamicCustomers();
     });
   </script>
 </body>

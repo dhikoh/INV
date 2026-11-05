@@ -23,6 +23,7 @@ class CreateOrderInput:
     transport_fee_billed: float = 0.0
     unloading_fee_billed: float = 0.0
     notes: Optional[str] = None
+    client_order_id: Optional[str] = None
 
 @dataclass
 class OrderItemOutput:
@@ -58,6 +59,7 @@ class OrderOutput:
     approved_by_admin_id: Optional[str] = None
     approved_at: Optional[str] = None
     rejection_reason: Optional[str] = None
+    client_order_id: Optional[str] = None
     notes: Optional[str] = None
     items: List[OrderItemOutput] = field(default_factory=list)
 

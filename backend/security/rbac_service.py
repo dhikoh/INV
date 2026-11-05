@@ -14,12 +14,15 @@ import urllib.parse
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
 
+import secrets
 import jwt
 
 from backend.database import db
 from backend.models import TokenClaims, TelegramAuthResult
 
-DEFAULT_JWT_SECRET = os.environ.get("OMNICAT_JWT_SECRET", "omnicat-enterprise-distribution-secret-key-2026")
+# Cryptographically strong secret: reads from environment or generates secure per-process token
+_ENV_JWT_SECRET = os.environ.get("OMNICAT_JWT_SECRET")
+DEFAULT_JWT_SECRET = _ENV_JWT_SECRET if _ENV_JWT_SECRET else secrets.token_hex(32)
 JWT_ALGORITHM = "HS256"
 
 VALID_ROLES = ("SUPER_ADMIN", "FINANCE", "SALES", "MANAGEMENT_VIEWER")
@@ -182,15 +185,17 @@ class RbacService:
             """, (tg_id,))
             user_row = cur.fetchone()
 
-            # If user not linked by telegram_user_id, link to sales user by default for testing / first login
             if not user_row:
-                cur.execute("SELECT id, username, role FROM users WHERE role = 'SALES' LIMIT 1")
-                user_row = cur.fetchone()
-                if user_row:
-                    cur.execute("UPDATE users SET telegram_user_id = ? WHERE id = ?", (tg_id, user_row["id"]))
+                return TelegramAuthResult(
+                    is_valid=False,
+                    rejection_reason=f"Akun Telegram (ID: {tg_id}) belum terdaftar atau belum ditautkan ke akun pengguna OmniCat. Hubungi Administrator."
+                )
 
-            if not user_row:
-                return TelegramAuthResult(is_valid=False, rejection_reason=f"Akun Telegram {tg_id} belum terdaftar di sistem.")
+            if not user_row["is_active"]:
+                return TelegramAuthResult(
+                    is_valid=False,
+                    rejection_reason="Akun pengguna OmniCat ini telah dinonaktifkan oleh Administrator."
+                )
 
             # Issue session token
             session_token = self.generate_token(user_row["id"])

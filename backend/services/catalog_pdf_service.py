@@ -63,7 +63,7 @@ class CatalogPdfService:
             cur.execute("""
                 SELECT bank_name, account_number, account_holder_name, is_primary
                 FROM brand_bank_accounts
-                WHERE brand_id = ?
+                WHERE brand_id = ? AND (timelock_until IS NULL OR timelock_until <= CURRENT_TIMESTAMP)
                 ORDER BY is_primary DESC, created_at ASC
             """, (brand["id"],))
             bank_accounts = cur.fetchall()

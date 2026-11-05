@@ -1,26 +1,96 @@
-# SYSTEM BLUEPRINT (v3.0): OMNICAT ENTERPRISE DISTRIBUTION, CRM & FINANCIAL ENGINE
-**Document Version:** `3.0.0-PRODUCTION-READY`  
+# SYSTEM BLUEPRINT (v0.9.5): OMNICAT ENTERPRISE DISTRIBUTION, CRM & FINANCIAL ENGINE
+**Document Version:** `v0.9.5-POST-AUDIT`  
 **Date:** November 2026  
-**Status:** Production Complete & Audit-Ready (All 3 Releases Verified with 80/80 Tests Passing)  
-**Database:** PostgreSQL 16 (Timezone: `Asia/Jakarta`)  
-**Auditor Reference:** Menjawab seluruh temuan pada `Laporan Audit Rencana Aplikasi OmniCat.docx`  
+**Status:** Post-Audit Remediated & End-to-End REST Enabled (92/92 Tests Passing)  
+**Database:** SQLite 3.38+ WAL Engine (Production Containerized) / PostgreSQL 16 (Scale-out Target)  
+**Auditor Reference:** Menjawab seluruh temuan pada `Laporan Audit Rencana Aplikasi OmniCat.docx` dan Audit Tindak Lanjut  
 
 ---
 
 ## 1. Arsitektur Tingkat Tinggi & Prinsip Desain
 
-Berdasarkan hasil audit tim, sistem dirancang dengan prinsip:
+Berdasarkan hasil audit komprehensif, arsitektur sistem OmniCat distandarisasi dengan prinsip:
 1. **Pemisahan Tiga Rilis Bertahap**: Rilis 1 (Inti Uang & Dokumen), Rilis 2 (Penjualan Lapangan & CRM), Rilis 3 (Optimasi & Ekosistem).
 2. **Definisi Finansial yang Presisi**:
    - Membedakan dengan tegas antara **Biaya Transport yang Ditagihkan ke Pelanggan** (komponen invoice) dan **Biaya Riil Ekspedisi Truk Vendor**.
    - **Subsidi Ongkir Bersih** dihitung sebagai: $\text{Realisasi Biaya Ekspedisi} - \text{Biaya Transport yang Ditagihkan ke Pelanggan}$.
    - Menggunakan istilah baku **Laba Kontribusi Kotor (Contribution Margin)** dan bukan *Net Profit*, karena belum memperhitungkan overhead umum dan beban operasional tetap (SG&A).
 3. **Pemisahan Data Finansial (HPP Isolation)**:
-   - Data HPP/COGS dan Laba dipisahkan ke tabel khusus (`order_financials` & `product_cogs_history`) dengan hak akses database ketat agar tidak bocor ke peran Sales.
-4. **Keamanan Dokumen Anti-Lompat**:
-   - Menggunakan `INSERT ... ON CONFLICT (customer_id, brand_id) DO UPDATE` dengan row lock PostgreSQL.
+   - Data HPP/COGS dan Laba dipisahkan ke tabel khusus (`order_financials` & `product_cogs_history`) dengan hak akses ketat.
+   - Peran `SALES` terisolasi secara kriptografis dan logika query dari melihat modal perusahaan, baik pada query service layer maupun output ekspor analitik AI (`ai_export_service.py`).
+4. **Keamanan Dokumen Anti-Lompat & Anti-Benturan**:
+   - Nomor invoice diisolasi per wilayah dan tahun menggunakan tabel `invoice_sequences (brand_id, region_id, year, last_invoice_seq)`, memecahkan masalah benturan nomor antar pelanggan di wilayah yang sama.
    - Kolom `doc_number` di tabel `orders` bersifat *nullable* sampai pesanan resmi disetujui (Status `APPROVED`).
-   - Penambahan status dokumen: `DRAFT`, `PENDING_APPROVAL`, `APPROVED`, `REVISION_REQUESTED`, `VOID`, `SUPERSEDED`, `SKIPPED_AUDIT`.
+   - Order revisi mempertahankan nomor dokumen pelanggan asal (format `-R{n}`) dan otomatis menandai invoice lama berstatus `SUPERSEDED`, menghapusnya dari laporan Umur Piutang (*Aging AR*).
+5. **REST API & Containerized Deployment (Coolify Ready)**:
+   - Service layer dibungkus dalam FastAPI REST Application (`backend/main.py`).
+   - Containerized via multi-stage `Dockerfile` dan `docker-compose.yml`.
+   - Database SQLite WAL dipetakan ke Docker Persistent Volume (`/app/data`) untuk mencegah kehilangan data saat redeploy di Coolify.
+
+---
+
+## 1.1. Spesifikasi REST API & Jalur End-to-End
+
+```mermaid
+flowchart LR
+    subgraph Clients["APLIKASI KLIEN"]
+        TMA["Telegram Mini App (Field Sales)"]
+        Browser["Finance / Admin Web Portal"]
+        Public["Pelanggan / Scan QR Dokumen"]
+    end
+
+    subgraph FastAPIServer["FASTAPI REST BACKEND (backend/main.py)"]
+        AuthRoute["POST /api/auth/telegram<br>(Validasi HMAC & JWT)"]
+        MasterRoute["GET /api/customers<br>GET /api/products"]
+        OrderRoute["POST /api/orders/draft<br>POST /api/orders/sync<br>(Idempotency via client_order_id)"]
+        FinRoute["GET /api/finance/pending<br>POST /api/finance/approve<br>POST /api/finance/reject"]
+        VerifyRoute["GET /verify/{invoice_id}<br>(Halaman Publik Status Invoice)"]
+        HealthRoute["GET /api/health<br>(Liveness Probe)"]
+    end
+
+    subgraph Storage["DATABASE & PERSISTENT STORAGE"]
+        DB[(omnicat_local.db<br>SQLite WAL Mode)]
+        Volume["Coolify Persistent Volume<br>(/app/data)"]
+    end
+
+    TMA --> AuthRoute & MasterRoute & OrderRoute
+    Browser --> FinRoute
+    Public --> VerifyRoute
+    FastAPIServer --> DB
+    DB --- Volume
+```
+
+### Rincian Endpoint Resmi:
+* `GET /api/health`: Healthcheck liveness & readiness probe untuk Coolify monitoring.
+* `POST /api/auth/telegram`: Menerima `init_data` Telegram, memverifikasi tanda tangan HMAC-SHA256, menolak user tidak terdaftar (403), dan menerbitkan JWT token.
+* `GET /api/customers`: Mengambil daftar pelanggan aktif, interval median, dan status reorder untuk radar sales.
+* `GET /api/products`: Mengambil master SKU, kemasan, dan harga dasar terverifikasi.
+* `POST /api/orders/draft`: Pembuatan draft pesanan baru oleh sales di lapangan.
+* `POST /api/orders/sync`: Sinkronisasi batch antrean offline dari `localStorage` TMA dengan pelindung idempotensi `client_order_id`.
+* `GET /api/finance/pending`: Antrean pesanan `PENDING_APPROVAL` untuk otorisasi Finance.
+* `POST /api/finance/approve`: Eksekusi approval order, validasi ambang margin sehat, penguncian sequence, dan penerbitan invoice resmi.
+* `GET /verify/{invoice_id}`: Verifikasi QR Code invoice publik yang mengembalikan HTML status resmi dokumen.
+
+---
+
+## 1.2. Panduan Deploy di Coolify
+
+Aplikasi OmniCat telah dioptimalkan untuk di-deploy secara instan pada platform **Coolify**:
+
+1. **Tipe Aplikasi di Coolify**: Pilih **Docker Compose** atau **Dockerfile**.
+2. **Port Mapping**:
+   - Internal Port: `8000`
+   - Coolify Public Port / Domain: Arahkan domain (misal: `omnicat.bentocat.com` atau subdomain Coolify) ke port `8000`.
+3. **Persistent Volume (Wajib untuk SQLite)**:
+   - Tambahkan volume binding di Coolify:
+     $$\text{Volume Name}: \texttt{omnicat\_data} \longrightarrow \text{Mount Path}: \texttt{/app/data}$$
+   - Ini menjamin file `omnicat_local.db` dan generated PDF tetap aman dan persisten saat container di-restart atau di-redeploy.
+4. **Environment Variables**:
+   * `OMNICAT_JWT_SECRET`: Isi dengan random string aman minimal 32 karakter.
+   * `TELEGRAM_BOT_TOKEN`: Token bot Telegram resmi dari @BotFather.
+   * `PORT`: `8000`
+   * `HOST`: `0.0.0.0`
+5. **Healthcheck**: Arahkan path health check Coolify ke `/api/health`.
 
 ---
 

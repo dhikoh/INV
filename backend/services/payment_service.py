@@ -137,7 +137,9 @@ class PaymentService:
                 JOIN orders o ON inv.order_id = o.id
                 JOIN customers c ON o.customer_id = c.id
                 JOIN regions r ON c.region_id = r.id
-                WHERE o.brand_id = ? AND inv.payment_status != 'PAID_LUNAS'
+                WHERE o.brand_id = ? 
+                  AND inv.payment_status NOT IN ('PAID_LUNAS', 'SUPERSEDED', 'VOID', 'CANCELLED')
+                  AND o.status NOT IN ('SUPERSEDED', 'VOID', 'CANCELLED', 'SKIPPED_AUDIT')
                 ORDER BY inv.due_date ASC
             """, (brand_id,))
 

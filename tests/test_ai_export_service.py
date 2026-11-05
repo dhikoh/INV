@@ -75,7 +75,7 @@ class TestAiExportService(unittest.TestCase):
         export_input = AiExportInput(
             brand_id=self.bentocat["id"],
             redacted=True,
-            requested_by_user_id=self.sales_id
+            requested_by_user_id=self.finance_id
         )
         res = self.service.export_analytics_for_ai(export_input)
 
@@ -117,8 +117,38 @@ class TestAiExportService(unittest.TestCase):
         cur.execute("SELECT * FROM audit_logs WHERE action = 'AI_ANALYTICS_EXPORT' ORDER BY created_at DESC LIMIT 1")
         audit_row = cur.fetchone()
         self.assertIsNotNone(audit_row)
-        self.assertEqual(audit_row["performed_by_user_id"], self.sales_id)
+        self.assertEqual(audit_row["performed_by_user_id"], self.finance_id)
         conn.close()
+
+    def test_sales_user_hpp_isolation_in_redacted_export(self):
+        """
+        Verify that when SALES requests an AI export, confidential COGS, margins,
+        and logistics subsidy leakage are strictly masked (None) to maintain HPP Isolation.
+        """
+        export_input = AiExportInput(
+            brand_id=self.bentocat["id"],
+            redacted=True,
+            requested_by_user_id=self.sales_id
+        )
+        res = self.service.export_analytics_for_ai(export_input)
+        kpis = res.data["executive_kpis"]
+
+        # Revenue and volumes are visible to sales
+        self.assertEqual(kpis["net_revenue_idr"], 2990251489.0)
+        self.assertEqual(kpis["total_volume_liters"], 682477.5)
+
+        # Confidential financials are strictly REDACTED (None) for SALES
+        self.assertIsNone(kpis["gross_cogs_idr"])
+        self.assertIsNone(kpis["gross_contribution_margin_idr"])
+        self.assertIsNone(kpis["gross_contribution_margin_percent"])
+        self.assertIsNone(kpis["total_actual_freight_idr"])
+        self.assertIsNone(kpis["freight_subsidy_leakage_idr"])
+
+        # Also verify order items in manifest have no contribution margins
+        orders = res.data["orders_dataset"]
+        for o in orders:
+            self.assertIsNone(o["contribution_margin_idr"])
+            self.assertIsNone(o["contribution_margin_percent"])
 
     def test_unredacted_export_rbac_boundary(self):
         """

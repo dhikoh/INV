@@ -78,7 +78,10 @@ class PdfInvoiceService:
             cur.execute("""
                 SELECT bank_name, account_number, account_holder_name
                 FROM brand_bank_accounts
-                WHERE brand_id = (SELECT brand_id FROM orders WHERE id = ?) AND is_primary = 1
+                WHERE brand_id = (SELECT brand_id FROM orders WHERE id = ?)
+                  AND is_primary = 1
+                  AND (timelock_until IS NULL OR timelock_until <= CURRENT_TIMESTAMP)
+                ORDER BY created_at DESC
                 LIMIT 1
             """, (order_id,))
             bank_row = cur.fetchone()

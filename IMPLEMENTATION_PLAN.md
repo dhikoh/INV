@@ -1,14 +1,14 @@
-# IMPLEMENTATION PLAN (v3.0): OMNICAT ENTERPRISE DISTRIBUTION & CRM
-**Document Version:** `3.0.0-PRODUCTION-READY`  
+# IMPLEMENTATION PLAN (v0.9.5): OMNICAT ENTERPRISE DISTRIBUTION & CRM
+**Document Version:** `v0.9.5-POST-AUDIT`  
 **Date:** November 2026  
-**Status:** 100% Implemented & Verified (All 3 Releases Finished with 80/80 Tests Passing)  
-**Methodology:** 3 Structured Production Releases (Staged Delivery)  
+**Status:** Post-Audit Remediated & End-to-End REST Enabled (92/92 Tests Passing)  
+**Methodology:** 3 Structured Production Releases (Staged Delivery) + Post-Audit Stabilization  
 
 ---
 
-## 1. Strategi Tiga Rilis Bertahap (The 3-Release Roadmap)
+## 1. Strategi Rilis Bertahap & Stabilisasi Pasca-Audit
 
-Sesuai rekomendasi audit tim pada dokumen `Laporan Audit Rencana Aplikasi OmniCat.docx` (Bagian 2.4), proyek dipecah menjadi **3 Rilis Bertahap** untuk memastikan stabilitas transaksi uang masuk dan nomor dokumen terlebih dahulu sebelum mengaktifkan fitur lapangan dan optimasi lanjutan.
+Sesuai rekomendasi audit tim pada dokumen `Laporan Audit Rencana Aplikasi OmniCat.docx` dan hasil temuan audit teknis, proyek telah melalui tahap stabilisasi kritis untuk menutup gap end-to-end, memperbaiki penomoran dokumen, mengunci privasi HPP, dan menambahkan FastAPI REST application sebelum deploy ke Coolify:
 
 ```mermaid
 flowchart LR
@@ -19,12 +19,11 @@ flowchart LR
         R1D["Approval & Financial Clearance"]
         R1E["Invoice PDF ber-QR & Surat Jalan"]
         R1F["Pembayaran, Pelunasan & Piutang"]
-        R1G["Backup & Staging dari Hari Ke-1"]
     end
 
     subgraph R2["RILIS 2: PENJUALAN LAPANGAN & CRM"]
         R2A["CRM Activity Logger"]
-        R2B["Mesin Interval (Median & Ambang Relatif)"]
+        R2B["Mesin Interval Median"]
         R2C["Telegram Mini App (Field Sales)"]
         R2D["Target Sales & Pipeline"]
         R2E["Tombol Berbagi ke WhatsApp"]
@@ -37,8 +36,15 @@ flowchart LR
         R3D["Export JSON untuk AI Eksternal"]
     end
 
-    R1 -->|Operasional Inti Stabil| R2
-    R2 -->|Sales Lapangan Aktif| R3
+    subgraph R_Audit["STABILISASI AUDIT & COOLIFY READY"]
+        RA1["FastAPI REST Backend (backend/main.py)"]
+        RA2["Penomoran Invoice Regional Anti-Benturan"]
+        RA3["HPP Isolation Strict Enforcement"]
+        RA4["TMA Fetch & Offline Sync Nyata"]
+        RA5["Dockerfile & Docker Compose (Coolify Ready)"]
+    end
+
+    R1 --> R2 --> R3 --> R_Audit
 ```
 
 ---

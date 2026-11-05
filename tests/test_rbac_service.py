@@ -58,6 +58,10 @@ class TestRbacService(unittest.TestCase):
         cls.sales_id = row["id"]
         cls.sales_username = row["username"]
 
+        # Explicitly link sales user to known telegram_user_id for testing
+        cur.execute("UPDATE users SET telegram_user_id = 987654321 WHERE id = ?", (cls.sales_id,))
+        conn.commit()
+
         cur.execute("SELECT id FROM brands WHERE code = 'BENTOCAT'")
         cls.bentocat_brand_id = cur.fetchone()["id"]
 
@@ -222,6 +226,13 @@ class TestRbacService(unittest.TestCase):
 
         no_hash_result = self.rbac.validate_telegram_init_data("auth_date=12345&user={}", self.bot_token)
         self.assertFalse(no_hash_result.is_valid)
+
+        # 5. Unknown Telegram User (Security Check: Not registered in OmniCat -> Strictly Rejected)
+        unknown_tg_user = {"id": 1122334455, "username": "unregistered_stranger"}
+        unknown_init_data = self._create_telegram_init_data(unknown_tg_user, self.bot_token)
+        unknown_res = self.rbac.validate_telegram_init_data(unknown_init_data, self.bot_token)
+        self.assertFalse(unknown_res.is_valid)
+        self.assertIn("belum terdaftar", unknown_res.rejection_reason)
 
 if __name__ == "__main__":
     unittest.main()

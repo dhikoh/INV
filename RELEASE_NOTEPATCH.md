@@ -1,29 +1,38 @@
-# RELEASE NOTEPATCH & SPECIFICATION GUIDE (v3.0 - AUDIT READY)
-**Version:** `v3.0.0-PRODUCTION-READY`  
+# RELEASE NOTEPATCH & SPECIFICATION GUIDE (v0.9.5 - POST-AUDIT STABILIZATION)
+**Version:** `v0.9.5-POST-AUDIT`  
 **Date:** November 2026  
-**Status:** All 3 Releases Fully Implemented & Mathematically Verified (80/80 Tests Passing)  
-**Modules:** Approval Engine, Financial Clearance, Sales CRM, TMA Field Sales, Estafet Optimizer, Vendor AP, Digital Catalog, AI Interoperability  
+**Status:** Post-Audit Remediated & End-to-End REST Enabled (92/92 Tests Passing)  
+**Modules:** REST API (FastAPI), Invoicing & Regional Sequencing, Financial Clearance Gate, Sales CRM, TMA Field Sales, Estafet Optimizer, Vendor AP, Digital Catalog, AI Analytics & PDP Redaction  
 
 ---
 
 ## 1. Executive Summary & Verification Milestones
 
-OmniCat Enterprise telah selesai dibangun secara menyeluruh mencakup 3 tahapan rilis produksi sesuai arahan dokumen `Laporan Audit Rencana Aplikasi OmniCat.docx`. Seluruh fitur telah diuji secara otomatis dengan 80 unit test tanpa kegagalan:
+OmniCat Enterprise telah melalui proses audit mendalam dan perbaikan komprehensif terhadap gap end-to-end, bug integritas keuangan, penomoran dokumen, dan keamanan. Seluruh fitur kini telah diuji secara otomatis dengan 92 unit test tanpa kegagalan:
 
-1. **Rekonsiliasi Keuangan Historis 100% Presisi**:
-   - **101 Pesanan Aktif** dari 180 invoice/spreadsheet di 7 wilayah (`BLITAR`, `BOJONEGORO`, `CILACAP`, `LAMONGAN`, `SEMARANG`, `TIMIKA`, `TUBAN`).
-   - **Omset Bersih**: Tepat **Rp 2.990.251.489,00**.
-   - **Volume Distribusi**: Tepat **682.477,50 Liter** (ditambah 2.062,5 L Dok 34 Semarang gap audit).
-   - **Kebocoran Subsidi Transport Terisolasi**: Tepat **Rp 124.900.000,00** (Ongkir riil Rp 243.500.000 dikurangi ongkir invoice Rp 118.600.000).
-   - Selisih piutang historis: **Rp 0 (100% Lunas)**.
-2. **Pemisahan Finansial & Perlindungan HPP (HPP Isolation)**:
-   - Data HPP modal barang, tarif ekspedisi riil vendor, dan laba kontribusi dipisahkan ke tabel `order_financials`.
-   - Peran `SALES` terisolasi secara kriptografis dan logika query dari melihat modal perusahaan.
-3. **Penomoran Dokumen Atomic Bebas Lompat (Anti-Gap Invariant)**:
-   - Dikelola melalui sequence counter per pelanggan (`customer_doc_sequences`).
-   - Draft pesanan berstatus `PENDING_APPROVAL` tanpa nomor dokumen, baru dikunci saat disetujui Admin/Finance.
-4. **Surat Jalan Logistik Tanpa Angka Rupiah**:
-   - Dokumen A4 Surat Jalan supir truk memuat rincian fisik barang, muatan kemasan, nopol kendaraan, dan 3 kolom tanda tangan resmi, terverifikasi bebas dari angka finansial.
+1. **Jalur End-to-End REST API Aktif (`backend/main.py`)**:
+   - Framework REST modern berbasis FastAPI melayani rute otentikasi Telegram (`/api/auth/telegram`), master data toko (`/api/customers`), antrean draft (`/api/orders/draft`), batch sinkronisasi offline (`/api/orders/sync`), antrean approval Finance (`/api/finance/pending` & `/api/finance/approve`), dan verifikasi QR publik (`/verify/{invoice_id}`).
+   - Sinkronisasi antrean offline pada TMA Frontend (`frontend/index.html`) kini menggunakan pemanggilan HTTP nyata (`fetch`) dan hanya membersihkan `localStorage` setelah server mengonfirmasi penerimaan data.
+2. **Penomoran Invoice Multi-Pelanggan Anti-Benturan**:
+   - Nomor invoice diisolasi per wilayah dan tahun (`invoice_sequences`), bukan counter per-pelanggan.
+   - Dua pelanggan di wilayah yang sama tidak akan lagi mengalami benturan `UNIQUE constraint` pada tabel `invoices`.
+3. **Pengamanan Autentikasi Telegram (Anti-Bypass)**:
+   - Celah *auto-mapping* ke akun sales telah dihapus. Telegram ID yang tidak terdaftar di tabel `users` ditolak tegas dengan kode `403 Forbidden`.
+   - JWT Secret dinamis dan aman via environment variable (`OMNICAT_JWT_SECRET`), mencegah pemalsuan token dari repo.
+4. **Perbaikan Siklus Revisi Order & Aging AR**:
+   - Pembuatan revisi dilakukan secara aman dan atomik.
+   - Persetujuan order revisi mempertahankan nomor dokumen pelanggan asal (format `-R{n}`) tanpa memakan nomor baru.
+   - Invoice asal otomatis diberi status `SUPERSEDED` dan dieliminasi dari laporan Umur Piutang (*Aging AR*).
+5. **Gating Margin Finansial & Isolasi HPP**:
+   - `approve_order` memeriksa status clearance finansial. Order dengan margin di bawah batas sehat (< 15%) ditolak keras kecuali memiliki otorisasi tertulis dari `SUPER_ADMIN`.
+   - Ekspor analitik AI (`ai_export_service.py`) secara ketat menyembunyikan data HPP, COGS, dan margin dari peran `SALES` pada seluruh mode.
+6. **Kemandirian Lingkungan & Seeding Reprodusibel**:
+   - Disediakan `requirements.txt`, `.env.example`, `Dockerfile`, dan `docker-compose.yml`.
+   - Database SQLite dapat dibangun ulang secara instan dari kondisi clone bersih menggunakan `python scripts/init_db_from_seed.py`.
+
+> [!NOTE]
+> **Catatan Integritas Data Historis**:
+> Angka historis total omset Rp 2.990.251.489, 101 pesanan, kebocoran subsidi transport Rp 124,9 juta, dan pelunasan piutang Rp 0 adalah hasil **rekonstruksi model matematis dan data sintetis awal**, bukan rekonsiliasi riil buku kas atau rekening koran bank. Master customer pada dataset saat ini mewakili agregasi representatif per wilayah.
 
 ---
 

@@ -188,6 +188,7 @@ CREATE TABLE IF NOT EXISTS orders (
     customer_id TEXT NOT NULL REFERENCES customers(id) ON DELETE RESTRICT,
     created_by_sales_id TEXT NOT NULL REFERENCES users(id),
     parent_order_id TEXT REFERENCES orders(id),
+    client_order_id TEXT UNIQUE,
     
     doc_number INTEGER,
     revision_number INTEGER NOT NULL DEFAULT 0,
@@ -260,9 +261,18 @@ CREATE TABLE IF NOT EXISTS invoices (
     total_amount REAL NOT NULL,
     amount_paid REAL NOT NULL DEFAULT 0,
     remaining_balance REAL GENERATED ALWAYS AS (total_amount - amount_paid) STORED,
-    payment_status TEXT NOT NULL CHECK (payment_status IN ('UNPAID', 'PARTIAL_DP', 'PAID_LUNAS')) DEFAULT 'UNPAID',
+    payment_status TEXT NOT NULL CHECK (payment_status IN ('UNPAID', 'PARTIAL_DP', 'PAID_LUNAS', 'VOID', 'SUPERSEDED', 'CANCELLED')) DEFAULT 'UNPAID',
     pdf_storage_path TEXT,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS invoice_sequences (
+    brand_id TEXT NOT NULL REFERENCES brands(id) ON DELETE CASCADE,
+    region_id TEXT NOT NULL REFERENCES regions(id) ON DELETE CASCADE,
+    year INTEGER NOT NULL,
+    last_invoice_seq INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (brand_id, region_id, year)
 );
 
 CREATE TABLE IF NOT EXISTS payments (
