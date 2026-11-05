@@ -99,7 +99,9 @@ class PdfInvoiceService:
         target_path = output_path or os.path.join(PDF_OUTPUT_DIR, pdf_filename)
 
         # 4. Generate QR Code in-memory
-        verify_url = f"https://omnicat.bentocat.com/verify/inv/{safe_inv_num}?val={order_data['net_invoice_grand_total']:.0f}"
+        app_domain = os.environ.get("APP_DOMAIN", "modula.click")
+        inv_ref = order_data["invoice_id"] or safe_inv_num
+        verify_url = f"https://{app_domain}/verify/{inv_ref}"
         qr = qrcode.QRCode(
             version=1,
             error_correction=qrcode.constants.ERROR_CORRECT_M,
