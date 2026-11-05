@@ -27,9 +27,9 @@
   - [x] Sub-task 5.2: TMA Draft Order Flow with offline sync & WhatsApp deep link
   - [x] Sub-task 5.3: Delivery Slip (Surat Jalan) Generator (`backend/services/delivery_slip_service.py`)
 
-## Release 3: Ecosystem & Optimization [READY]
+## Release 3: Ecosystem & Optimization [IN PROGRESS]
 - [ ] **Task 6: Logistics & Advanced Analytics**
-  - [ ] Sub-task 6.1: Estafet Shared Freight Optimizer
+  - [x] Sub-task 6.1: Estafet Shared Freight Optimizer (`backend/services/freight_optimizer_service.py`)
   - [ ] Sub-task 6.2: Vendor AP (Accounts Payable)
   - [ ] Sub-task 6.3: Multi-brand Digital Catalog PDF Generator
   - [ ] Sub-task 6.4: Standard JSON Export/Import for External AI (Gemini/Claude)

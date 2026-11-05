@@ -41,7 +41,7 @@
 ### Phase 3: Release 3 (Ecosystem & Optimization)
 
 - [ ] **Task 6: Logistics & Advanced Analytics**
-  - [ ] **Sub-task 6.1**: Estafet Shared Freight Optimizer (East Java Cluster: Bojonegoro, Tuban, Lamongan)
+  - [x] **Sub-task 6.1**: Estafet Shared Freight Optimizer (East Java Cluster: Bojonegoro, Tuban, Lamongan)
   - [ ] **Sub-task 6.2**: Vendor AP (Accounts Payable) & Shared Freight Allocation
   - [ ] **Sub-task 6.3**: Multi-brand Digital Catalog PDF Generator (A4 Landscape Display & Price Sheet)
   - [ ] **Sub-task 6.4**: Standard JSON Export/Import for External AI (Gemini/Claude) with Redacted PDP Mode

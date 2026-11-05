@@ -390,3 +390,4 @@ class DeliverySlipService:
             )
         finally:
             conn.close()
+

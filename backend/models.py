@@ -327,6 +327,36 @@ class DeliverySlipResult:
     estimated_weight_kg: float
     pdf_path: str
 
+@dataclass
+class FreightClusterOrder:
+    order_id: str
+    customer_id: str
+    customer_name: str
+    region_name: str
+    order_date: str
+    volume_liters: float
+    standalone_freight_idr: float
+    allocated_freight_idr: float = 0.0
+    allocated_savings_idr: float = 0.0
+
+@dataclass
+class FreightOptimizationPlan:
+    plan_id: str
+    cluster_name: str
+    window_start: str
+    window_end: str
+    recommended_truck_type: str  # 'TRUK_ENGKEL_8T' or 'TRUK_FUSO_15T'
+    truck_capacity_liters: float
+    total_volume_liters: float
+    truck_utilization_percent: float
+    standalone_total_freight_idr: float
+    estafet_total_freight_idr: float
+    projected_savings_idr: float
+    savings_percent: float
+    orders: List[FreightClusterOrder] = field(default_factory=list)
+    route_stops: List[str] = field(default_factory=list)
+
+
 
 
 
