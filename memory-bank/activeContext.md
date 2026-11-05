@@ -3,14 +3,14 @@
 ## 1. Current Focus
 - **Active Release:** Release 1 (Core Money & Documents)
 - **Current Milestone:** Task 2 - Backend Core Services (Invoicing & Financial Clearance)
-- **Current Active Sub-Task:** **Sub-task 2.2: FinancialClearanceService (Contribution Margin & Freight Isolation)**
+- **Current Active Sub-Task:** **Sub-task 2.3: PromotionService (Discount Engine & Subsidy Rules)**
 
 ## 2. Recent Accomplishments
-- **Sub-task 2.1 Selesai & Terverifikasi:**
-  - `backend/database.py`: Transaksi thread-safe dengan lock isolation.
-  - `backend/models.py`: Model data order, items, invoice, approval result.
-  - `backend/services/invoicing_service.py`: Pembuatan draft order, sequence counter `customer_doc_sequences`, penerbitan invoice resmi, penanganan revisi pesanan, dan validasi hak akses RBAC.
-  - `tests/test_invoicing_service.py`: 6/6 test lolos termasuk stress-test multi-thread concurrent approval (zero race collision, strictly monotonic sequencing).
+- **Sub-task 2.2 Selesai & Terverifikasi:**
+  - `backend/services/financial_clearance_service.py`: Menghitung HPP (COGS), ongkir riil vendor truk vs ongkir ditagih, kebocoran subsidi, Laba Kontribusi Kotor (Gross Contribution Margin), dan ambang batas margin sehat (15%).
+  - Memproteksi data sensitif dengan RBAC ketat (Sales dilarang mengakses HPP dan profit margin perusahaan).
+  - Mengimplementasikan laporan agregasi finansial regional dan KPI laba kontribusi perusahaan.
+  - `tests/test_financial_clearance_service.py`: 5/5 test lolos. Seluruh 18/18 test dalam 3 test suite sistem lolos 100%.
 
 ## 3. Next Steps (Single Sub-Task Queue)
 1. **[ACTIVE] Sub-task 1.1:** Setup local database schema harness (PostgreSQL / SQLite compatibility layer) untuk memvalidasi struktur tabel.

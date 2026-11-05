@@ -8,12 +8,16 @@ atomic document sequencing, revision management, and concurrent approval safety.
 import os
 import sys
 import uuid
+import shutil
 import unittest
 import concurrent.futures
 
 WORKSPACE_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if WORKSPACE_ROOT not in sys.path:
     sys.path.insert(0, WORKSPACE_ROOT)
+
+CANONICAL_DB_PATH = os.path.join(WORKSPACE_ROOT, "data", "omnicat_local.db")
+TEST_DB_PATH = os.path.join(WORKSPACE_ROOT, "data", "test_invoicing.db")
 
 from backend.database import Database
 from backend.models import CreateOrderInput, OrderItemInput
@@ -23,7 +27,12 @@ class TestInvoicingService(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.db = Database()
+        # Create isolated test database clone
+        if os.path.exists(TEST_DB_PATH):
+            os.remove(TEST_DB_PATH)
+        shutil.copyfile(CANONICAL_DB_PATH, TEST_DB_PATH)
+
+        cls.db = Database(TEST_DB_PATH)
         cls.service = InvoicingService(cls.db)
 
         # Retrieve test IDs from database
@@ -61,6 +70,11 @@ class TestInvoicingService(unittest.TestCase):
         cls.var_10l = cur.fetchone()[0]
 
         conn.close()
+
+    @classmethod
+    def tearDownClass(cls):
+        if os.path.exists(TEST_DB_PATH):
+            os.remove(TEST_DB_PATH)
 
     def test_01_create_draft_order(self):
         """Verifies creating a draft order with volume and subtotal calculations."""
@@ -235,3 +249,4 @@ class TestInvoicingService(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+

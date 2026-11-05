@@ -311,3 +311,4 @@ class InvoicingService:
         new_order.doc_number = doc_no
         new_order.revision_number = next_rev
         return new_order
+

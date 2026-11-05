@@ -723,6 +723,18 @@ def migrate_to_sqlite(dataset):
             VALUES (?, ?, ?, ?, ?, ?)
         """, (pv["id"], pv["product_id"], pv["sku"], pv["name"], pv["packaging_unit"], pv["unit_multiplier"]))
 
+    # Insert Active Product COGS History
+    for sku, vcfg in VARIANTS.items():
+        cursor.execute("""
+            INSERT INTO product_cogs_history (
+                id, variant_id, raw_material_cogs, packaging_cogs, labor_handling_cogs,
+                effective_from, effective_to, created_by_user_id
+            ) VALUES (?, ?, ?, ?, ?, '2023-01-01', NULL, ?)
+        """, (
+            str(uuid.uuid4()), vcfg["id"], vcfg["cogs_raw"], vcfg["cogs_pack"], vcfg["cogs_labor"],
+            USER_SUPERADMIN_ID
+        ))
+
     # Insert Orders
     for o in dataset["orders"]:
         cursor.execute("""

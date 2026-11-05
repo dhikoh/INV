@@ -16,7 +16,7 @@
 
 - [ ] **Task 2: Backend Core Services (Invoicing & Financial Clearance)**
   - [x] **Sub-task 2.1**: Implement `InvoicingService` with atomic sequence lock (`customer_doc_sequences`)
-  - [ ] **Sub-task 2.2**: Implement `FinancialClearanceService` (Gross Contribution Margin, HPP, real vs billed freight)
+  - [x] **Sub-task 2.2**: Implement `FinancialClearanceService` (Gross Contribution Margin, HPP, real vs billed freight)
   - [ ] **Sub-task 2.3**: Implement `PromotionService` (percentage discount, fixed discount, transport subsidy)
   - [ ] **Sub-task 2.4**: Implement `PaymentService` (DP, Pelunasan, remaining balance, Aging AR)
 

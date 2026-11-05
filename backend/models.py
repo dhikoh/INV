@@ -70,3 +70,36 @@ class ApprovalResult:
     total_amount: float
     issue_date: str
     due_date: str
+
+@dataclass
+class FinancialClearanceInput:
+    actual_freight_cost: float
+    actual_unloading_cost: float = 0.0
+    override_reason: Optional[str] = None
+
+@dataclass
+class OrderFinancialsOutput:
+    order_id: str
+    net_invoice_grand_total: float
+    total_cogs_amount: float
+    actual_freight_cost: float
+    actual_unloading_cost: float
+    net_transport_subsidy_borne: float
+    contribution_margin_amount: float
+    contribution_margin_percent: float
+    is_margin_healthy: bool
+    requires_superadmin_override: bool
+
+@dataclass
+class RegionalProfitabilitySummary:
+    region_id: str
+    region_name: str
+    orders_count: int
+    total_revenue: float
+    total_cogs: float
+    total_freight: float
+    total_subsidy_borne: float
+    gross_contribution_margin: float
+    margin_percent: float
+
+
