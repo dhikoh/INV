@@ -827,3 +827,4 @@ class CatalogPdfService:
             has_pricing=True,
             generated_at=datetime.now().isoformat()
         )
+
