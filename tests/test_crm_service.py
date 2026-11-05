@@ -20,7 +20,12 @@ CANONICAL_DB_PATH = os.path.join(WORKSPACE_ROOT, "data", "omnicat_local.db")
 TEST_DB_PATH = os.path.join(WORKSPACE_ROOT, "data", "test_crm.db")
 
 from backend.database import Database
-from backend.models import CustomerCadenceMetric, SalesCrmSummary
+from backend.models import (
+    CustomerCadenceMetric,
+    SalesCrmSummary,
+    SalesTargetInput,
+    SalesPerformanceReport
+)
 from backend.services.crm_service import CrmService
 
 class TestCrmService(unittest.TestCase):
@@ -58,6 +63,7 @@ class TestCrmService(unittest.TestCase):
         # Fetch Sales user
         cur.execute("SELECT id FROM users WHERE role = 'SALES' LIMIT 1")
         cls.sales_id = cur.fetchone()["id"]
+        cls.brand_id = cls.tuban_customer["brand_id"]
 
         conn.close()
 
@@ -199,6 +205,106 @@ class TestCrmService(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             self.crm.log_sales_activity(semarang_id, self.sales_id, "CALL", "   ")
+
+    def test_sales_target_setting_and_upsert(self):
+        """Tests configuring monthly sales targets and verifying upsert idempotency."""
+        target_in = SalesTargetInput(
+            sales_user_id=self.sales_id,
+            brand_id=self.brand_id,
+            target_month="2025-03",
+            target_volume_liters=40000.0,
+            target_revenue_idr=200000000.0
+        )
+        t_id1 = self.crm.set_sales_target(target_in)
+        self.assertIsInstance(t_id1, str)
+
+        # Upsert: Update same month with revised targets
+        target_revised = SalesTargetInput(
+            sales_user_id=self.sales_id,
+            brand_id=self.brand_id,
+            target_month="2025-03",
+            target_volume_liters=45000.0,
+            target_revenue_idr=220000000.0
+        )
+        t_id2 = self.crm.set_sales_target(target_revised)
+        self.assertIsInstance(t_id2, str)
+
+        # Verify values updated in performance calculation
+        report = self.crm.get_sales_performance(self.sales_id, self.brand_id, "2025-03")
+        self.assertEqual(report.target_volume_liters, 45000.0)
+        self.assertEqual(report.target_revenue_idr, 220000000.0)
+
+        # Validation errors
+        with self.assertRaises(ValueError):
+            # Invalid month format
+            self.crm.set_sales_target(SalesTargetInput(self.sales_id, self.brand_id, "2025-13", 1000.0, 1000.0))
+
+        with self.assertRaises(ValueError):
+            # Zero volume
+            self.crm.set_sales_target(SalesTargetInput(self.sales_id, self.brand_id, "2025-03", 0.0, 1000.0))
+
+        with self.assertRaises(ValueError):
+            # Negative revenue
+            self.crm.set_sales_target(SalesTargetInput(self.sales_id, self.brand_id, "2025-03", 1000.0, -500.0))
+
+    def test_sales_performance_attainment_calculation(self):
+        """Tests calculation of volume and revenue attainment against actual orders in that month."""
+        # Find a month with real orders in the test DB
+        conn = self.db.get_connection()
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT substr(order_date, 1, 7) as ym,
+                   COUNT(*) as cnt,
+                   SUM(total_order_volume) as vol,
+                   SUM(net_invoice_grand_total) as rev
+            FROM orders
+            WHERE status != 'SKIPPED_AUDIT'
+            GROUP BY ym
+            ORDER BY cnt DESC
+            LIMIT 1
+        """)
+        row = cur.fetchone()
+        conn.close()
+
+        target_month = row["ym"]
+        expected_cnt = row["cnt"]
+        expected_vol = row["vol"]
+        expected_rev = row["rev"]
+
+        # Case 1: Target set low -> Status EXCEEDED
+        self.crm.set_sales_target(SalesTargetInput(
+            sales_user_id=self.sales_id,
+            brand_id=self.brand_id,
+            target_month=target_month,
+            target_volume_liters=expected_vol * 0.5,
+            target_revenue_idr=expected_rev * 0.5
+        ))
+        rep_exceeded = self.crm.get_sales_performance(self.sales_id, self.brand_id, target_month)
+        self.assertEqual(rep_exceeded.orders_count, expected_cnt)
+        self.assertAlmostEqual(rep_exceeded.actual_volume_liters, expected_vol, places=2)
+        self.assertAlmostEqual(rep_exceeded.actual_revenue_idr, expected_rev, places=2)
+        self.assertEqual(rep_exceeded.performance_status, "EXCEEDED")
+        self.assertGreaterEqual(rep_exceeded.revenue_attainment_percent, 100.0)
+
+        # Case 2: Target set very high -> Status LAGGING
+        self.crm.set_sales_target(SalesTargetInput(
+            sales_user_id=self.sales_id,
+            brand_id=self.brand_id,
+            target_month=target_month,
+            target_volume_liters=expected_vol * 10.0,
+            target_revenue_idr=expected_rev * 10.0
+        ))
+        rep_lagging = self.crm.get_sales_performance(self.sales_id, self.brand_id, target_month)
+        self.assertEqual(rep_lagging.performance_status, "LAGGING")
+        self.assertLess(rep_lagging.revenue_attainment_percent, 40.0)
+
+    def test_get_all_sales_targets_for_month(self):
+        """Tests fetching performance reports for all active sales representatives."""
+        reports = self.crm.get_all_sales_targets_for_month("2025-01", brand_id=self.brand_id)
+        self.assertIsInstance(reports, list)
+        self.assertGreaterEqual(len(reports), 1)
+        self.assertIsInstance(reports[0], SalesPerformanceReport)
+
 
 if __name__ == "__main__":
     unittest.main()

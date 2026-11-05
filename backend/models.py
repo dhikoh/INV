@@ -242,6 +242,31 @@ class SalesCrmSummary:
     new_customer_count: int
     customers: List[CustomerCadenceMetric] = field(default_factory=list)
 
+@dataclass
+class SalesTargetInput:
+    sales_user_id: str
+    brand_id: str
+    target_month: str  # Format: YYYY-MM
+    target_volume_liters: float
+    target_revenue_idr: float
+
+@dataclass
+class SalesPerformanceReport:
+    sales_user_id: str
+    sales_name: str
+    brand_id: str
+    target_month: str
+    target_volume_liters: float
+    actual_volume_liters: float
+    volume_attainment_percent: float
+    target_revenue_idr: float
+    actual_revenue_idr: float
+    revenue_attainment_percent: float
+    orders_count: int
+    average_order_value_idr: float
+    performance_status: str
+
+
 
 
 

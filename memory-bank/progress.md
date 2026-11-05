@@ -19,9 +19,9 @@
   - [x] Sub-task 3.2: RBAC Middleware (Super Admin, Finance, Sales, Management Viewer) & Telegram HMAC-SHA256 Auth
 
 ## Release 2: Field Sales & CRM [IN PROGRESS]
-- [ ] **Task 4: Sales CRM & Repeat Order Engine**
+- [x] **Task 4: Sales CRM & Repeat Order Engine** [100% COMPLETE]
   - [x] Sub-task 4.1: Customer Health & Median Reorder Interval Engine (`backend/services/crm_service.py`)
-  - [ ] Sub-task 4.2: Sales Dashboard & Target Tracking
+  - [x] Sub-task 4.2: Sales Dashboard & Target Tracking
 - [ ] **Task 5: Telegram Mini App (TMA)**
   - [ ] Sub-task 5.1: TMA Mobile Frontend (React/Tailwind)
   - [ ] Sub-task 5.2: TMA Draft Order Flow with offline sync & WhatsApp deep link

@@ -28,9 +28,9 @@
 
 ### Phase 2: Release 2 (Field Sales & CRM)
 
-- [ ] **Task 4: Sales CRM & Repeat Order Engine**
+- [x] **Task 4: Sales CRM & Repeat Order Engine**
   - [x] **Sub-task 4.1**: Customer Health & Median Reorder Interval Engine (`backend/services/crm_service.py`)
-  - [ ] **Sub-task 4.2**: Sales Target Tracking & Activity Logger
+  - [x] **Sub-task 4.2**: Sales Target Tracking & Activity Logger
 - [ ] **Task 5: Telegram Mini App (TMA)**
   - [ ] **Sub-task 5.1**: TMA Mobile Frontend (React/Tailwind)
   - [ ] **Sub-task 5.2**: TMA Draft Order Flow with offline sync & WhatsApp deep link

@@ -11,7 +11,12 @@ from datetime import date, datetime, timedelta
 from typing import Optional, List, Dict, Any
 
 from backend.database import db
-from backend.models import CustomerCadenceMetric, SalesCrmSummary
+from backend.models import (
+    CustomerCadenceMetric,
+    SalesCrmSummary,
+    SalesTargetInput,
+    SalesPerformanceReport
+)
 
 HEALTH_PRIORITY_ORDER = {
     "DUE_FOR_REORDER": 0,
@@ -364,3 +369,161 @@ class CrmService:
             return [dict(r) for r in cur.fetchall()]
         finally:
             conn.close()
+
+    def set_sales_target(self, target_input: SalesTargetInput) -> str:
+        """Sets or updates a monthly sales volume and revenue target for a sales representative."""
+        # 1. Validate Month Format (YYYY-MM)
+        if len(target_input.target_month) != 7 or target_input.target_month[4] != "-":
+            raise ValueError(f"Format target_month harus 'YYYY-MM', ditemukan: '{target_input.target_month}'.")
+
+        try:
+            year = int(target_input.target_month[:4])
+            month = int(target_input.target_month[5:7])
+            if month < 1 or month > 12:
+                raise ValueError()
+        except Exception:
+            raise ValueError(f"Bulan target '{target_input.target_month}' tidak valid.")
+
+        if target_input.target_volume_liters <= 0:
+            raise ValueError("Target volume liter harus lebih besar dari 0.")
+
+        if target_input.target_revenue_idr <= 0:
+            raise ValueError("Target revenue omset harus lebih besar dari Rp 0.")
+
+        conn = self.db.get_connection()
+        cur = conn.cursor()
+        try:
+            # Verify sales user exists
+            cur.execute("SELECT id, role FROM users WHERE id = ?", (target_input.sales_user_id,))
+            u = cur.fetchone()
+            if not u:
+                raise ValueError(f"User sales dengan ID '{target_input.sales_user_id}' tidak ditemukan.")
+
+            # Verify brand exists
+            cur.execute("SELECT id FROM brands WHERE id = ?", (target_input.brand_id,))
+            b = cur.fetchone()
+            if not b:
+                raise ValueError(f"Brand dengan ID '{target_input.brand_id}' tidak ditemukan.")
+
+            target_id = str(uuid.uuid4())
+            cur.execute("""
+                INSERT INTO sales_targets (id, sales_user_id, brand_id, target_month, target_volume_liters, target_revenue_idr)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(sales_user_id, brand_id, target_month)
+                DO UPDATE SET
+                    target_volume_liters = excluded.target_volume_liters,
+                    target_revenue_idr = excluded.target_revenue_idr
+            """, (
+                target_id,
+                target_input.sales_user_id,
+                target_input.brand_id,
+                target_input.target_month,
+                target_input.target_volume_liters,
+                target_input.target_revenue_idr
+            ))
+            conn.commit()
+            return target_id
+        finally:
+            conn.close()
+
+    def get_sales_performance(self, sales_user_id: str, brand_id: str, target_month: str) -> SalesPerformanceReport:
+        """
+        Calculates sales rep target attainment vs actuals for a specific month.
+        Attainment is measured on actual volume (liters) and revenue (IDR) from orders.
+        """
+        conn = self.db.get_connection()
+        cur = conn.cursor()
+        try:
+            # 1. Fetch Sales User Details
+            cur.execute("SELECT id, full_name FROM users WHERE id = ?", (sales_user_id,))
+            user_row = cur.fetchone()
+            if not user_row:
+                raise ValueError(f"User sales dengan ID '{sales_user_id}' tidak ditemukan.")
+            sales_name = user_row["full_name"]
+
+            # 2. Fetch Configured Target for this Month
+            cur.execute("""
+                SELECT target_volume_liters, target_revenue_idr
+                FROM sales_targets
+                WHERE sales_user_id = ? AND brand_id = ? AND target_month = ?
+            """, (sales_user_id, brand_id, target_month))
+            target_row = cur.fetchone()
+
+            target_vol = target_row["target_volume_liters"] if target_row else 0.0
+            target_rev = target_row["target_revenue_idr"] if target_row else 0.0
+
+            # 3. Fetch Actual Order Performance for this Month
+            cur.execute("""
+                SELECT COUNT(*) as orders_count,
+                       COALESCE(SUM(total_order_volume), 0.0) as actual_volume,
+                       COALESCE(SUM(net_invoice_grand_total), 0.0) as actual_revenue
+                FROM orders
+                WHERE brand_id = ?
+                  AND (created_by_sales_id = ? OR customer_id IN (SELECT id FROM customers WHERE assigned_sales_id = ?))
+                  AND status != 'SKIPPED_AUDIT'
+                  AND substr(order_date, 1, 7) = ?
+            """, (brand_id, sales_user_id, sales_user_id, target_month))
+            actual_row = cur.fetchone()
+
+            orders_count = actual_row["orders_count"]
+            actual_vol = actual_row["actual_volume"]
+            actual_rev = actual_row["actual_revenue"]
+
+            # 4. Attainment Rates
+            vol_attainment = round((actual_vol / target_vol * 100), 2) if target_vol > 0 else 0.0
+            rev_attainment = round((actual_rev / target_rev * 100), 2) if target_rev > 0 else 0.0
+            aov = round(actual_rev / orders_count, 2) if orders_count > 0 else 0.0
+
+            # 5. Performance Status
+            primary_attainment = rev_attainment if target_rev > 0 else vol_attainment
+            if primary_attainment >= 100.0:
+                perf_status = "EXCEEDED"
+            elif primary_attainment >= 75.0:
+                perf_status = "ON_TRACK"
+            elif primary_attainment >= 40.0:
+                perf_status = "AT_RISK"
+            else:
+                perf_status = "LAGGING"
+
+            return SalesPerformanceReport(
+                sales_user_id=sales_user_id,
+                sales_name=sales_name,
+                brand_id=brand_id,
+                target_month=target_month,
+                target_volume_liters=target_vol,
+                actual_volume_liters=actual_vol,
+                volume_attainment_percent=vol_attainment,
+                target_revenue_idr=target_rev,
+                actual_revenue_idr=actual_rev,
+                revenue_attainment_percent=rev_attainment,
+                orders_count=orders_count,
+                average_order_value_idr=aov,
+                performance_status=perf_status
+            )
+        finally:
+            conn.close()
+
+    def get_all_sales_targets_for_month(
+        self,
+        target_month: str,
+        brand_id: Optional[str] = None
+    ) -> List[SalesPerformanceReport]:
+        """Lists performance reports across all active sales reps for a given month."""
+        conn = self.db.get_connection()
+        cur = conn.cursor()
+        try:
+            # Query default brand if not specified
+            if not brand_id:
+                cur.execute("SELECT id FROM brands WHERE is_active = 1 LIMIT 1")
+                b_row = cur.fetchone()
+                brand_id = b_row["id"] if b_row else ""
+
+            cur.execute("SELECT id FROM users WHERE role = 'SALES' AND is_active = 1")
+            sales_users = [r["id"] for r in cur.fetchall()]
+        finally:
+            conn.close()
+
+        reports = [self.get_sales_performance(uid, brand_id, target_month) for uid in sales_users]
+        reports.sort(key=lambda r: -r.revenue_attainment_percent)
+        return reports
+

@@ -2,32 +2,26 @@
 
 ## 1. Current Focus
 - **Active Release:** Phase 2: Release 2 (Field Sales & CRM)
-- **Current Milestone:** Task 4 - Sales CRM & Repeat Order Engine
-- **Next Active Sub-Task:** **Sub-task 4.2: Sales Target Tracking & Activity Logger**
+- **Current Milestone:** Task 5 - Telegram Mini App (TMA)
+- **Next Active Sub-Task:** **Sub-task 5.1: TMA Mobile Frontend (React/Tailwind with Telegram WebApp SDK harness)**
 
 ## 2. Recent Accomplishments
-- **Sub-task 4.1 Selesai & Terverifikasi:**
-  - `backend/services/crm_service.py`: Engine siklus pemesanan ulang (*median repeat-order interval*) per customer berbasis histori transaksi nyata (Tuban, Semarang, Cilacap, Bojonegoro, Lamongan, Blitar, Timika).
-  - Klasifikasi 5 status kesehatan customer:
-    - `ACTIVE`: Berada dalam siklus normal ($\le M - 3$ hari).
-    - `DUE_FOR_REORDER`: Waktu reorder tepat / estimasi stok menipis ($M - 3 < \text{days} \le M$).
-    - `OVERDUE`: Telat reorder ($M < \text{days} \le 1.5M$).
-    - `CHURN_ALERT`: Peringatan bahaya churn / defeksi kompetitor ($1.5M < \text{days} \le 3.0M$).
-    - `INACTIVE`: Dorman / pasif ($> 3.0M$).
-    - `NEW_CUSTOMER`: Akun baru ($< 2$ pesanan).
-  - Urutan prioritas antrian CRM otomatis: `DUE_FOR_REORDER` $\rightarrow$ `CHURN_ALERT` $\rightarrow$ `OVERDUE` $\rightarrow$ `ACTIVE`.
-  - Logging touchpoint aktivitas sales lapangan (`CALL`, `VISIT`, `WHATSAPP`, `SAMPLE_SENT`, `DEMO`) dengan follow-up date.
-  - `tests/test_crm_service.py`: 5/5 test lolos dalam 0.054 detik.
-  - Total pengujian sistem bertambah menjadi **42/42 unit test lolos 100%**.
+- **Task 4 (Sales CRM & Repeat Order Engine) Selesai 100%:**
+  - **Sub-task 4.1:** Engine siklus pemesanan ulang (*median repeat-order interval*) per customer, klasifikasi 5 siklus kesehatan pelanggan (`ACTIVE`, `DUE_FOR_REORDER`, `OVERDUE`, `CHURN_ALERT`, `INACTIVE`), dan antrian prioritas CRM.
+  - **Sub-task 4.2:** Sales Target Tracking & Activity Logger (`backend/services/crm_service.py`):
+    - Penentuan target bulanan sales (volume liter dan target omset rupiah per brand) dengan dukungan upsert idempotency.
+    - Kalkulasi tingkat pencapaian aktual (*attainment rate %* volume dan omset) berbasis pesanan riil pada bulan bersangkutan.
+    - Klasifikasi status performa: `EXCEEDED` ($\ge 100\%$), `ON_TRACK` ($\ge 75\%$), `AT_RISK` ($\ge 40\%$), dan `LAGGING` ($< 40\%$).
+    - Rekap laporan performa seluruh sales rep per bulan.
+  - **Total Pengujian:** Seluruh 45 unit test di sistem (`tests/test_*.py`) lolos 100% tanpa error dalam 0.58 detik.
 
 ## 3. Next Steps (Single Sub-Task Queue)
-1. **[ACTIVE] Sub-task 4.2:** Sales Target Tracking & Activity Logger (`backend/services/crm_service.py`):
-   - Manajemen target bulanan sales (target volume liter dan target omset rupiah per brand).
-   - Perhitungan pencapaian riil (*actual vs target attainment rate %*).
-   - Ringkasan performa bulanan sales rep.
-2. **Sub-task 5.1:** TMA Mobile Frontend (React/Tailwind) dengan mock Telegram WebApp SDK.
-3. **Sub-task 5.2:** TMA Draft Order Flow dengan offline sync & WhatsApp deep link invoice sharing.
-4. **Sub-task 5.3:** Generator Surat Jalan (Delivery Slip) PDF.
+1. **[ACTIVE] Sub-task 5.1:** TMA Mobile Frontend (React / Tailwind):
+   - Setup antarmuka mobile Telegram Mini App untuk field sales.
+   - Mock Telegram WebApp SDK context (`window.Telegram.WebApp.initDataUnsafe`).
+   - Tampilan antrian CRM (prioritas follow-up reorder) dan dashboard target bulanan sales.
+2. **Sub-task 5.2:** TMA Draft Order Flow dengan offline sync & WhatsApp deep link invoice sharing.
+3. **Sub-task 5.3:** Generator Surat Jalan (Delivery Slip) PDF.
 
 ## 4. Active Decisions & Considerations
 - Database `data/omnicat_local.db` tetap kanonik dan bersih (101 order, Rp 2.990.251.489). Semua test suite menggunakan temporary clone (`test_*.db`) yang dibuat di `setUpClass` dan dihapus di `tearDownClass`.
