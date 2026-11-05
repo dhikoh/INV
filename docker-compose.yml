@@ -6,8 +6,8 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: omnicat_server
-    ports:
-      - "8000:8000"
+    expose:
+      - "8000"
     environment:
       - DATABASE_PATH=/app/data/omnicat_local.db
       - OMNICAT_JWT_SECRET=${OMNICAT_JWT_SECRET:-omnicat_production_strong_key_2026_required}
