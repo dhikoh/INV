@@ -22,8 +22,8 @@
 - [x] **Task 4: Sales CRM & Repeat Order Engine** [100% COMPLETE]
   - [x] Sub-task 4.1: Customer Health & Median Reorder Interval Engine (`backend/services/crm_service.py`)
   - [x] Sub-task 4.2: Sales Dashboard & Target Tracking
-- [ ] **Task 5: Telegram Mini App (TMA)**
-  - [ ] Sub-task 5.1: TMA Mobile Frontend (React/Tailwind)
+- [ ] **Task 5: Telegram Mini App (TMA)** [IN PROGRESS]
+  - [x] Sub-task 5.1: TMA Mobile Frontend (React/Tailwind with WebApp SDK harness)
   - [ ] Sub-task 5.2: TMA Draft Order Flow with offline sync & WhatsApp deep link
   - [ ] Sub-task 5.3: Delivery Slip (Surat Jalan) Generator
 
