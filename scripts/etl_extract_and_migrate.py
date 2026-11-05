@@ -411,6 +411,16 @@ def build_omnicat_dataset():
         }
     ]
 
+    # User Brand Access Permissions
+    user_brand_access = [
+        {"user_id": USER_SUPERADMIN_ID, "brand_id": BRAND_BENTOCAT_ID, "can_approve_orders": 1},
+        {"user_id": USER_SUPERADMIN_ID, "brand_id": BRAND_ZEOLITE_ID, "can_approve_orders": 1},
+        {"user_id": USER_FINANCE_ID, "brand_id": BRAND_BENTOCAT_ID, "can_approve_orders": 1},
+        {"user_id": USER_FINANCE_ID, "brand_id": BRAND_ZEOLITE_ID, "can_approve_orders": 1},
+        {"user_id": USER_SALES_ID, "brand_id": BRAND_BENTOCAT_ID, "can_approve_orders": 0},
+        {"user_id": USER_VIEWER_ID, "brand_id": BRAND_BENTOCAT_ID, "can_approve_orders": 0}
+    ]
+
     # Regions
     regions = []
     customers = []
@@ -640,6 +650,7 @@ def build_omnicat_dataset():
         "brands": brands,
         "brand_bank_accounts": brand_bank_accounts,
         "users": users,
+        "user_brand_access": user_brand_access,
         "regions": regions,
         "customers": customers,
         "customer_doc_sequences": doc_sequences,
@@ -687,6 +698,13 @@ def migrate_to_sqlite(dataset):
             INSERT INTO users (id, username, full_name, role, password_hash)
             VALUES (?, ?, ?, ?, ?)
         """, (u["id"], u["username"], u["full_name"], u["role"], u["password_hash"]))
+
+    # Insert User Brand Access
+    for uba in dataset.get("user_brand_access", []):
+        cursor.execute("""
+            INSERT INTO user_brand_access (user_id, brand_id, can_approve_orders)
+            VALUES (?, ?, ?)
+        """, (uba["user_id"], uba["brand_id"], uba["can_approve_orders"]))
 
     # Insert Regions
     for r in dataset["regions"]:

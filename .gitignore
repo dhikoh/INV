@@ -19,3 +19,4 @@ data/*.sqlite3
 # OS metadata
 .DS_Store
 Thumbs.db
+

@@ -191,6 +191,27 @@ class AgingARReport:
     total_critical_over_60: float
     invoices: List[AgingARInvoiceItem] = field(default_factory=list)
 
+@dataclass
+class TokenClaims:
+    user_id: str
+    username: str
+    full_name: str
+    role: str
+    brand_access: List[str]
+    telegram_user_id: Optional[int] = None
+    exp: int = 0
+    iat: int = 0
+
+@dataclass
+class TelegramAuthResult:
+    is_valid: bool
+    user_id: Optional[str] = None
+    username: Optional[str] = None
+    role: Optional[str] = None
+    token: Optional[str] = None
+    rejection_reason: Optional[str] = None
+
+
 
 
 

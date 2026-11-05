@@ -1,23 +1,29 @@
 # Active Context: OmniCat Enterprise
 
 ## 1. Current Focus
-- **Active Release:** Release 1 (Core Money & Documents)
-- **Current Milestone:** Task 3 - Document Generation & Security
-- **Current Active Sub-Task:** **Sub-task 3.2: RBAC Middleware & Authentication Contracts**
+- **Active Release:** Phase 2: Release 2 (Field Sales & CRM)
+- **Current Milestone:** Task 4 - Sales CRM & Repeat Order Engine
+- **Next Active Sub-Task:** **Sub-task 4.1: Customer Health & Median Reorder Interval Engine (`backend/services/crm_service.py`)**
 
 ## 2. Recent Accomplishments
-- **Sub-task 3.1 Selesai & Terverifikasi:**
-  - `backend/services/pdf_invoice_service.py`: Generator PDF A4 resmi standar BentoCat menggunakan ReportLab.
-  - Memuat kop brand, nomor invoice, tanggal jatuh tempo, rincian varian produk (25L, 10L, 5.5L), baris diskon/ongkir/bongkar, instruksi transfer rekening bank resmi BCA Finda Fatikasari / Dhiko Herlambang, dan QR Code verifikasi keaslian digital.
-  - `tests/test_pdf_invoice_service.py`: 2/2 test lolos (dokumen pas 1 halaman A4, ekstraksi teks pypdf presisi, sinkronisasi path ke database).
-  - Seluruh 32 unit test di sistem lolos 100%.
+- **Phase 1: Release 1 (Core Money & Documents) Selesai 100%:**
+  - **Task 1 (Database & ETL Reconciliation):** 101 transaksi historis terekonsiliasi 100% tepat Rp 2.990.251.489 dan volume 684.540 Liter.
+  - **Task 2 (Core Services):** `InvoicingService`, `FinancialClearanceService`, `PromotionService`, dan `PaymentService` dengan 5-bucket Aging AR.
+  - **Task 3 (Document & Security):**
+    - Sub-task 3.1: Generator PDF Invoice resmi A4 dengan QR code verifikasi dan nomor rekening BCA Finda Fatikasari.
+    - Sub-task 3.2: Middleware RBAC 4-role (`SUPER_ADMIN`, `FINANCE`, `SALES`, `MANAGEMENT_VIEWER`), multi-brand isolation (`user_brand_access`), otentikasi Telegram WebApp cryptographic HMAC-SHA256, dan JWT session claims.
+  - **Total Pengujian:** Seluruh 37 unit test di sistem (`tests/test_*.py`) lolos 100% tanpa error dalam 0.52 detik.
 
 ## 3. Next Steps (Single Sub-Task Queue)
-1. **[ACTIVE] Sub-task 1.1:** Setup local database schema harness (PostgreSQL / SQLite compatibility layer) untuk memvalidasi struktur tabel.
-2. **Sub-task 1.2:** Implementasi script ETL `scripts/etl_extract_and_migrate.py` yang membaca seluruh 101 transaksi historis, memperbaiki 4 anomali (2925 typo, tanggal Cilacap, gap Semarang Dok 34, sheet overlap), dan menghasilkan `data/migrated_omnicat_seed.json`.
-3. **Sub-task 1.3:** Eksekusi verifikasi rekonsiliasi matematis 100% (Target: Rp 2.990.251.489 dan 684.540 Liters).
-4. **Sub-task 1.4:** Implementasi Backend Core Service: `InvoicingService` & `FinancialClearanceService`.
+1. **[ACTIVE] Sub-task 4.1:** Customer Health & Median Reorder Interval Engine (`backend/services/crm_service.py`):
+   - Hitung interval median pemesanan ulang (repeat-order cycle) per customer (contoh: Tuban 30 hari, Cilacap 32 hari, Semarang 35 hari).
+   - Klasifikasi status kesehatan customer: `ACTIVE`, `DUE_FOR_REORDER` (H-3 sebelum siklus median habis), `CHURN_ALERT` (>1.5x median tanpa repeat order), `INACTIVE` (>3x median).
+   - Notifikasi otomatis peluang repeat order untuk field sales.
+2. **Sub-task 4.2:** Sales Target Tracking & Activity Logger.
+3. **Sub-task 5.1:** TMA Mobile Frontend (React/Tailwind) dengan mock Telegram WebApp SDK.
+4. **Sub-task 5.2:** TMA Draft Order Flow dengan offline sync & WhatsApp deep link invoice sharing.
+5. **Sub-task 5.3:** Generator Surat Jalan (Delivery Slip) PDF.
 
 ## 4. Active Decisions & Considerations
-- Verifikasi lokal menggunakan Python / SQLite engine untuk pengujian cepat sebelum deployment ke PostgreSQL staging cloud/container.
-- Memastikan tipe data mata uang menggunakan `NUMERIC(15,2)` (atau INTEGER cents di SQLite) agar tidak ada pembulatan floating-point.
+- Database `data/omnicat_local.db` tetap kanonik dan bersih (101 order, Rp 2.990.251.489). Semua test suite menggunakan temporary clone (`test_*.db`) yang dibuat di `setUpClass` dan dihapus di `tearDownClass`.
+- Sales CRM membaca langsung riwayat order kanonik untuk menghitung interval pemesanan tanpa mengubah data transaksi historis.
