@@ -10,7 +10,7 @@
   - [x] Sub-task 1.2: ETL Extraction & Anomaly Correction Engine (`scripts/etl_extract_and_migrate.py`)
   - [x] Sub-task 1.3: Mathematical Reconciliation Test (Target: Rp 2.990.251.489 & 684.540 L)
 - [ ] **Task 2: Backend Core Services (Invoicing & Financial Clearance)**
-  - [ ] Sub-task 2.1: `InvoicingService` with atomic sequence lock
+  - [x] Sub-task 2.1: `InvoicingService` with atomic sequence lock
   - [ ] Sub-task 2.2: `FinancialClearanceService` (Margin Kontribusi, HPP, Freight Subsidy)
   - [ ] Sub-task 2.3: `PromotionService` (Discount, Freight subsidy, Free freight rules)
   - [ ] Sub-task 2.4: `PaymentService` & Aging AR Tracker

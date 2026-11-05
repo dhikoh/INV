@@ -3,15 +3,14 @@
 ## 1. Current Focus
 - **Active Release:** Release 1 (Core Money & Documents)
 - **Current Milestone:** Task 2 - Backend Core Services (Invoicing & Financial Clearance)
-- **Current Active Sub-Task:** **Sub-task 2.1: InvoicingService with Atomic Sequence Lock**
+- **Current Active Sub-Task:** **Sub-task 2.2: FinancialClearanceService (Contribution Margin & Freight Isolation)**
 
 ## 2. Recent Accomplishments
-- **Task 1 Selesai 100% dan Dikomit ke Git (`fef7617`):**
-  - DDL PostgreSQL 16 v2.1 di `database/init_schema.sql`.
-  - SQLite Parity Schema di `database/sqlite_schema.sql`.
-  - Pipeline ETL `scripts/etl_extract_and_migrate.py` sukses mengekstrak 101 transaksi historis senilai Rp 2.990.251.489.
-  - Test suite rekonsiliasi matematis `tests/test_reconciliation.py` lolos 7/7 (100% pass dalam 0.004 detik).
-  - Clean seed tersimpan di `data/migrated_omnicat_seed.json` dan database lokal `data/omnicat_local.db`.
+- **Sub-task 2.1 Selesai & Terverifikasi:**
+  - `backend/database.py`: Transaksi thread-safe dengan lock isolation.
+  - `backend/models.py`: Model data order, items, invoice, approval result.
+  - `backend/services/invoicing_service.py`: Pembuatan draft order, sequence counter `customer_doc_sequences`, penerbitan invoice resmi, penanganan revisi pesanan, dan validasi hak akses RBAC.
+  - `tests/test_invoicing_service.py`: 6/6 test lolos termasuk stress-test multi-thread concurrent approval (zero race collision, strictly monotonic sequencing).
 
 ## 3. Next Steps (Single Sub-Task Queue)
 1. **[ACTIVE] Sub-task 1.1:** Setup local database schema harness (PostgreSQL / SQLite compatibility layer) untuk memvalidasi struktur tabel.
