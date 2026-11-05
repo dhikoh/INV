@@ -31,10 +31,20 @@
 - [x] **Task 4: Sales CRM & Repeat Order Engine**
   - [x] **Sub-task 4.1**: Customer Health & Median Reorder Interval Engine (`backend/services/crm_service.py`)
   - [x] **Sub-task 4.2**: Sales Target Tracking & Activity Logger
-- [ ] **Task 5: Telegram Mini App (TMA)**
+- [x] **Task 5: Telegram Mini App (TMA)**
   - [x] **Sub-task 5.1**: TMA Mobile Frontend (React/Tailwind)
   - [x] **Sub-task 5.2**: TMA Draft Order Flow with offline sync & WhatsApp deep link
-  - [ ] **Sub-task 5.3**: Delivery Slip (Surat Jalan) Generator
+  - [x] **Sub-task 5.3**: Delivery Slip (Surat Jalan) Generator
+
+---
+
+### Phase 3: Release 3 (Ecosystem & Optimization)
+
+- [ ] **Task 6: Logistics & Advanced Analytics**
+  - [ ] **Sub-task 6.1**: Estafet Shared Freight Optimizer (East Java Cluster: Bojonegoro, Tuban, Lamongan)
+  - [ ] **Sub-task 6.2**: Vendor AP (Accounts Payable) & Shared Freight Allocation
+  - [ ] **Sub-task 6.3**: Multi-brand Digital Catalog PDF Generator (A4 Landscape Display & Price Sheet)
+  - [ ] **Sub-task 6.4**: Standard JSON Export/Import for External AI (Gemini/Claude) with Redacted PDP Mode
 
 ---
 

@@ -305,6 +305,29 @@ class TmaBatchSyncResult:
     failed_count: int
     results: List[TmaDraftOrderResult] = field(default_factory=list)
 
+@dataclass
+class DeliverySlipInput:
+    order_id: str
+    carrier_name: Optional[str] = "Ekspedisi Logistik Truk"
+    vehicle_plate_number: Optional[str] = "S 8291 UJ"
+    driver_name: Optional[str] = "Sopir Pengiriman"
+    notes: Optional[str] = None
+
+@dataclass
+class DeliverySlipResult:
+    order_id: str
+    delivery_slip_number: str
+    invoice_number: str
+    doc_number: Optional[int]
+    customer_name: str
+    shipping_address: str
+    shipping_date: str
+    total_packages_count: int
+    total_volume_liters: float
+    estimated_weight_kg: float
+    pdf_path: str
+
+
 
 
 
