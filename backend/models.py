@@ -142,5 +142,55 @@ class PromoValidationResult:
     rejection_reason: Optional[str] = None
     requires_admin_approval: bool = False
 
+@dataclass
+class RecordPaymentInput:
+    invoice_id: str
+    payment_type: str  # 'DP', 'PELUNASAN', 'FULL_PAYMENT'
+    amount: float
+    payment_date: Optional[str] = None
+    payment_method: str = "BCA Transfer"
+    proof_image_url: Optional[str] = None
+    notes: Optional[str] = None
+
+@dataclass
+class PaymentOutput:
+    id: str
+    invoice_id: str
+    payment_type: str
+    amount: float
+    payment_date: str
+    payment_method: str
+    verified_by_user_id: str
+    notes: Optional[str]
+    remaining_invoice_balance: float
+    new_payment_status: str
+
+@dataclass
+class AgingARInvoiceItem:
+    invoice_id: str
+    invoice_number: str
+    customer_id: str
+    customer_name: str
+    region_name: str
+    issue_date: str
+    due_date: str
+    total_amount: float
+    amount_paid: float
+    remaining_balance: float
+    days_overdue: int
+    bucket: str  # 'CURRENT', 'OVERDUE_1_15', 'OVERDUE_16_30', 'OVERDUE_31_60', 'CRITICAL_OVER_60'
+
+@dataclass
+class AgingARReport:
+    as_of_date: str
+    total_outstanding_ar: float
+    total_current: float
+    total_overdue_1_15: float
+    total_overdue_16_30: float
+    total_overdue_31_60: float
+    total_critical_over_60: float
+    invoices: List[AgingARInvoiceItem] = field(default_factory=list)
+
+
 
 

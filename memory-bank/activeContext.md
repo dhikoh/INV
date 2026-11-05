@@ -2,14 +2,16 @@
 
 ## 1. Current Focus
 - **Active Release:** Release 1 (Core Money & Documents)
-- **Current Milestone:** Task 2 - Backend Core Services (Invoicing & Financial Clearance)
-- **Current Active Sub-Task:** **Sub-task 2.4: PaymentService & Aging AR Tracker**
+- **Current Milestone:** Task 3 - Document Generation & Security
+- **Current Active Sub-Task:** **Sub-task 3.1: Professional Invoice PDF Generator with QR Verification**
 
 ## 2. Recent Accomplishments
-- **Sub-task 2.3 Selesai & Terverifikasi:**
-  - `backend/services/promotion_service.py`: Mendukung 5 tipe promo (diskon persentase, voucher nominal tetap, gratis ongkir muatan penuh $\ge 8.000\text{ L}$, subsidi ongkir, dan barang gratis).
-  - Validasi otomatis masa berlaku promo, syarat volume minimal, perhitungan potongan produk, dan penyesuaian ongkir otomatis pada order.
-  - `tests/test_promotion_service.py`: 6/6 test lolos 100%. Total 24 test di seluruh sistem lolos tanpa kegagalan.
+- **Task 2 Selesai 100% dan Seluruh Test Lolos (30/30 Pass):**
+  - `InvoicingService` (Sub-task 2.1): Atomic sequence lock pada `customer_doc_sequences`, concurency-safe numbering, pembuatan draft & penerbitan invoice resmi.
+  - `FinancialClearanceService` (Sub-task 2.2): Gross Contribution Margin calculation, real-time COGS, freight subsidy isolation, dan ambang batas margin sehat 15% dengan override alert.
+  - `PromotionService` (Sub-task 2.3): Diskon persentase, voucher tetap, gratis ongkir muatan penuh ($\ge 8.000\text{ L}$), dan subsidi logistik.
+  - `PaymentService` (Sub-task 2.4): Down Payment (DP), pelunasan bertahap, overpayment guard, transisi status invoice `UNPAID` $\rightarrow$ `PARTIAL_DP` $\rightarrow$ `PAID_LUNAS`, dan pengelompokan Aging AR 5-bucket.
+  - Test suite komprehensif 30/30 test passed.
 
 ## 3. Next Steps (Single Sub-Task Queue)
 1. **[ACTIVE] Sub-task 1.1:** Setup local database schema harness (PostgreSQL / SQLite compatibility layer) untuk memvalidasi struktur tabel.

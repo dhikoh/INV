@@ -14,11 +14,11 @@
   - [x] **Sub-task 1.2**: Develop Python ETL & reconciliation pipeline (`scripts/etl_extract_and_migrate.py`) to parse all 180 PDFs/Excels and generate normalized dataset with 4 anomaly corrections
   - [x] **Sub-task 1.3**: Execute 100% mathematical reconciliation check to verify grand total Rp 2.990.251.489 and volume 684.540 Liters
 
-- [ ] **Task 2: Backend Core Services (Invoicing & Financial Clearance)**
+- [x] **Task 2: Backend Core Services (Invoicing & Financial Clearance)**
   - [x] **Sub-task 2.1**: Implement `InvoicingService` with atomic sequence lock (`customer_doc_sequences`)
   - [x] **Sub-task 2.2**: Implement `FinancialClearanceService` (Gross Contribution Margin, HPP, real vs billed freight)
   - [x] **Sub-task 2.3**: Implement `PromotionService` (percentage discount, fixed discount, transport subsidy)
-  - [ ] **Sub-task 2.4**: Implement `PaymentService` (DP, Pelunasan, remaining balance, Aging AR)
+  - [x] **Sub-task 2.4**: Implement `PaymentService` (DP, Pelunasan, remaining balance, Aging AR)
 
 - [ ] **Task 3: Document Generation & Security**
   - [ ] **Sub-task 3.1**: Build professional Invoice PDF template with QR verification link

@@ -247,3 +247,4 @@ class PromotionService:
             ]
         finally:
             conn.close()
+
