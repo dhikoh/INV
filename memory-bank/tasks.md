@@ -26,6 +26,18 @@
 
 ---
 
+### Phase 2: Release 2 (Field Sales & CRM)
+
+- [ ] **Task 4: Sales CRM & Repeat Order Engine**
+  - [x] **Sub-task 4.1**: Customer Health & Median Reorder Interval Engine (`backend/services/crm_service.py`)
+  - [ ] **Sub-task 4.2**: Sales Target Tracking & Activity Logger
+- [ ] **Task 5: Telegram Mini App (TMA)**
+  - [ ] **Sub-task 5.1**: TMA Mobile Frontend (React/Tailwind)
+  - [ ] **Sub-task 5.2**: TMA Draft Order Flow with offline sync & WhatsApp deep link
+  - [ ] **Sub-task 5.3**: Delivery Slip (Surat Jalan) Generator
+
+---
+
 ## Relevant Files
 - `database/init_schema.sql`: Production PostgreSQL 16 DDL
 - `database/sqlite_schema.sql`: Local development & test SQLite schema

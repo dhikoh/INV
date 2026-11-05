@@ -211,6 +211,38 @@ class TelegramAuthResult:
     token: Optional[str] = None
     rejection_reason: Optional[str] = None
 
+@dataclass
+class CustomerCadenceMetric:
+    customer_id: str
+    customer_name: str
+    region_name: str
+    phone: Optional[str]
+    brand_id: str
+    total_orders: int
+    total_volume_liters: float
+    lifetime_revenue_idr: float
+    first_order_date: Optional[str]
+    last_order_date: Optional[str]
+    median_interval_days: Optional[float]
+    average_interval_days: Optional[float]
+    days_since_last_order: int
+    expected_next_order_date: Optional[str]
+    health_status: str
+    recommended_action: str
+    favorite_variant: Optional[str]
+
+@dataclass
+class SalesCrmSummary:
+    total_customers: int
+    active_count: int
+    due_for_reorder_count: int
+    overdue_count: int
+    churn_alert_count: int
+    inactive_count: int
+    new_customer_count: int
+    customers: List[CustomerCadenceMetric] = field(default_factory=list)
+
+
 
 
 

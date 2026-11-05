@@ -337,7 +337,31 @@ CREATE TABLE IF NOT EXISTS payments (
 );
 
 -- ----------------------------------------------------------------------------
--- 6. STORED PROCEDURES (ATOMIC SEQUENCE LOCK)
+-- 6. SALES CRM & FIELD ACTIVITY
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS sales_activities (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    customer_id UUID NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+    sales_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    activity_type VARCHAR(50) NOT NULL CHECK (activity_type IN ('CALL', 'VISIT', 'WHATSAPP', 'SAMPLE_SENT', 'DEMO')),
+    notes TEXT NOT NULL,
+    follow_up_date DATE,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS sales_targets (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    sales_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    brand_id UUID NOT NULL REFERENCES brands(id) ON DELETE CASCADE,
+    target_month VARCHAR(7) NOT NULL, -- Format: YYYY-MM
+    target_volume_liters NUMERIC(15,2) NOT NULL,
+    target_revenue_idr NUMERIC(15,2) NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(sales_user_id, brand_id, target_month)
+);
+
+-- ----------------------------------------------------------------------------
+-- 7. STORED PROCEDURES (ATOMIC SEQUENCE LOCK)
 -- ----------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION lock_and_assign_doc_number(
     p_order_id UUID,

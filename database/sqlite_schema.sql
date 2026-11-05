@@ -290,3 +290,26 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
+-- 7. SALES CRM & FIELD ACTIVITY
+CREATE TABLE IF NOT EXISTS sales_activities (
+    id TEXT PRIMARY KEY,
+    customer_id TEXT NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+    sales_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    activity_type TEXT NOT NULL CHECK (activity_type IN ('CALL', 'VISIT', 'WHATSAPP', 'SAMPLE_SENT', 'DEMO')),
+    notes TEXT NOT NULL,
+    follow_up_date TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS sales_targets (
+    id TEXT PRIMARY KEY,
+    sales_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    brand_id TEXT NOT NULL REFERENCES brands(id) ON DELETE CASCADE,
+    target_month TEXT NOT NULL, -- Format: YYYY-MM
+    target_volume_liters REAL NOT NULL,
+    target_revenue_idr REAL NOT NULL,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(sales_user_id, brand_id, target_month)
+);
+
+
