@@ -12,7 +12,7 @@
 - [ ] **Task 2: Backend Core Services (Invoicing & Financial Clearance)**
   - [x] Sub-task 2.1: `InvoicingService` with atomic sequence lock
   - [x] Sub-task 2.2: `FinancialClearanceService` (Margin Kontribusi, HPP, Freight Subsidy)
-  - [ ] Sub-task 2.3: `PromotionService` (Discount, Freight subsidy, Free freight rules)
+  - [x] Sub-task 2.3: `PromotionService` (Discount, Freight subsidy, Free freight rules)
   - [ ] Sub-task 2.4: `PaymentService` & Aging AR Tracker
 - [ ] **Task 3: Document Generation & Security**
   - [ ] Sub-task 3.1: Professional Invoice PDF Generator with Verification QR Code

@@ -102,4 +102,45 @@ class RegionalProfitabilitySummary:
     gross_contribution_margin: float
     margin_percent: float
 
+@dataclass
+class CreatePromotionInput:
+    brand_id: str
+    code: str
+    name: str
+    promo_type: str  # 'PERCENTAGE_DISCOUNT', 'FIXED_DISCOUNT', 'FREE_TRANSPORT', 'SUBSIDIZED_TRANSPORT', 'FREE_GOODS'
+    discount_percent: float = 0.0
+    discount_fixed_amount: float = 0.0
+    min_order_volume: float = 0.0
+    start_date: str = ""
+    end_date: str = ""
+    requires_admin_approval: bool = False
+
+@dataclass
+class PromotionOutput:
+    id: str
+    brand_id: str
+    code: str
+    name: str
+    promo_type: str
+    discount_percent: float
+    discount_fixed_amount: float
+    min_order_volume: float
+    start_date: str
+    end_date: str
+    requires_admin_approval: bool
+    is_active: bool
+
+@dataclass
+class PromoValidationResult:
+    is_valid: bool
+    promo_id: Optional[str] = None
+    promo_code: Optional[str] = None
+    promo_name: Optional[str] = None
+    promo_type: Optional[str] = None
+    discount_amount: float = 0.0
+    adjusted_transport_fee: float = 0.0
+    rejection_reason: Optional[str] = None
+    requires_admin_approval: bool = False
+
+
 

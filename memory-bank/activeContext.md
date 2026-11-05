@@ -3,14 +3,13 @@
 ## 1. Current Focus
 - **Active Release:** Release 1 (Core Money & Documents)
 - **Current Milestone:** Task 2 - Backend Core Services (Invoicing & Financial Clearance)
-- **Current Active Sub-Task:** **Sub-task 2.3: PromotionService (Discount Engine & Subsidy Rules)**
+- **Current Active Sub-Task:** **Sub-task 2.4: PaymentService & Aging AR Tracker**
 
 ## 2. Recent Accomplishments
-- **Sub-task 2.2 Selesai & Terverifikasi:**
-  - `backend/services/financial_clearance_service.py`: Menghitung HPP (COGS), ongkir riil vendor truk vs ongkir ditagih, kebocoran subsidi, Laba Kontribusi Kotor (Gross Contribution Margin), dan ambang batas margin sehat (15%).
-  - Memproteksi data sensitif dengan RBAC ketat (Sales dilarang mengakses HPP dan profit margin perusahaan).
-  - Mengimplementasikan laporan agregasi finansial regional dan KPI laba kontribusi perusahaan.
-  - `tests/test_financial_clearance_service.py`: 5/5 test lolos. Seluruh 18/18 test dalam 3 test suite sistem lolos 100%.
+- **Sub-task 2.3 Selesai & Terverifikasi:**
+  - `backend/services/promotion_service.py`: Mendukung 5 tipe promo (diskon persentase, voucher nominal tetap, gratis ongkir muatan penuh $\ge 8.000\text{ L}$, subsidi ongkir, dan barang gratis).
+  - Validasi otomatis masa berlaku promo, syarat volume minimal, perhitungan potongan produk, dan penyesuaian ongkir otomatis pada order.
+  - `tests/test_promotion_service.py`: 6/6 test lolos 100%. Total 24 test di seluruh sistem lolos tanpa kegagalan.
 
 ## 3. Next Steps (Single Sub-Task Queue)
 1. **[ACTIVE] Sub-task 1.1:** Setup local database schema harness (PostgreSQL / SQLite compatibility layer) untuk memvalidasi struktur tabel.

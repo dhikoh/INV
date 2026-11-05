@@ -250,3 +250,4 @@ class FinancialClearanceService:
             }
         finally:
             conn.close()
+
