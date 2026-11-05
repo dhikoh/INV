@@ -94,6 +94,7 @@ CREATE TABLE IF NOT EXISTS brand_bank_accounts (
     account_number VARCHAR(50) NOT NULL,
     account_holder_name VARCHAR(150) NOT NULL,
     is_primary BOOLEAN DEFAULT TRUE,
+    timelock_until TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 

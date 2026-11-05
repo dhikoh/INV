@@ -421,6 +421,50 @@ class CatalogPdfResult:
     has_pricing: bool
     generated_at: str
 
+@dataclass
+class AiExportInput:
+    brand_id: Optional[str] = None
+    redacted: bool = True  # UU PDP compliance
+    requested_by_user_id: str = "00000000-0000-0000-0000-000000000001"
+    include_financials: bool = True
+    include_logistics: bool = True
+    include_customers: bool = True
+
+@dataclass
+class AiExportResult:
+    export_id: str
+    generated_at: str
+    is_redacted: bool
+    brand_scope: str
+    total_orders_included: int
+    total_revenue_idr: float
+    total_volume_liters: float
+    json_schema_version: str
+    data: Dict[str, Any]
+    json_payload: str
+
+@dataclass
+class BrandImportInput:
+    performed_by_user_id: str
+    brand_data: Dict[str, Any]
+    dry_run: bool = False
+    superadmin_2fa_confirmed: bool = False
+    two_factor_auth_token: Optional[str] = None
+
+@dataclass
+class BrandImportResult:
+    success: bool
+    brand_id: str
+    brand_code: str
+    is_dry_run: bool
+    changes_detected: List[str]
+    bank_accounts_updated: int
+    bank_timelock_active: bool
+    bank_timelock_until: Optional[str]
+    audit_log_id: str
+    message: str
+
+
 
 
 

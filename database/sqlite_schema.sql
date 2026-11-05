@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS brand_bank_accounts (
     account_number TEXT NOT NULL,
     account_holder_name TEXT NOT NULL,
     is_primary INTEGER DEFAULT 1,
+    timelock_until TEXT,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
