@@ -15,7 +15,7 @@
   - [x] Sub-task 2.3: `PromotionService` (Discount, Freight subsidy, Free freight rules)
   - [x] Sub-task 2.4: `PaymentService` & Aging AR Tracker
 - [ ] **Task 3: Document Generation & Security**
-  - [ ] Sub-task 3.1: Professional Invoice PDF Generator with Verification QR Code
+  - [x] Sub-task 3.1: Professional Invoice PDF Generator with Verification QR Code
   - [ ] Sub-task 3.2: RBAC Middleware (Super Admin, Finance, Sales, Management Viewer)
 
 ## Release 2: Field Sales & CRM

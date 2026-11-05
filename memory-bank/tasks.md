@@ -21,7 +21,7 @@
   - [x] **Sub-task 2.4**: Implement `PaymentService` (DP, Pelunasan, remaining balance, Aging AR)
 
 - [ ] **Task 3: Document Generation & Security**
-  - [ ] **Sub-task 3.1**: Build professional Invoice PDF template with QR verification link
+  - [x] **Sub-task 3.1**: Build professional Invoice PDF template with QR verification link
   - [ ] **Sub-task 3.2**: Setup RBAC middleware and authentication contracts
 
 ---

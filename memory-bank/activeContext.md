@@ -3,15 +3,14 @@
 ## 1. Current Focus
 - **Active Release:** Release 1 (Core Money & Documents)
 - **Current Milestone:** Task 3 - Document Generation & Security
-- **Current Active Sub-Task:** **Sub-task 3.1: Professional Invoice PDF Generator with QR Verification**
+- **Current Active Sub-Task:** **Sub-task 3.2: RBAC Middleware & Authentication Contracts**
 
 ## 2. Recent Accomplishments
-- **Task 2 Selesai 100% dan Seluruh Test Lolos (30/30 Pass):**
-  - `InvoicingService` (Sub-task 2.1): Atomic sequence lock pada `customer_doc_sequences`, concurency-safe numbering, pembuatan draft & penerbitan invoice resmi.
-  - `FinancialClearanceService` (Sub-task 2.2): Gross Contribution Margin calculation, real-time COGS, freight subsidy isolation, dan ambang batas margin sehat 15% dengan override alert.
-  - `PromotionService` (Sub-task 2.3): Diskon persentase, voucher tetap, gratis ongkir muatan penuh ($\ge 8.000\text{ L}$), dan subsidi logistik.
-  - `PaymentService` (Sub-task 2.4): Down Payment (DP), pelunasan bertahap, overpayment guard, transisi status invoice `UNPAID` $\rightarrow$ `PARTIAL_DP` $\rightarrow$ `PAID_LUNAS`, dan pengelompokan Aging AR 5-bucket.
-  - Test suite komprehensif 30/30 test passed.
+- **Sub-task 3.1 Selesai & Terverifikasi:**
+  - `backend/services/pdf_invoice_service.py`: Generator PDF A4 resmi standar BentoCat menggunakan ReportLab.
+  - Memuat kop brand, nomor invoice, tanggal jatuh tempo, rincian varian produk (25L, 10L, 5.5L), baris diskon/ongkir/bongkar, instruksi transfer rekening bank resmi BCA Finda Fatikasari / Dhiko Herlambang, dan QR Code verifikasi keaslian digital.
+  - `tests/test_pdf_invoice_service.py`: 2/2 test lolos (dokumen pas 1 halaman A4, ekstraksi teks pypdf presisi, sinkronisasi path ke database).
+  - Seluruh 32 unit test di sistem lolos 100%.
 
 ## 3. Next Steps (Single Sub-Task Queue)
 1. **[ACTIVE] Sub-task 1.1:** Setup local database schema harness (PostgreSQL / SQLite compatibility layer) untuk memvalidasi struktur tabel.
