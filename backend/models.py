@@ -356,6 +356,49 @@ class FreightOptimizationPlan:
     orders: List[FreightClusterOrder] = field(default_factory=list)
     route_stops: List[str] = field(default_factory=list)
 
+@dataclass
+class VendorInput:
+    brand_id: str
+    code: str
+    name: str
+    category: str  # 'FREIGHT_EXPEDITION', 'PACKAGING_SUPPLIER', 'RAW_MATERIAL', 'GENERAL_OPERATIONAL'
+    contact_person: Optional[str] = None
+    phone: Optional[str] = None
+    bank_name: Optional[str] = None
+    bank_account_number: Optional[str] = None
+    bank_account_holder: Optional[str] = None
+
+@dataclass
+class VendorInvoiceInput:
+    vendor_id: str
+    brand_id: str
+    invoice_number: str
+    invoice_date: str
+    due_date: str
+    total_amount: float
+    is_shared_freight: bool = False
+    shared_order_ids: List[str] = field(default_factory=list)
+    notes: Optional[str] = None
+
+@dataclass
+class VendorPaymentInput:
+    vendor_invoice_id: str
+    amount: float
+    payment_date: str
+    payment_method: str = "BCA Transfer"
+    notes: Optional[str] = None
+
+@dataclass
+class VendorApSummary:
+    total_invoices_count: int
+    unpaid_count: int
+    total_ap_amount_idr: float
+    total_paid_idr: float
+    total_outstanding_ap_idr: float
+    overdue_outstanding_ap_idr: float
+    invoices: List[Dict[str, Any]] = field(default_factory=list)
+
+
 
 
 

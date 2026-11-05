@@ -30,7 +30,7 @@
 ## Release 3: Ecosystem & Optimization [IN PROGRESS]
 - [ ] **Task 6: Logistics & Advanced Analytics**
   - [x] Sub-task 6.1: Estafet Shared Freight Optimizer (`backend/services/freight_optimizer_service.py`)
-  - [ ] Sub-task 6.2: Vendor AP (Accounts Payable)
+  - [x] Sub-task 6.2: Vendor AP (Accounts Payable) & Shared Freight Allocation (`backend/services/vendor_ap_service.py`)
   - [ ] Sub-task 6.3: Multi-brand Digital Catalog PDF Generator
   - [ ] Sub-task 6.4: Standard JSON Export/Import for External AI (Gemini/Claude)
 

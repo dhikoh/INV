@@ -312,4 +312,47 @@ CREATE TABLE IF NOT EXISTS sales_targets (
     UNIQUE(sales_user_id, brand_id, target_month)
 );
 
+-- 8. VENDOR ACCOUNTS PAYABLE (AP) & SHARED FREIGHT
+CREATE TABLE IF NOT EXISTS vendors (
+    id TEXT PRIMARY KEY,
+    brand_id TEXT NOT NULL REFERENCES brands(id) ON DELETE CASCADE,
+    code TEXT UNIQUE NOT NULL,
+    name TEXT NOT NULL,
+    category TEXT NOT NULL CHECK (category IN ('FREIGHT_EXPEDITION', 'PACKAGING_SUPPLIER', 'RAW_MATERIAL', 'GENERAL_OPERATIONAL')),
+    contact_person TEXT,
+    phone TEXT,
+    bank_name TEXT,
+    bank_account_number TEXT,
+    bank_account_holder TEXT,
+    is_active INTEGER DEFAULT 1,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS vendor_invoices (
+    id TEXT PRIMARY KEY,
+    vendor_id TEXT NOT NULL REFERENCES vendors(id) ON DELETE RESTRICT,
+    brand_id TEXT NOT NULL REFERENCES brands(id) ON DELETE CASCADE,
+    invoice_number TEXT NOT NULL,
+    invoice_date TEXT NOT NULL,
+    due_date TEXT NOT NULL,
+    total_amount REAL NOT NULL CHECK (total_amount > 0),
+    amount_paid REAL NOT NULL DEFAULT 0,
+    payment_status TEXT NOT NULL CHECK (payment_status IN ('UNPAID', 'PARTIAL', 'PAID_LUNAS')) DEFAULT 'UNPAID',
+    is_shared_freight INTEGER DEFAULT 0,
+    notes TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(vendor_id, invoice_number)
+);
+
+CREATE TABLE IF NOT EXISTS shared_freight_allocations (
+    id TEXT PRIMARY KEY,
+    vendor_invoice_id TEXT NOT NULL REFERENCES vendor_invoices(id) ON DELETE CASCADE,
+    order_id TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+    allocated_freight_amount REAL NOT NULL,
+    allocated_ratio REAL NOT NULL,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(vendor_invoice_id, order_id)
+);
+
+
 

@@ -361,7 +361,51 @@ CREATE TABLE IF NOT EXISTS sales_targets (
 );
 
 -- ----------------------------------------------------------------------------
--- 7. STORED PROCEDURES (ATOMIC SEQUENCE LOCK)
+-- 7. VENDOR ACCOUNTS PAYABLE (AP) & SHARED FREIGHT
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS vendors (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    brand_id UUID NOT NULL REFERENCES brands(id) ON DELETE CASCADE,
+    code VARCHAR(50) UNIQUE NOT NULL,
+    name VARCHAR(150) NOT NULL,
+    category VARCHAR(50) NOT NULL CHECK (category IN ('FREIGHT_EXPEDITION', 'PACKAGING_SUPPLIER', 'RAW_MATERIAL', 'GENERAL_OPERATIONAL')),
+    contact_person VARCHAR(100),
+    phone VARCHAR(50),
+    bank_name VARCHAR(50),
+    bank_account_number VARCHAR(50),
+    bank_account_holder VARCHAR(150),
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS vendor_invoices (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    vendor_id UUID NOT NULL REFERENCES vendors(id) ON DELETE RESTRICT,
+    brand_id UUID NOT NULL REFERENCES brands(id) ON DELETE CASCADE,
+    invoice_number VARCHAR(100) NOT NULL,
+    invoice_date DATE NOT NULL,
+    due_date DATE NOT NULL,
+    total_amount NUMERIC(15,2) NOT NULL CHECK (total_amount > 0),
+    amount_paid NUMERIC(15,2) NOT NULL DEFAULT 0,
+    payment_status VARCHAR(20) NOT NULL CHECK (payment_status IN ('UNPAID', 'PARTIAL', 'PAID_LUNAS')) DEFAULT 'UNPAID',
+    is_shared_freight BOOLEAN DEFAULT FALSE,
+    notes TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(vendor_id, invoice_number)
+);
+
+CREATE TABLE IF NOT EXISTS shared_freight_allocations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    vendor_invoice_id UUID NOT NULL REFERENCES vendor_invoices(id) ON DELETE CASCADE,
+    order_id UUID NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+    allocated_freight_amount NUMERIC(15,2) NOT NULL,
+    allocated_ratio NUMERIC(7,4) NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(vendor_invoice_id, order_id)
+);
+
+-- ----------------------------------------------------------------------------
+-- 8. STORED PROCEDURES (ATOMIC SEQUENCE LOCK)
 -- ----------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION lock_and_assign_doc_number(
     p_order_id UUID,
