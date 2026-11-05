@@ -9,10 +9,10 @@
 
 ### Phase 1: Release 1 (Core Money & Documents)
 
-- [ ] **Task 1: Database Architecture & Schema Initialization**
+- [x] **Task 1: Database Architecture & Schema Initialization**
   - [x] **Sub-task 1.1**: Initialize local test database engine and execute DDL verification (`database/init_schema.sql` and SQLite adapter for instant local execution)
   - [x] **Sub-task 1.2**: Develop Python ETL & reconciliation pipeline (`scripts/etl_extract_and_migrate.py`) to parse all 180 PDFs/Excels and generate normalized dataset with 4 anomaly corrections
-  - [ ] **Sub-task 1.3**: Execute 100% mathematical reconciliation check to verify grand total Rp 2.990.251.489 and volume 684.540 Liters
+  - [x] **Sub-task 1.3**: Execute 100% mathematical reconciliation check to verify grand total Rp 2.990.251.489 and volume 684.540 Liters
 
 - [ ] **Task 2: Backend Core Services (Invoicing & Financial Clearance)**
   - [ ] **Sub-task 2.1**: Implement `InvoicingService` with atomic sequence lock (`customer_doc_sequences`)

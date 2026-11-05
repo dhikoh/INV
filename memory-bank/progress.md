@@ -5,10 +5,10 @@
 - **Confidence Level:** High (Historical data fully audited, requirements aligned with audit team report)
 
 ## Release 1: Core Money & Documents
-- [ ] **Task 1: Database Architecture & Schema Initialization**
+- [x] **Task 1: Database Architecture & Schema Initialization**
   - [x] Sub-task 1.1: Local Database Schema Harness & DDL verification
   - [x] Sub-task 1.2: ETL Extraction & Anomaly Correction Engine (`scripts/etl_extract_and_migrate.py`)
-  - [ ] Sub-task 1.3: Mathematical Reconciliation Test (Target: Rp 2.990.251.489 & 684.540 L)
+  - [x] Sub-task 1.3: Mathematical Reconciliation Test (Target: Rp 2.990.251.489 & 684.540 L)
 - [ ] **Task 2: Backend Core Services (Invoicing & Financial Clearance)**
   - [ ] Sub-task 2.1: `InvoicingService` with atomic sequence lock
   - [ ] Sub-task 2.2: `FinancialClearanceService` (Margin Kontribusi, HPP, Freight Subsidy)

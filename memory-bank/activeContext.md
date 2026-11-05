@@ -2,15 +2,16 @@
 
 ## 1. Current Focus
 - **Active Release:** Release 1 (Core Money & Documents)
-- **Current Milestone:** Task 1 - Database Architecture & Historical ETL Extraction
-- **Current Active Sub-Task:** **Sub-task 1.3: Mathematical Reconciliation Test & Report**
+- **Current Milestone:** Task 2 - Backend Core Services (Invoicing & Financial Clearance)
+- **Current Active Sub-Task:** **Sub-task 2.1: InvoicingService with Atomic Sequence Lock**
 
 ## 2. Recent Accomplishments
-- DDL PostgreSQL 16 v2.1 selesai dirancang di `database/init_schema.sql`.
-- SQLite Development Harness `database/sqlite_schema.sql` dan automated test `tests/test_schema_init.py` 100% pass.
-- Script ETL `scripts/etl_extract_and_migrate.py` sukses mengekstrak 101 transaksi invoice historis dengan omzet kumulatif Rp 2.990.251.489 (100% match).
-- Ekspor dataset bersih ke `data/migrated_omnicat_seed.json` dan migrasi ke SQLite database `data/omnicat_local.db` sukses tanpa error constraint.
-- Sub-task 1.2 selesai diverifikasi.
+- **Task 1 Selesai 100% dan Dikomit ke Git (`fef7617`):**
+  - DDL PostgreSQL 16 v2.1 di `database/init_schema.sql`.
+  - SQLite Parity Schema di `database/sqlite_schema.sql`.
+  - Pipeline ETL `scripts/etl_extract_and_migrate.py` sukses mengekstrak 101 transaksi historis senilai Rp 2.990.251.489.
+  - Test suite rekonsiliasi matematis `tests/test_reconciliation.py` lolos 7/7 (100% pass dalam 0.004 detik).
+  - Clean seed tersimpan di `data/migrated_omnicat_seed.json` dan database lokal `data/omnicat_local.db`.
 
 ## 3. Next Steps (Single Sub-Task Queue)
 1. **[ACTIVE] Sub-task 1.1:** Setup local database schema harness (PostgreSQL / SQLite compatibility layer) untuk memvalidasi struktur tabel.
