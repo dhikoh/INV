@@ -398,6 +398,30 @@ class VendorApSummary:
     overdue_outstanding_ap_idr: float
     invoices: List[Dict[str, Any]] = field(default_factory=list)
 
+@dataclass
+class CatalogPdfInput:
+    brand_id: str
+    format_type: str = "DISPLAY_LANDSCAPE"  # "DISPLAY_LANDSCAPE" or "B2B_PRICE_SHEET"
+    target_region_id: Optional[str] = None
+    effective_date: Optional[str] = None
+    title: Optional[str] = None
+    include_qr_code: bool = True
+    notes: Optional[str] = None
+
+@dataclass
+class CatalogPdfResult:
+    brand_id: str
+    brand_code: str
+    brand_name: str
+    format_type: str
+    orientation: str  # "LANDSCAPE" or "PORTRAIT"
+    file_path: str
+    page_count: int
+    file_size_bytes: int
+    has_pricing: bool
+    generated_at: str
+
+
 
 
 
