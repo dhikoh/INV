@@ -8,6 +8,17 @@ dan proyek ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Halaman katalog produk `/products` dengan pemisahan tampilan berdasarkan peran: Super Admin melihat HPP modal, harga dasar, margin Rupiah & bps, dan harga minimal; Sales hanya melihat harga dasar, harga minimal, dan stok tersedia tanpa kolom/data rahasia HPP atau margin (T1.6 & Seksi 10.3).
+- Desain antarmuka mobile-first responsif: tampilan kartu (card view) pada layar sempit hingga 360 px tanpa scroll horizontal, dan tabel data lengkap pada desktop (T1.6).
+- Komponen input uang `MoneyInput` (`src/components/ui/MoneyInput.tsx`) yang menerima dan membersihkan input atau paste format Rupiah (seperti "Rp 1.250.000") menjadi bilangan bulat aman murni (1250000) (T1.6 & Seksi 20.4).
+- Komponen input persentase `PercentInput` (`src/components/ui/PercentInput.tsx`) yang menerima desimal ("3,5") dan menghasilkan basis points bulat (350 bps) maksimal 2 desimal (T1.6).
+- Dialog konfirmasi pengetikan teks `ConfirmTypeDialog` (`src/components/ui/ConfirmTypeDialog.tsx`) untuk proteksi soft delete (T1.6).
+- Komponen label status terpadu `StatusBadge` (`src/components/ui/StatusBadge.tsx`) dengan pemetaan warna dan label Indonesia (T1.6).
+- Modal tambah dan ubah produk dengan validasi `minPrice <= basePrice`, deteksi otomatis perubahan harga yang mewajibkan input `priceReason`, dan galeri kelola foto produk maksimal 8 berkas (T1.6).
+- Halaman riwayat perubahan harga `/products/[id]/prices` menyajikan kronologi penyesuaian harga, selisih nominal, alasan bisnis, waktu WIB, dan identitas pengubah khusus untuk Super Admin (T1.6).
+- Suite pengujian unit `tests/unit/ui-inputs.test.ts` untuk memverifikasi logika `MoneyInput`, `PercentInput`, dan aturan validasi harga (T1.6).
+- Integrasi tautan cepat "Katalog Produk" pada dashboard (`/dashboard`) untuk kemudahan navigasi Sales dan Super Admin (T1.6).
+
 - CRUD Kategori produk (`/api/v1/categories` dan `/api/v1/categories/:id`) khusus Super Admin (read untuk Sales) dengan keunikan nama per unit usaha dan pencatatan audit log (T1.5).
 - CRUD Master produk (`/api/v1/products` dan `/api/v1/products/:id`) dengan filtering pencarian teks `q`, kategori `categoryId`, status aktif `active`, dan isolasi DTO per role (T1.5 & Seksi 10.3).
 - DTO Produk per Role (`src/lib/dto/product.ts`): Sales tidak pernah menerima `costPrice`, `hpp`, `margin`, `marginAmount`, `marginBps`, atau kunci rahasia internal lainnya (lolos `assertNoSecretKeys` Seksi 17.4 a) (T1.5).

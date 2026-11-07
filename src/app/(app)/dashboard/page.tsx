@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Building2, ShoppingCart, Users, CheckCircle2 } from 'lucide-react';
+import { Building2, ShoppingCart, Users, CheckCircle2, Package } from 'lucide-react';
 import Link from 'next/link';
 import { Skeleton } from '@/components/ui/States';
 
@@ -121,6 +121,25 @@ export default function DashboardPage() {
             </div>
             <div className="text-xs text-slate-500">
               Kelola prospek dan customer
+            </div>
+          </div>
+        </Link>
+
+        <Link
+          href="/products"
+          className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm hover:border-blue-400 transition-all flex items-center gap-4 min-h-[44px]"
+        >
+          <div className="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+            <Package className="w-6 h-6" />
+          </div>
+          <div>
+            <div className="text-base font-bold text-slate-900">
+              Katalog Produk
+            </div>
+            <div className="text-xs text-slate-500">
+              {isSuperAdmin
+                ? 'Master harga, HPP, margin & stok'
+                : 'Cek harga dasar & stok tersedia'}
             </div>
           </div>
         </Link>

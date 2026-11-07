@@ -220,6 +220,18 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
 | `POST`     | `/api/v1/payments/:id/verify`  | Super Admin        | Verifikasi dana masuk                         |
 | `GET`      | `/api/v1/invoices/:id/pdf`     | Authenticated      | Unduh berkas PDF invoice resmi                |
 
+### Antarmuka Pengguna (UI Routes)
+
+| Path                   | Hak Akses          | Deskripsi                                                        |
+| ---------------------- | ------------------ | ---------------------------------------------------------------- |
+| `/login`               | Publik             | Halaman login dengan rate-limiting & proteksi timing attack      |
+| `/dashboard`           | Super Admin, Sales | Ringkasan navigasi cepat & kartu usaha aktif                     |
+| `/profile`             | Super Admin, Sales | Pengaturan profil, ganti password, & integrasi bot Telegram      |
+| `/settings/business`   | Super Admin        | Legalitas usaha, rekening bank, toggle operasional, tema invoice |
+| `/settings/users`      | Super Admin        | Manajemen pengguna staf sales, reset password, skema komisi      |
+| `/products`            | Super Admin, Sales | Katalog produk (kolom HPP/margin khusus SA; kartu mobile 360 px) |
+| `/products/:id/prices` | Super Admin        | Kronologi riwayat perubahan harga produk & alasan bisnis         |
+
 ---
 
 ## 8. Integrasi
