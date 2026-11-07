@@ -24,6 +24,7 @@ pnpm-debug.log*
 # Uploads and temporary data
 /data/uploads/*
 !/data/uploads/.gitkeep
+uploads/
 data/*.db
 data/generated_*
 

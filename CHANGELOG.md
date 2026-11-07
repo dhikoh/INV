@@ -8,6 +8,15 @@ dan proyek ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Manajemen unit usaha (CRUD `/api/v1/businesses` dan `/api/v1/businesses/:id`), termasuk pengaturan legalitas, kode usaha kapital unik, operasional (PPN & rate, stok negatif, syarat lunas sebelum kirim, DP default, jatuh tempo, siklus repeat order), tema invoice, dan skema komisi sales (T1.3).
+- Aturan ketat imutabilitas kode usaha: kode usaha tidak dapat diubah setelah ada transaksi order (`orderCount > 0` mengembalikan 409 `INVALID_STATE`) (T1.3 & Seksi 10.5).
+- Manajemen rekening bank unit usaha (`/api/v1/businesses/:id/bank-accounts` dan `/api/v1/bank-accounts/:id`) dengan penegakan otomatis aturan satu rekening default per unit usaha dalam transaksi database (T1.3 & Seksi 6.2).
+- Modul berkas dan penyimpanan aman `src/lib/files/fileService.ts` dengan deteksi magic bytes riil (JPEG, PNG, WebP, PDF), penolakan berkas rusak/palsu (422), isolasi PDF untuk foto/logo, kompresi otomatis WebP (kualitas 82, rotasi EXIF, max 1600px via `sharp`), penamaan UUID acak, dan proteksi path traversal (T1.3 & Seksi 16.3).
+- Endpoint penyajian berkas `/api/v1/files/:businessId/:kind/:filename` dengan header `X-Content-Type-Options: nosniff`, `Cache-Control: no-store` untuk bukti transfer (proof), dan pembatasan isolasi Sales (T1.3).
+- Endpoint unggah logo usaha `POST /api/v1/businesses/:id/logo` khusus Super Admin (T1.3).
+- Modul audit logging transaksional `src/lib/audit/audit.ts` dengan fungsi rekursif `toJsonSafe` yang mengubah BigInt ke number, Date ke ISO string, dan menghapus secara bersih field sensitif (`passwordHash`, `tokenHash`, `secret`, `initData`) (T1.3 & Seksi 16.5).
+- Antarmuka pengguna pengaturan usaha lengkap dan responsif pada `src/app/(app)/settings/business/page.tsx` dengan formulir legalitas, pratinjau & upload logo, toggles operasional, tema faktur, skema komisi, modal unit usaha baru, dan manajemen rekening bank (T1.3).
+- Suite pengujian unit dan integrasi untuk modul audit, layanan berkas, dan endpoint bisnis/rekening bank (T1.3).
 - Skrip seed Super Admin produksi pada `prisma/seed.ts` membaca `SEED_SUPERADMIN_USERNAME` dan `SEED_SUPERADMIN_PASSWORD` (minimal 12 karakter), menolak eksekusi bila Super Admin sudah ada, dan menyetel `mustChangePassword = true` (T1.2).
 - Antarmuka halaman login pada `src/app/(auth)/login/page.tsx` dengan target sentuh responsif (>= 44 px), input teks >= 16 px, indikator loading, dan pesan bantuan pemilik usaha (T1.2).
 - Komponen kerangka aplikasi `AppShell` pada `src/components/AppShell.tsx` dengan sidebar desktop & drawer mobile untuk Super Admin, bar navigasi bawah untuk Sales (Beranda, Order, Customer, Pengingat, Lainnya), dan banner pengingat ganti password (T1.2).

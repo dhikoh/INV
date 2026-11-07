@@ -61,6 +61,7 @@ Tabel versi dependensi inti yang dikunci persis tanpa rentang versi (`^` atau `~
 | Password Hash   | argon2            | `0.45.2`       | Hashing password argon2id dengan parameter OWASP       |
 | Styling CSS     | Tailwind CSS      | `3.4.17`       | Framework utilitas CSS mobile-first responsif          |
 | UI Icons        | Lucide React      | `0.475.0`      | Ikonografi antarmuka terpadu                           |
+| Olah Gambar     | sharp             | `0.35.5`       | Pemrosesan citra, strip EXIF, convert WebP, anti-traversal |
 | TS Runner       | tsx               | `4.23.15`      | Eksekutor TypeScript cepat untuk seed dan skrip        |
 | Linter          | ESLint            | `9.20.1`       | Analisis statis kode                                   |
 | Pemformat Kode  | Prettier          | `3.5.1`        | Standar konsistensi format kode                        |
@@ -191,6 +192,11 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
 | `POST`     | `/api/v1/session/business`     | Super Admin        | Memilih / mengganti unit usaha aktif di sesi  |
 | `GET`      | `/api/v1/business`             | Authenticated      | Ringkasan info usaha aktif (kode, nama, logo) |
 | `GET/POST` | `/api/v1/businesses`           | Super Admin        | CRUD data unit usaha                          |
+| `GET/PATCH/DELETE` | `/api/v1/businesses/:id`   | Super Admin        | Detail, pengaturan usaha, dan soft delete     |
+| `GET/POST` | `/api/v1/businesses/:id/bank-accounts` | Super Admin    | CRUD rekening bank unit usaha                 |
+| `GET/PATCH/DELETE` | `/api/v1/bank-accounts/:id` | Super Admin       | Detail, set default, dan soft delete rekening |
+| `POST`     | `/api/v1/businesses/:id/logo`  | Super Admin        | Unggah logo usaha (multipart/form-data)       |
+| `GET`      | `/api/v1/files/:businessId/:kind/:filename` | Authenticated | Penyajian berkas aman & terisolasi       |
 | `GET/POST` | `/api/v1/users`                | Super Admin        | CRUD akun staf sales                          |
 | `GET/POST` | `/api/v1/products`             | Super Admin, Sales | Master produk (DTO disaring per role)         |
 | `GET/POST` | `/api/v1/customers`            | Super Admin, Sales | Data pelanggan & CRM                          |
@@ -245,8 +251,8 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
 
 | Fase       | Target Rilis | Deskripsi                                                               | Status              |
 | ---------- | ------------ | ----------------------------------------------------------------------- | ------------------- |
-| **Fase 0** | `v0.1.0`     | Fondasi proyek, env, skema Prisma, rumus domain, infra tes              | **SEDANG BERJALAN** |
-| **Fase 1** | `v0.2.0`     | Login, manajemen usaha, akun sales, master produk & vendor              | Belum dimulai       |
+| **Fase 0** | `v0.1.0`     | Fondasi proyek, env, skema Prisma, rumus domain, infra tes              | **SELESAI**         |
+| **Fase 1** | `v0.2.0`     | Login, manajemen usaha, akun sales, master produk & vendor              | **SEDANG BERJALAN** |
 | **Fase 2** | `v0.3.0`     | Customer CRM, order draft, floor pricing, manajemen stok                | Belum dimulai       |
 | **Fase 3** | `v0.4.0`     | Persetujuan invoice, verifikasi pembayaran, mesin cetak PDF, void/retur | Belum dimulai       |
 | **Fase 4** | `v0.5.0`     | Bot Telegram, Mini App, pengingat repeat order, katalog PWA             | Belum dimulai       |
