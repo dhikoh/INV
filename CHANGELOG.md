@@ -8,6 +8,14 @@ dan proyek ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- CRUD Master vendor dan rekanan logistik (`/api/v1/vendors` dan `/api/v1/vendors/:id`) dengan klasifikasi jenis `SUPPLIER` (pemasok barang) dan `TRANSPORT` (jasa pengangkutan/ekspedisi) khusus Super Admin (T1.7).
+- Penegakan keunikan kode vendor per unit usaha dalam status aktif (`deletedAt: null`) dan otomatisasi kode huruf besar (T1.7).
+- Soft delete vendor `DELETE /api/v1/vendors/:id` dengan pencatatan audit log `VENDOR_DELETE` yang mempertahankan integritas data transaksi masa lalu (T1.7).
+- Antarmuka pengguna manajemen vendor `/vendors` dengan tabel data lengkap untuk desktop dan tampilan kartu responsif pada layar sempit hingga 360 px tanpa scroll horizontal (T1.7).
+- Modal tambah dan ubah vendor lengkap dengan pemilihan jenis vendor, informasi kontak PIC, data rekening pembayaran, term of payment (TOP), dan catatan khusus (T1.7).
+- Suite pengujian integrasi vendor `tests/integration/vendors.test.ts` (9 skenario pengujian) mencakup CRUD, keunikan kode, filtering jenis, soft delete, dan proteksi otorisasi (T1.7).
+- Perluasan matriks hak akses `tests/integration/permissions.test.ts` memverifikasi penolakan (403 FORBIDDEN) terhadap akun Sales pada 5 endpoint vendor (T1.7 & Seksi 17.4 b).
+
 - Halaman katalog produk `/products` dengan pemisahan tampilan berdasarkan peran: Super Admin melihat HPP modal, harga dasar, margin Rupiah & bps, dan harga minimal; Sales hanya melihat harga dasar, harga minimal, dan stok tersedia tanpa kolom/data rahasia HPP atau margin (T1.6 & Seksi 10.3).
 - Desain antarmuka mobile-first responsif: tampilan kartu (card view) pada layar sempit hingga 360 px tanpa scroll horizontal, dan tabel data lengkap pada desktop (T1.6).
 - Komponen input uang `MoneyInput` (`src/components/ui/MoneyInput.tsx`) yang menerima dan membersihkan input atau paste format Rupiah (seperti "Rp 1.250.000") menjadi bilangan bulat aman murni (1250000) (T1.6 & Seksi 20.4).

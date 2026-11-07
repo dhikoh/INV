@@ -50,6 +50,15 @@ import {
   DELETE as deleteImageHandler,
 } from '@/app/api/v1/products/[id]/images/[imageId]/route';
 import { GET as getPriceHistoryHandler } from '@/app/api/v1/products/[id]/price-history/route';
+import {
+  GET as getVendorsHandler,
+  POST as createVendorHandler,
+} from '@/app/api/v1/vendors/route';
+import {
+  GET as getVendorDetailHandler,
+  PATCH as updateVendorHandler,
+  DELETE as deleteVendorHandler,
+} from '@/app/api/v1/vendors/[id]/route';
 
 describe('Matriks Hak Akses Berbasis Tabel (Seksi 5.1 & 17.4 b)', () => {
   const APP_URL = 'http://localhost:3000';
@@ -286,6 +295,41 @@ describe('Matriks Hak Akses Berbasis Tabel (Seksi 5.1 & 17.4 b)', () => {
       path: '/api/v1/products/prod_1/price-history',
       handler: (req, r) => getPriceHistoryHandler(req, r),
       params: { id: 'prod_1' },
+    },
+    {
+      name: 'GET /api/v1/vendors',
+      method: 'GET',
+      path: '/api/v1/vendors',
+      handler: (req) => getVendorsHandler(req),
+    },
+    {
+      name: 'POST /api/v1/vendors',
+      method: 'POST',
+      path: '/api/v1/vendors',
+      handler: (req) => createVendorHandler(req),
+      body: { code: 'V-1', name: 'Vendor Baru' },
+    },
+    {
+      name: 'GET /api/v1/vendors/:id',
+      method: 'GET',
+      path: '/api/v1/vendors/vnd_1',
+      handler: (req, r) => getVendorDetailHandler(req, r),
+      params: { id: 'vnd_1' },
+    },
+    {
+      name: 'PATCH /api/v1/vendors/:id',
+      method: 'PATCH',
+      path: '/api/v1/vendors/vnd_1',
+      handler: (req, r) => updateVendorHandler(req, r),
+      params: { id: 'vnd_1' },
+      body: { name: 'Vendor Update' },
+    },
+    {
+      name: 'DELETE /api/v1/vendors/:id',
+      method: 'DELETE',
+      path: '/api/v1/vendors/vnd_1',
+      handler: (req, r) => deleteVendorHandler(req, r),
+      params: { id: 'vnd_1' },
     },
   ];
 
