@@ -198,6 +198,12 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
 | `POST`     | `/api/v1/businesses/:id/logo`  | Super Admin        | Unggah logo usaha (multipart/form-data)       |
 | `GET`      | `/api/v1/files/:businessId/:kind/:filename` | Authenticated | Penyajian berkas aman & terisolasi       |
 | `GET/POST` | `/api/v1/users`                | Super Admin        | CRUD akun staf sales                          |
+| `GET/PATCH/DELETE` | `/api/v1/users/:id`        | Super Admin        | Detail, ubah data, soft delete user           |
+| `POST`     | `/api/v1/users/:id/reset-password` | Super Admin    | Reset password & cabut seluruh sesi aktif     |
+| `POST`     | `/api/v1/users/:id/deactivate` | Super Admin        | Nonaktifkan user & cabut seluruh sesi aktif   |
+| `POST`     | `/api/v1/users/:id/activate`   | Super Admin        | Aktifkan kembali user                         |
+| `POST`     | `/api/v1/auth/telegram/link-code` | Authenticated   | Buat kode tautan bot Telegram 8 karakter      |
+| `DELETE`   | `/api/v1/auth/telegram`        | Authenticated      | Putuskan tautan bot Telegram                  |
 | `GET/POST` | `/api/v1/products`             | Super Admin, Sales | Master produk (DTO disaring per role)         |
 | `GET/POST` | `/api/v1/customers`            | Super Admin, Sales | Data pelanggan & CRM                          |
 | `POST`     | `/api/v1/orders/preview`       | Super Admin, Sales | Pratinjau hitungan total & floor              |

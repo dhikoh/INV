@@ -21,6 +21,14 @@ const nextConfig: NextConfig = {
         source: '/businesses',
         destination: '/api/v1/businesses',
       },
+      {
+        source: '/users',
+        destination: '/api/v1/users',
+      },
+      {
+        source: '/users/:path*',
+        destination: '/api/v1/users/:path*',
+      },
     ];
   },
 };

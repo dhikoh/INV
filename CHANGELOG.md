@@ -8,6 +8,16 @@ dan proyek ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Manajemen pengguna sales (CRUD `/api/v1/users` dan `/api/v1/users/:id`), termasuk filtering usaha, pencarian, dan penugasan skema komisi khusus (T1.4).
+- Pendaftaran sales baru dengan username huruf kecil, password hashing argon2id, status aktif, dan kewajiban ganti password (`mustChangePassword = true`) (T1.4).
+- Endpoint reset password pengguna `POST /api/v1/users/:id/reset-password` dengan pencabutan otomatis seluruh sesi aktif dan audit log (T1.4).
+- Endpoint aktivasi `POST /api/v1/users/:id/activate` dan penonaktifan `POST /api/v1/users/:id/deactivate` dengan pencabutan instan seluruh sesi aktif (T1.4).
+- Soft delete pengguna `DELETE /api/v1/users/:id` dengan proteksi pencegahan penghapusan akun sendiri (T1.4).
+- Modul dan endpoint kode tautan bot Telegram `POST /api/v1/auth/telegram/link-code` (alfabet 8 karakter `ABCDEFGHJKLMNPQRSTUVWXYZ23456789`, hash SHA-256 tersimpan di database, masa berlaku 10 menit, dan kedaluwarsa kode lama otomatis) serta pemutusan tautan `DELETE /api/v1/auth/telegram` (T1.4 & Seksi 6.3).
+- Antarmuka manajemen pengguna `/settings/users` untuk Super Admin dengan tabel responsif, filter unit usaha, modal tambah sales, edit akun, dan reset password (T1.4).
+- Integrasi tombol "Hubungkan Telegram" dan "Putuskan Tautan" pada halaman profil `/profile` dengan kode tautan dan tombol langsung ke bot Telegram (T1.4).
+- Pengujian hak akses berbasis tabel `tests/integration/permissions.test.ts` (Seksi 17.4 b) memverifikasi penolakan (403 FORBIDDEN) saat role Sales memanggil endpoint Super Admin.
+- Suite pengujian integrasi pengguna `tests/integration/users.test.ts` mencakup siklus hidup pengguna, reset password, deaktivasi, dan kode tautan Telegram (T1.4).
 - Manajemen unit usaha (CRUD `/api/v1/businesses` dan `/api/v1/businesses/:id`), termasuk pengaturan legalitas, kode usaha kapital unik, operasional (PPN & rate, stok negatif, syarat lunas sebelum kirim, DP default, jatuh tempo, siklus repeat order), tema invoice, dan skema komisi sales (T1.3).
 - Aturan ketat imutabilitas kode usaha: kode usaha tidak dapat diubah setelah ada transaksi order (`orderCount > 0` mengembalikan 409 `INVALID_STATE`) (T1.3 & Seksi 10.5).
 - Manajemen rekening bank unit usaha (`/api/v1/businesses/:id/bank-accounts` dan `/api/v1/bank-accounts/:id`) dengan penegakan otomatis aturan satu rekening default per unit usaha dalam transaksi database (T1.3 & Seksi 6.2).

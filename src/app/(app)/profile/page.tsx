@@ -38,6 +38,16 @@ export default function ProfilePage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
+  // Integrasi Telegram link code
+  const [linkCodeData, setLinkCodeData] = useState<{
+    code: string;
+    expiresAt: string;
+    linkUrl: string;
+  } | null>(null);
+  const [generatingCode, setGeneratingCode] = useState(false);
+  const [unlinkingTelegram, setUnlinkingTelegram] = useState(false);
+  const [telegramMessage, setTelegramMessage] = useState<string | null>(null);
+
   useEffect(() => {
     async function loadProfile() {
       try {
@@ -118,6 +128,52 @@ export default function ProfilePage() {
       setError('Terjadi kesalahan jaringan.');
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function handleGenerateTelegramCode() {
+    try {
+      setGeneratingCode(true);
+      setTelegramMessage(null);
+      const res = await fetch('/api/v1/auth/telegram/link-code', {
+        method: 'POST',
+      });
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        setLinkCodeData(data.data);
+      } else {
+        setTelegramMessage(
+          data?.error?.message || 'Gagal membuat kode tautan Telegram.'
+        );
+      }
+    } catch {
+      setTelegramMessage('Terjadi kesalahan jaringan.');
+    } finally {
+      setGeneratingCode(false);
+    }
+  }
+
+  async function handleUnlinkTelegram() {
+    if (!confirm('Apakah Anda yakin ingin memutuskan tautan bot Telegram?')) {
+      return;
+    }
+    try {
+      setUnlinkingTelegram(true);
+      setTelegramMessage(null);
+      const res = await fetch('/api/v1/auth/telegram', {
+        method: 'DELETE',
+      });
+      if (res.ok) {
+        setProfile((prev) =>
+          prev ? { ...prev, telegramConnected: false } : null
+        );
+        setLinkCodeData(null);
+        setTelegramMessage('Tautan Telegram berhasil diputuskan.');
+      }
+    } catch {
+      setTelegramMessage('Terjadi kesalahan jaringan.');
+    } finally {
+      setUnlinkingTelegram(false);
     }
   }
 
@@ -234,6 +290,102 @@ export default function ProfilePage() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Integrasi Telegram */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-4">
+        <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center font-bold">
+              <Send className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="font-bold text-base text-slate-900">
+                Notifikasi & Bot Telegram
+              </h3>
+              <p className="text-xs text-slate-500">
+                Hubungkan bot Telegram untuk menerima notifikasi order dan approval
+              </p>
+            </div>
+          </div>
+
+          <div>
+            {profile.telegramConnected ? (
+              <span className="px-2.5 py-1 text-xs font-bold rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                Terhubung
+              </span>
+            ) : (
+              <span className="px-2.5 py-1 text-xs font-semibold rounded-full bg-slate-100 text-slate-600">
+                Belum Terhubung
+              </span>
+            )}
+          </div>
+        </div>
+
+        {telegramMessage && (
+          <div className="p-3 bg-sky-50 border border-sky-200 text-sky-800 rounded-xl text-xs font-medium">
+            {telegramMessage}
+          </div>
+        )}
+
+        {profile.telegramConnected ? (
+          <div className="flex items-center justify-between pt-2">
+            <p className="text-xs text-slate-600">
+              Akun Anda sudah terhubung dengan bot Telegram resmi OmniCat.
+            </p>
+            <button
+              type="button"
+              disabled={unlinkingTelegram}
+              onClick={handleUnlinkTelegram}
+              className="h-10 px-4 rounded-xl border border-rose-200 text-rose-600 hover:bg-rose-50 text-xs font-bold transition-colors disabled:opacity-50"
+            >
+              {unlinkingTelegram ? 'Memproses...' : 'Putuskan Tautan'}
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-4 pt-1">
+            {!linkCodeData ? (
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <p className="text-xs text-slate-600">
+                  Dapatkan notifikasi instan langsung di Telegram Anda dengan menghubungkan bot.
+                </p>
+                <button
+                  type="button"
+                  disabled={generatingCode}
+                  onClick={handleGenerateTelegramCode}
+                  className="h-10 px-4 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-colors shrink-0 disabled:opacity-50 shadow-sm"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  <span>{generatingCode ? 'Membuat Kode...' : 'Hubungkan Telegram'}</span>
+                </button>
+              </div>
+            ) : (
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
+                <div className="text-xs text-slate-600">
+                  Kode tautan Anda (berlaku 10 menit):
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="text-2xl font-mono font-extrabold tracking-wider text-slate-900 bg-white px-4 py-2 rounded-lg border border-slate-300">
+                    {linkCodeData.code}
+                  </div>
+                  <a
+                    href={linkCodeData.linkUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="h-11 px-5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-bold flex items-center gap-2 transition-colors shadow-sm"
+                  >
+                    <Send className="w-4 h-4" />
+                    <span>Buka Bot di Telegram</span>
+                  </a>
+                </div>
+                <p className="text-[11px] text-slate-500">
+                  Kirim perintah <code>/start {linkCodeData.code}</code> ke bot atau klik tombol di atas.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Formulir Ganti Password */}
