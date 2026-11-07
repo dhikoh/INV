@@ -58,9 +58,7 @@ export async function createSession(
   // Batasi maksimal 5 sesi aktif: cabut sesi terlama jika sudah mencapai batas
   if (activeSessions.length >= MAX_ACTIVE_SESSIONS) {
     const excessCount = activeSessions.length - (MAX_ACTIVE_SESSIONS - 1);
-    const toRevokeIds = activeSessions
-      .slice(0, excessCount)
-      .map((s) => s.id);
+    const toRevokeIds = activeSessions.slice(0, excessCount).map((s) => s.id);
 
     await prisma.session.updateMany({
       where: { id: { in: toRevokeIds } },
@@ -106,7 +104,9 @@ export async function findValidSession(
 
   // Sliding expiration: perbarui lastUsedAt & expiresAt jika sudah lewat dari 10 menit
   if (now.getTime() - session.lastUsedAt.getTime() > SLIDING_THRESHOLD_MS) {
-    const newExpiresAt = new Date(now.getTime() + SESSION_MAX_AGE_SECONDS * 1000);
+    const newExpiresAt = new Date(
+      now.getTime() + SESSION_MAX_AGE_SECONDS * 1000
+    );
     await prisma.session.update({
       where: { id: session.id },
       data: {

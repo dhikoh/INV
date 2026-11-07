@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import React from 'react';
+import './globals.css';
 
 export const metadata: Metadata = {
   title: 'OmniCat - Sistem Multi-Usaha',
@@ -13,7 +14,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="id">
-      <body>{children}</body>
+      <body className="antialiased">{children}</body>
     </html>
   );
 }

@@ -59,6 +59,9 @@ Tabel versi dependensi inti yang dikunci persis tanpa rentang versi (`^` atau `~
 | Pengujian Unit  | Vitest            | `3.0.5`        | Unit testing cepat untuk rumus domain dan logika murni |
 | Pengujian E2E   | Playwright        | `1.50.1`       | Pengujian skenario lintas antarmuka dan role           |
 | Password Hash   | argon2            | `0.45.2`       | Hashing password argon2id dengan parameter OWASP       |
+| Styling CSS     | Tailwind CSS      | `3.4.17`       | Framework utilitas CSS mobile-first responsif          |
+| UI Icons        | Lucide React      | `0.475.0`      | Ikonografi antarmuka terpadu                           |
+| TS Runner       | tsx               | `4.23.15`      | Eksekutor TypeScript cepat untuk seed dan skrip        |
 | Linter          | ESLint            | `9.20.1`       | Analisis statis kode                                   |
 | Pemformat Kode  | Prettier          | `3.5.1`        | Standar konsistensi format kode                        |
 
@@ -178,24 +181,26 @@ stateDiagram-v2
 
 Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requireContext()`:
 
-| Metode     | Endpoint Path                  | Hak Akses          | Deskripsi                                    |
-| ---------- | ------------------------------ | ------------------ | -------------------------------------------- |
-| `GET`      | `/api/health`                  | Publik             | Healthcheck database dan versi aplikasi      |
-| `POST`     | `/api/v1/auth/login`           | Publik             | Otentikasi username/password, terbitkan sesi |
-| `POST`     | `/api/v1/auth/logout`          | Authenticated      | Revokasi sesi pengguna                       |
-| `GET`      | `/api/v1/auth/me`              | Authenticated      | Profil user dan usaha aktif                  |
-| `POST`     | `/api/v1/auth/change-password` | Authenticated      | Ganti password & revokasi sesi lain          |
-| `GET/POST` | `/api/v1/businesses`           | Super Admin        | CRUD data unit usaha                         |
-| `GET/POST` | `/api/v1/users`                | Super Admin        | CRUD akun staf sales                         |
-| `GET/POST` | `/api/v1/products`             | Super Admin, Sales | Master produk (DTO disaring per role)        |
-| `GET/POST` | `/api/v1/customers`            | Super Admin, Sales | Data pelanggan & CRM                         |
-| `POST`     | `/api/v1/orders/preview`       | Super Admin, Sales | Pratinjau hitungan total & floor             |
-| `GET/POST` | `/api/v1/orders`               | Super Admin, Sales | Pencatatan & daftar order                    |
-| `POST`     | `/api/v1/orders/:id/submit`    | Sales              | Mengajukan order ke Super Admin              |
-| `POST`     | `/api/v1/invoices/:id/approve` | Super Admin        | Persetujuan invoice                          |
-| `POST`     | `/api/v1/payments`             | Super Admin, Sales | Pencatatan pembayaran & bukti transfer       |
-| `POST`     | `/api/v1/payments/:id/verify`  | Super Admin        | Verifikasi dana masuk                        |
-| `GET`      | `/api/v1/invoices/:id/pdf`     | Authenticated      | Unduh berkas PDF invoice resmi               |
+| Metode     | Endpoint Path                  | Hak Akses          | Deskripsi                                     |
+| ---------- | ------------------------------ | ------------------ | --------------------------------------------- |
+| `GET`      | `/api/health`                  | Publik             | Healthcheck database dan versi aplikasi       |
+| `POST`     | `/api/v1/auth/login`           | Publik             | Otentikasi username/password, terbitkan sesi  |
+| `POST`     | `/api/v1/auth/logout`          | Authenticated      | Revokasi sesi pengguna                        |
+| `GET`      | `/api/v1/auth/me`              | Authenticated      | Profil user dan usaha aktif                   |
+| `POST`     | `/api/v1/auth/change-password` | Authenticated      | Ganti password & revokasi sesi lain           |
+| `POST`     | `/api/v1/session/business`     | Super Admin        | Memilih / mengganti unit usaha aktif di sesi  |
+| `GET`      | `/api/v1/business`             | Authenticated      | Ringkasan info usaha aktif (kode, nama, logo) |
+| `GET/POST` | `/api/v1/businesses`           | Super Admin        | CRUD data unit usaha                          |
+| `GET/POST` | `/api/v1/users`                | Super Admin        | CRUD akun staf sales                          |
+| `GET/POST` | `/api/v1/products`             | Super Admin, Sales | Master produk (DTO disaring per role)         |
+| `GET/POST` | `/api/v1/customers`            | Super Admin, Sales | Data pelanggan & CRM                          |
+| `POST`     | `/api/v1/orders/preview`       | Super Admin, Sales | Pratinjau hitungan total & floor              |
+| `GET/POST` | `/api/v1/orders`               | Super Admin, Sales | Pencatatan & daftar order                     |
+| `POST`     | `/api/v1/orders/:id/submit`    | Sales              | Mengajukan order ke Super Admin               |
+| `POST`     | `/api/v1/invoices/:id/approve` | Super Admin        | Persetujuan invoice                           |
+| `POST`     | `/api/v1/payments`             | Super Admin, Sales | Pencatatan pembayaran & bukti transfer        |
+| `POST`     | `/api/v1/payments/:id/verify`  | Super Admin        | Verifikasi dana masuk                         |
+| `GET`      | `/api/v1/invoices/:id/pdf`     | Authenticated      | Unduh berkas PDF invoice resmi                |
 
 ---
 

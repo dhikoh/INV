@@ -8,6 +8,13 @@ dan proyek ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Skrip seed Super Admin produksi pada `prisma/seed.ts` membaca `SEED_SUPERADMIN_USERNAME` dan `SEED_SUPERADMIN_PASSWORD` (minimal 12 karakter), menolak eksekusi bila Super Admin sudah ada, dan menyetel `mustChangePassword = true` (T1.2).
+- Antarmuka halaman login pada `src/app/(auth)/login/page.tsx` dengan target sentuh responsif (>= 44 px), input teks >= 16 px, indikator loading, dan pesan bantuan pemilik usaha (T1.2).
+- Komponen kerangka aplikasi `AppShell` pada `src/components/AppShell.tsx` dengan sidebar desktop & drawer mobile untuk Super Admin, bar navigasi bawah untuk Sales (Beranda, Order, Customer, Pengingat, Lainnya), dan banner pengingat ganti password (T1.2).
+- Tiga komponen status wajib `Skeleton`, `EmptyState`, dan `ErrorState` pada `src/components/ui/States.tsx` (T1.2).
+- Endpoint dan antarmuka pengalih usaha Super Admin `POST /api/v1/session/business`, ringkasan usaha aktif `GET /api/v1/business`, dan daftar usaha `GET /api/v1/businesses` (T1.2).
+- Halaman dashboard awal pada `src/app/(app)/dashboard/page.tsx` dan halaman profil pengguna dengan formulir ganti password pada `src/app/(app)/profile/page.tsx` (T1.2).
+- Integrasi Tailwind CSS v3, PostCSS, dan ikon antarmuka `lucide-react` (T1.2).
 - Autentikasi inti dengan password hashing argon2id (parameter OWASP: memoryCost 19456, timeCost 2, parallelism 1) pada `src/lib/auth/password.ts` (T1.1).
 - Manajemen sesi berbasis token acak 32-byte (SHA-256 tersimpan di database), rotasi maksimal 5 sesi aktif, dan sliding expiration 7 hari pada `src/lib/auth/session.ts` (T1.1).
 - Pembatasan percobaan login (rate limiting) 5 kali per username atau 20 kali per IP dalam 15 menit pada `src/lib/auth/rateLimit.ts` (T1.1).

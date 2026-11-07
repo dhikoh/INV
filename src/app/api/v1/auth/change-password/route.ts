@@ -2,10 +2,7 @@ import { z } from 'zod';
 import { withApi } from '@/lib/api/withApi';
 import { prisma } from '@/lib/db';
 import { DomainError } from '@/lib/domain/money';
-import {
-  verifyPassword,
-  hashPassword,
-} from '@/lib/auth/password';
+import { verifyPassword, hashPassword } from '@/lib/auth/password';
 import { revokeOtherSessions } from '@/lib/auth/session';
 
 const ChangePasswordSchema = z
@@ -47,11 +44,7 @@ export const POST = withApi(
     );
 
     if (!isCurrentValid) {
-      throw new DomainError(
-        'VALIDATION_ERROR',
-        'Password saat ini salah',
-        422
-      );
+      throw new DomainError('VALIDATION_ERROR', 'Password saat ini salah', 422);
     }
 
     const newHash = await hashPassword(body.newPassword, user.username);

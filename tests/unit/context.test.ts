@@ -124,7 +124,9 @@ describe('Context Resolution & Role Guard (T1.1 & Seksi 10.2 & 16.1)', () => {
 
     const req = makeReq('valid-token');
     // Tanpa allowPasswordChange
-    await expect(requireContext(req, [Role.SALES])).rejects.toThrow(DomainError);
+    await expect(requireContext(req, [Role.SALES])).rejects.toThrow(
+      DomainError
+    );
 
     try {
       await requireContext(req, [Role.SALES]);
@@ -231,7 +233,12 @@ describe('Context Resolution & Role Guard (T1.1 & Seksi 10.2 & 16.1)', () => {
     expect(requireBusiness(validCtx)).toBe('biz_1');
 
     const adminWithoutBiz = {
-      user: { id: 'admin1', role: Role.SUPERADMIN, name: 'Boss', businessId: null },
+      user: {
+        id: 'admin1',
+        role: Role.SUPERADMIN,
+        name: 'Boss',
+        businessId: null,
+      },
       role: Role.SUPERADMIN,
       businessId: null,
       sessionId: 's2',

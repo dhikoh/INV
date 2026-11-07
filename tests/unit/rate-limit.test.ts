@@ -57,9 +57,9 @@ describe('Login Rate Limiting (T1.1 & Seksi 16.1)', () => {
       .mockResolvedValueOnce(1) // 1 kegagalan user
       .mockResolvedValueOnce(20); // 20 kegagalan IP
 
-    await expect(
-      checkLoginRateLimit('budi', '203.0.113.195')
-    ).rejects.toThrow(DomainError);
+    await expect(checkLoginRateLimit('budi', '203.0.113.195')).rejects.toThrow(
+      DomainError
+    );
 
     try {
       await checkLoginRateLimit('budi', '203.0.113.195');

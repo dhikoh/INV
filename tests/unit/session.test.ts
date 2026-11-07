@@ -105,7 +105,13 @@ describe('Session Management & Sliding Expiration (T1.1)', () => {
       lastUsedAt: new Date(now.getTime() - 5 * 60 * 1000), // 5 menit yang lalu (< 10 menit)
       expiresAt: new Date(now.getTime() + 604800000),
       revokedAt: null,
-      user: { id: 'u1', name: 'Admin', role: Role.SUPERADMIN, isActive: true, deletedAt: null },
+      user: {
+        id: 'u1',
+        name: 'Admin',
+        role: Role.SUPERADMIN,
+        isActive: true,
+        deletedAt: null,
+      },
     };
 
     vi.mocked(prisma.session.findUnique).mockResolvedValueOnce(
@@ -128,7 +134,13 @@ describe('Session Management & Sliding Expiration (T1.1)', () => {
       lastUsedAt: new Date(now.getTime() - 12 * 60 * 1000), // 12 menit yang lalu (> 10 menit)
       expiresAt: new Date(now.getTime() + 604800000),
       revokedAt: null,
-      user: { id: 'u1', name: 'Admin', role: Role.SUPERADMIN, isActive: true, deletedAt: null },
+      user: {
+        id: 'u1',
+        name: 'Admin',
+        role: Role.SUPERADMIN,
+        isActive: true,
+        deletedAt: null,
+      },
     };
 
     vi.mocked(prisma.session.findUnique).mockResolvedValueOnce(

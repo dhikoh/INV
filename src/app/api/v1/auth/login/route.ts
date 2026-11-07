@@ -3,18 +3,9 @@ import { z } from 'zod';
 import { prisma } from '@/lib/db';
 import { DomainError } from '@/lib/domain/money';
 import { assertSameOrigin } from '@/lib/auth/origin';
-import {
-  verifyPassword,
-  verifyDummyPassword,
-} from '@/lib/auth/password';
-import {
-  createSession,
-  setSessionCookie,
-} from '@/lib/auth/session';
-import {
-  checkLoginRateLimit,
-  recordLoginAttempt,
-} from '@/lib/auth/rateLimit';
+import { verifyPassword, verifyDummyPassword } from '@/lib/auth/password';
+import { createSession, setSessionCookie } from '@/lib/auth/session';
+import { checkLoginRateLimit, recordLoginAttempt } from '@/lib/auth/rateLimit';
 import { toErrorResponse } from '@/lib/api/withApi';
 
 const LoginSchema = z

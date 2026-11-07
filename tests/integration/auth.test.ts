@@ -60,24 +60,38 @@ let loginAttempts: MockLoginAttempt[] = [];
 vi.mock('@/lib/db', () => ({
   prisma: {
     user: {
-      findFirst: vi.fn(async ({ where }: { where: { username: string; deletedAt?: null } }) => {
-        return (
-          users.find(
-            (u) =>
-              u.username.toLowerCase() === where.username.toLowerCase() &&
-              (where.deletedAt === undefined || u.deletedAt === null)
-          ) || null
-        );
-      }),
+      findFirst: vi.fn(
+        async ({
+          where,
+        }: {
+          where: { username: string; deletedAt?: null };
+        }) => {
+          return (
+            users.find(
+              (u) =>
+                u.username.toLowerCase() === where.username.toLowerCase() &&
+                (where.deletedAt === undefined || u.deletedAt === null)
+            ) || null
+          );
+        }
+      ),
       findUnique: vi.fn(async ({ where }: { where: { id: string } }) => {
         return users.find((u) => u.id === where.id) || null;
       }),
-      update: vi.fn(async ({ where, data }: { where: { id: string }; data: Partial<MockUser> }) => {
-        const u = users.find((user) => user.id === where.id);
-        if (!u) throw new Error('User not found');
-        Object.assign(u, data);
-        return u;
-      }),
+      update: vi.fn(
+        async ({
+          where,
+          data,
+        }: {
+          where: { id: string };
+          data: Partial<MockUser>;
+        }) => {
+          const u = users.find((user) => user.id === where.id);
+          if (!u) throw new Error('User not found');
+          Object.assign(u, data);
+          return u;
+        }
+      ),
     },
     session: {
       findUnique: vi.fn(async ({ where }: { where: { tokenHash: string } }) => {
@@ -86,63 +100,122 @@ vi.mock('@/lib/db', () => ({
         const user = users.find((u) => u.id === s.userId);
         return user ? { ...s, user } : null;
       }),
-      findMany: vi.fn(async ({ where }: { where: { userId: string; revokedAt?: null; expiresAt?: { gt: Date } } }) => {
-        return sessions.filter((s) => {
-          if (s.userId !== where.userId) return false;
-          if (where.revokedAt === null && s.revokedAt !== null) return false;
-          if (where.expiresAt?.gt && s.expiresAt <= where.expiresAt.gt) return false;
-          return true;
-        });
-      }),
-      create: vi.fn(async ({ data }: { data: Omit<MockSession, 'id' | 'createdAt' | 'lastUsedAt' | 'revokedAt'> }) => {
-        const newSession: MockSession = {
-          id: 'sess_' + Math.random().toString(36).substring(7),
-          ...data,
-          createdAt: new Date(),
-          lastUsedAt: new Date(),
-          revokedAt: null,
-        };
-        sessions.push(newSession);
-        return newSession;
-      }),
-      update: vi.fn(async ({ where, data }: { where: { id: string }; data: Partial<MockSession> }) => {
-        const s = sessions.find((sess) => sess.id === where.id);
-        if (!s) throw new Error('Session not found');
-        Object.assign(s, data);
-        return s;
-      }),
-      updateMany: vi.fn(async ({ where, data }: { where: { id?: { in?: string[]; not?: string }; userId?: string; revokedAt?: null }; data: Partial<MockSession> }) => {
-        let count = 0;
-        for (const s of sessions) {
-          if (where.userId && s.userId !== where.userId) continue;
-          if (where.id?.in && !where.id.in.includes(s.id)) continue;
-          if (where.id?.not && s.id === where.id.not) continue;
-          if (where.revokedAt === null && s.revokedAt !== null) continue;
-          Object.assign(s, data);
-          count++;
+      findMany: vi.fn(
+        async ({
+          where,
+        }: {
+          where: { userId: string; revokedAt?: null; expiresAt?: { gt: Date } };
+        }) => {
+          return sessions.filter((s) => {
+            if (s.userId !== where.userId) return false;
+            if (where.revokedAt === null && s.revokedAt !== null) return false;
+            if (where.expiresAt?.gt && s.expiresAt <= where.expiresAt.gt)
+              return false;
+            return true;
+          });
         }
-        return { count };
-      }),
+      ),
+      create: vi.fn(
+        async ({
+          data,
+        }: {
+          data: Omit<
+            MockSession,
+            'id' | 'createdAt' | 'lastUsedAt' | 'revokedAt'
+          >;
+        }) => {
+          const newSession: MockSession = {
+            id: 'sess_' + Math.random().toString(36).substring(7),
+            ...data,
+            createdAt: new Date(),
+            lastUsedAt: new Date(),
+            revokedAt: null,
+          };
+          sessions.push(newSession);
+          return newSession;
+        }
+      ),
+      update: vi.fn(
+        async ({
+          where,
+          data,
+        }: {
+          where: { id: string };
+          data: Partial<MockSession>;
+        }) => {
+          const s = sessions.find((sess) => sess.id === where.id);
+          if (!s) throw new Error('Session not found');
+          Object.assign(s, data);
+          return s;
+        }
+      ),
+      updateMany: vi.fn(
+        async ({
+          where,
+          data,
+        }: {
+          where: {
+            id?: { in?: string[]; not?: string };
+            userId?: string;
+            revokedAt?: null;
+          };
+          data: Partial<MockSession>;
+        }) => {
+          let count = 0;
+          for (const s of sessions) {
+            if (where.userId && s.userId !== where.userId) continue;
+            if (where.id?.in && !where.id.in.includes(s.id)) continue;
+            if (where.id?.not && s.id === where.id.not) continue;
+            if (where.revokedAt === null && s.revokedAt !== null) continue;
+            Object.assign(s, data);
+            count++;
+          }
+          return { count };
+        }
+      ),
     },
     loginAttempt: {
-      count: vi.fn(async ({ where }: { where: { username?: string; ip?: string; success?: boolean; createdAt?: { gte: Date } } }) => {
-        return loginAttempts.filter((a) => {
-          if (where.username && a.username.toLowerCase() !== where.username.toLowerCase()) return false;
-          if (where.ip && a.ip !== where.ip) return false;
-          if (where.success !== undefined && a.success !== where.success) return false;
-          if (where.createdAt?.gte && a.createdAt < where.createdAt.gte) return false;
-          return true;
-        }).length;
-      }),
-      create: vi.fn(async ({ data }: { data: Omit<MockLoginAttempt, 'id' | 'createdAt'> }) => {
-        const attempt: MockLoginAttempt = {
-          id: 'att_' + Math.random().toString(36).substring(7),
-          ...data,
-          createdAt: new Date(),
-        };
-        loginAttempts.push(attempt);
-        return attempt;
-      }),
+      count: vi.fn(
+        async ({
+          where,
+        }: {
+          where: {
+            username?: string;
+            ip?: string;
+            success?: boolean;
+            createdAt?: { gte: Date };
+          };
+        }) => {
+          return loginAttempts.filter((a) => {
+            if (
+              where.username &&
+              a.username.toLowerCase() !== where.username.toLowerCase()
+            )
+              return false;
+            if (where.ip && a.ip !== where.ip) return false;
+            if (where.success !== undefined && a.success !== where.success)
+              return false;
+            if (where.createdAt?.gte && a.createdAt < where.createdAt.gte)
+              return false;
+            return true;
+          }).length;
+        }
+      ),
+      create: vi.fn(
+        async ({
+          data,
+        }: {
+          data: Omit<MockLoginAttempt, 'id' | 'createdAt'>;
+        }) => {
+          const attempt: MockLoginAttempt = {
+            id: 'att_' + Math.random().toString(36).substring(7),
+            ...data,
+            createdAt: new Date(),
+          };
+          loginAttempts.push(attempt);
+          return attempt;
+        }
+      ),
     },
   },
 }));
