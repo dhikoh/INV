@@ -32,3 +32,8 @@ dan proyek ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Implementasi fungsi murni logika keuangan di `src/lib/domain/` (money, pricing, order, profit, credit, commission, numbering, reminder, terbilang) dan `src/lib/format/parse.ts` (T0.4).
 - Suite pengujian unit komprehensif mencakup 100% fungsi domain keuangan (T0.4).
 - Verifikasi otomatis Fixture 7.7 contoh hitungan bisnis presisi angka demi angka (T0.4).
+- Konfigurasi `globalSetup.ts` dengan proteksi pengaman URL database tes wajib berakhiran `_test` (T0.5).
+- Utilitas isolasi database pengujian `tests/helpers/resetDb.ts` (T0.5).
+- Generator entitas pengujian terstandar `tests/factories.ts` (T0.5).
+- Detektor kebocoran field rahasia Sales `tests/helpers/leak.ts` dengan fungsi rekursif `assertNoSecretKeys` (T0.5).
+- Perintah terpisah `test:unit` dan `test:int` pada `package.json` (T0.5).
