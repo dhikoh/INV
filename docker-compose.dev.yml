@@ -1,0 +1,41 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: omnicat_postgres_dev
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+      POSTGRES_DB: app
+      TZ: Asia/Jakarta
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U app -d app']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  postgres_test:
+    image: postgres:16-alpine
+    container_name: omnicat_postgres_test
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+      POSTGRES_DB: app_test
+      TZ: Asia/Jakarta
+    ports:
+      - '5433:5432'
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U app -d app_test']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_dev_data:

@@ -324,7 +324,7 @@ PPN bukan pendapatan dan tidak masuk profit. Diskon, promo, dan subsidi harga su
 ### 7.5 credit.ts: retur (credit note) yang konsisten untuk retur bertahap
 
 Kredit untuk baris dihitung kumulatif supaya beberapa kali retur tidak menumpuk selisih pembulatan.
-// src/lib/domain/credit.tsimport { applyBps, DomainError } from './money'// Kredit kumulatif untuk r unit dari baris (setengah ke atas, aritmetika bilangan bulat)export function creditForQty(lineNet: number, qty: number, returnedQty: number): number { if (returnedQty < 0 || returnedQty > qty) throw new DomainError('RETURN_QTY_INVALID', 'Jumlah retur melebihi jumlah order') const d = 2 _ qty const n = lineNet _ returnedQty \* 2 + qty return (n - (n % d)) / d}// Kredit retur saat ini = kumulatif setelah retur - kumulatif sebelum returexport function creditThisReturn(lineNet: number, qty: number, alreadyReturned: number, nowReturning: number): number { return creditForQty(lineNet, qty, alreadyReturned + nowReturning) - creditForQty(lineNet, qty, alreadyReturned)}export function creditNoteTotals(creditExPpn: number, ppnEnabled: boolean, ppnRateBps: number) { const ppnAmount = ppnEnabled ? applyBps(creditExPpn, ppnRateBps) : 0 return { amountExPpn: creditExPpn, ppnAmount, total: creditExPpn + ppnAmount }}// HPP yang dibalik = costPrice (snapshot) x qty, HANYA untuk baris dengan restock = true
+// src/lib/domain/credit.tsimport { applyBps, DomainError } from './money'// Kredit kumulatif untuk r unit dari baris (setengah ke atas, aritmetika bilangan bulat)export function creditForQty(lineNet: number, qty: number, returnedQty: number): number { if (returnedQty < 0 || returnedQty > qty) throw new DomainError('RETURN*QTY_INVALID', 'Jumlah retur melebihi jumlah order') const d = 2 * qty const n = lineNet \_ returnedQty \* 2 + qty return (n - (n % d)) / d}// Kredit retur saat ini = kumulatif setelah retur - kumulatif sebelum returexport function creditThisReturn(lineNet: number, qty: number, alreadyReturned: number, nowReturning: number): number { return creditForQty(lineNet, qty, alreadyReturned + nowReturning) - creditForQty(lineNet, qty, alreadyReturned)}export function creditNoteTotals(creditExPpn: number, ppnEnabled: boolean, ppnRateBps: number) { const ppnAmount = ppnEnabled ? applyBps(creditExPpn, ppnRateBps) : 0 return { amountExPpn: creditExPpn, ppnAmount, total: creditExPpn + ppnAmount }}// HPP yang dibalik = costPrice (snapshot) x qty, HANYA untuk baris dengan restock = true
 
 ### 7.6 commission.ts: komisi (hanya Super Admin)
 
@@ -468,14 +468,14 @@ Hanya Super Admin yang boleh membatalkan, meretur, dan menghapus. Prinsipnya: ua
 
 | Dampak | Void order | Retur | Void pembayaran | Hapus |
 | Stok reservasi | Dilepas bila stockReserved | Tidak ada | Tidak ada | Mengikuti void |
-| Stok fisik | Dikembalikan bila sudah dikirim dan restock = true | Dikembalikan untuk baris restock (RETURN_IN) | Tidak ada | Mengikuti void |
+| Stok fisik | Dikembalikan bila sudah dikirim dan restock = true | Dikembalikan untuk baris restock (RETURN*IN) | Tidak ada | Mengikuti void |
 | Uang masuk | Dibuat REFUND terverifikasi atau saldo kredit customer (wajib dipilih) | Sesuai settlement: OFFSET, REFUND, atau CUSTOMER_CREDIT | paidTotal dihitung ulang | Mengikuti void |
 | Sisa tagihan (balanceDue) | Order tidak lagi ditagih | Turun bila OFFSET | Naik | Mengikuti void |
 | Profit | Order dikeluarkan dari laporan. Ongkir aktual dan biaya lain yang sudah keluar tampil sebagai "Kerugian pembatalan" | Pendapatan dan HPP dikoreksi (rumus 7.4) | Tidak ada | Mengikuti void |
 | Komisi | REVERSED | Dihitung ulang bila belum PAID | Dihitung ulang | Mengikuti void |
 | Pengingat repeat | Dibangun ulang dari order selesai yang tersisa | Tidak ada | Tidak ada | Mengikuti void |
 | Nomor dokumen | Tetap terpakai, tidak dipakai ulang | Nomor credit note baru | Tidak ada | Tidak ada |
-| Audit log | ORDER_VOID dengan snapshot sebelum | CREDIT_NOTE_CREATE | PAYMENT_VOID | _\_DELETE, _\_PURGE dengan snapshot penuh |
+| Audit log | ORDER_VOID dengan snapshot sebelum | CREDIT_NOTE_CREATE | PAYMENT_VOID | *\_DELETE, \_\_PURGE dengan snapshot penuh |
 
 ### 9.3 Void order, langkah demi langkah
 

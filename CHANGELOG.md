@@ -17,3 +17,9 @@ dan proyek ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Dokumen keputusan arsitektur awal `docs/adr/0001-uang-bigint.md` dan `docs/adr/0002-stack.md` (T0.1).
 - Dokumen pelacak pertanyaan terbuka `docs/OPEN_QUESTIONS.md` (T0.1).
 - Struktur direktori aplikasi sesuai bagian 3.2 panduan spesifikasi (T0.1).
+- Validasi variabel environment berbasis Zod pada `src/lib/env.ts` (T0.2).
+- Logger terstruktur Pino dengan sensor/redaction otomatis field sensitif (cookie, password, token, APP_SECRET, initData) pada `src/lib/logger.ts` (T0.2).
+- Endpoint publik pemantauan status `GET /api/health` mengembalikan { ok, db, version } (T0.2).
+- Konfigurasi database development dan testing PostgreSQL pada `docker-compose.dev.yml` (T0.2).
+- Dockerfile multi-stage production dengan headless Chromium dan font terpasang untuk PDF rendering (T0.2).
+- Template variabel environment lengkap `.env.example` (T0.2).
