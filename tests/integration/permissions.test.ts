@@ -34,6 +34,22 @@ import {
 } from '@/app/api/v1/bank-accounts/[id]/route';
 import { POST as uploadLogoHandler } from '@/app/api/v1/businesses/[id]/logo/route';
 import { POST as switchBusinessHandler } from '@/app/api/v1/session/business/route';
+import { POST as createCategoryHandler } from '@/app/api/v1/categories/route';
+import {
+  PATCH as updateCategoryHandler,
+  DELETE as deleteCategoryHandler,
+} from '@/app/api/v1/categories/[id]/route';
+import { POST as createProductHandler } from '@/app/api/v1/products/route';
+import {
+  PATCH as updateProductHandler,
+  DELETE as deleteProductHandler,
+} from '@/app/api/v1/products/[id]/route';
+import { POST as uploadImagesHandler } from '@/app/api/v1/products/[id]/images/route';
+import {
+  PATCH as updateImageHandler,
+  DELETE as deleteImageHandler,
+} from '@/app/api/v1/products/[id]/images/[imageId]/route';
+import { GET as getPriceHistoryHandler } from '@/app/api/v1/products/[id]/price-history/route';
 
 describe('Matriks Hak Akses Berbasis Tabel (Seksi 5.1 & 17.4 b)', () => {
   const APP_URL = 'http://localhost:3000';
@@ -189,6 +205,87 @@ describe('Matriks Hak Akses Berbasis Tabel (Seksi 5.1 & 17.4 b)', () => {
       path: '/api/v1/session/business',
       handler: (req) => switchBusinessHandler(req),
       body: { businessId: 'biz_2' },
+    },
+    {
+      name: 'POST /api/v1/categories',
+      method: 'POST',
+      path: '/api/v1/categories',
+      handler: (req) => createCategoryHandler(req),
+      body: { name: 'Kategori Baru' },
+    },
+    {
+      name: 'PATCH /api/v1/categories/:id',
+      method: 'PATCH',
+      path: '/api/v1/categories/cat_1',
+      handler: (req, r) => updateCategoryHandler(req, r),
+      params: { id: 'cat_1' },
+      body: { name: 'Kategori Update' },
+    },
+    {
+      name: 'DELETE /api/v1/categories/:id',
+      method: 'DELETE',
+      path: '/api/v1/categories/cat_1',
+      handler: (req, r) => deleteCategoryHandler(req, r),
+      params: { id: 'cat_1' },
+    },
+    {
+      name: 'POST /api/v1/products',
+      method: 'POST',
+      path: '/api/v1/products',
+      handler: (req) => createProductHandler(req),
+      body: {
+        sku: 'P-1',
+        name: 'Produk Baru',
+        unit: 'PCS',
+        basePrice: 10000,
+        minPrice: 8000,
+        costPrice: 5000,
+      },
+    },
+    {
+      name: 'PATCH /api/v1/products/:id',
+      method: 'PATCH',
+      path: '/api/v1/products/prod_1',
+      handler: (req, r) => updateProductHandler(req, r),
+      params: { id: 'prod_1' },
+      body: { name: 'Produk Update', rev: 1 },
+    },
+    {
+      name: 'DELETE /api/v1/products/:id',
+      method: 'DELETE',
+      path: '/api/v1/products/prod_1',
+      handler: (req, r) => deleteProductHandler(req, r),
+      params: { id: 'prod_1' },
+      body: { confirm: 'Produk Update' },
+    },
+    {
+      name: 'POST /api/v1/products/:id/images',
+      method: 'POST',
+      path: '/api/v1/products/prod_1/images',
+      handler: (req, r) => uploadImagesHandler(req, r),
+      params: { id: 'prod_1' },
+    },
+    {
+      name: 'PATCH /api/v1/products/:id/images/:imageId',
+      method: 'PATCH',
+      path: '/api/v1/products/prod_1/images/img_1',
+      handler: (req, r) => updateImageHandler(req, r),
+      params: { id: 'prod_1', imageId: 'img_1' },
+      body: { isPrimary: true },
+    },
+    {
+      name: 'DELETE /api/v1/products/:id/images/:imageId',
+      method: 'DELETE',
+      path: '/api/v1/products/prod_1/images/img_1',
+      handler: (req, r) => deleteImageHandler(req, r),
+      params: { id: 'prod_1', imageId: 'img_1' },
+    },
+    {
+      name: 'GET /api/v1/products/:id/price-history',
+      method: 'GET',
+      path: '/api/v1/products/prod_1/price-history',
+      handler: (req, r) => getPriceHistoryHandler(req, r),
+      params: { id: 'prod_1' },
     },
   ];
 

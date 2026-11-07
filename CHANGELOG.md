@@ -8,6 +8,18 @@ dan proyek ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- CRUD Kategori produk (`/api/v1/categories` dan `/api/v1/categories/:id`) khusus Super Admin (read untuk Sales) dengan keunikan nama per unit usaha dan pencatatan audit log (T1.5).
+- CRUD Master produk (`/api/v1/products` dan `/api/v1/products/:id`) dengan filtering pencarian teks `q`, kategori `categoryId`, status aktif `active`, dan isolasi DTO per role (T1.5 & Seksi 10.3).
+- DTO Produk per Role (`src/lib/dto/product.ts`): Sales tidak pernah menerima `costPrice`, `hpp`, `margin`, `marginAmount`, `marginBps`, atau kunci rahasia internal lainnya (lolos `assertNoSecretKeys` Seksi 17.4 a) (T1.5).
+- Validasi harga: `minPrice <= basePrice` di Route Handler, penolakan jika `minPrice > basePrice` dengan 422 `VALIDATION_ERROR` (T1.5 & Seksi 10.3).
+- Penguncian optimistik (`rev`): verifikasi versi revisi saat edit produk, penolakan jika data sudah basi dengan 409 `OPTIMISTIC_LOCK_ERROR` (T1.5 & Seksi 10.3).
+- Aturan pencatatan riwayat harga (`PriceHistory`): perubahan `costPrice`, `basePrice`, atau `minPrice` mewajibkan pengisian `priceReason` (minimal 3 karakter), mencatat riwayat perubahan secara append-only, dan menaikkan nilai `rev` (T1.5).
+- Endpoint riwayat harga `GET /api/v1/products/:id/price-history` khusus Super Admin (Sales menerima 403 FORBIDDEN) (T1.5).
+- Soft delete produk `DELETE /api/v1/products/:id` dengan konfirmasi teks nama produk yang persis (`confirm: product.name`) (T1.5 & Seksi 10.3).
+- Manajemen foto produk (`POST /api/v1/products/:id/images`, `PATCH /api/v1/products/:id/images/:imageId`, `DELETE /api/v1/products/:id/images/:imageId`): batas maksimal 8 foto per produk, konversi WebP 82 1600px, magic bytes check, dan rotasi otomatis foto utama saat foto utama dihapus (T1.5 & Seksi 10.3).
+- Suite pengujian integrasi katalog `tests/integration/products.test.ts` (15 skenario pengujian) mencakup kebocoran DTO, harga, optimistic lock, price history, soft delete, dan batas 8 foto (T1.5).
+- Perluasan matriks hak akses `tests/integration/permissions.test.ts` dengan 10 endpoint katalog memverifikasi role Sales ditolak (403 FORBIDDEN) (T1.5 & Seksi 17.4 b).
+
 - Manajemen pengguna sales (CRUD `/api/v1/users` dan `/api/v1/users/:id`), termasuk filtering usaha, pencarian, dan penugasan skema komisi khusus (T1.4).
 - Pendaftaran sales baru dengan username huruf kecil, password hashing argon2id, status aktif, dan kewajiban ganti password (`mustChangePassword = true`) (T1.4).
 - Endpoint reset password pengguna `POST /api/v1/users/:id/reset-password` dengan pencabutan otomatis seluruh sesi aktif dan audit log (T1.4).
