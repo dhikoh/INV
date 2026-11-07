@@ -29,3 +29,6 @@ dan proyek ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Integrasi `@prisma/adapter-pg` dan konfigurasi `prisma.config.ts` untuk Prisma 7 (T0.3).
 - Tes integrasi database dengan `@electric-sql/pglite` membuktikan check constraint `product_min_le_base` dan trigger `audit_log_immutable` (T0.3).
 - Dokumen keputusan arsitektur `docs/adr/0003-prisma-7-config.md` (T0.3).
+- Implementasi fungsi murni logika keuangan di `src/lib/domain/` (money, pricing, order, profit, credit, commission, numbering, reminder, terbilang) dan `src/lib/format/parse.ts` (T0.4).
+- Suite pengujian unit komprehensif mencakup 100% fungsi domain keuangan (T0.4).
+- Verifikasi otomatis Fixture 7.7 contoh hitungan bisnis presisi angka demi angka (T0.4).
