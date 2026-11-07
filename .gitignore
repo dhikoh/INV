@@ -1,25 +1,49 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.env
-venv/
-.venv/
-
-# Node
+# Dependencies
 node_modules/
-dist/
+.pnpm-store/
+
+# Next.js build
 .next/
+out/
+dist/
 
-# Databases & logs
+# Environment files
+.env
+.env*.local
+!.env.example
+
+# Logs and databases
 *.log
-data/*.db
-data/*.sqlite3
-data/generated_catalogs/
-data/generated_invoices/
-data/generated_delivery_slips/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.db
+*.sqlite3
 
-# OS metadata
+# Uploads and temporary data
+/data/uploads/*
+!/data/uploads/.gitkeep
+data/*.db
+data/generated_*
+
+# Playwright & test reports
+test-results/
+playwright-report/
+blob-report/
+coverage/
+
+# OS and Editor metadata
 .DS_Store
 Thumbs.db
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
 
+# Reference raw archives (optional)
+BENTOCAT-20261104T120040Z-1-001.zip
+
+*.tsbuildinfo
