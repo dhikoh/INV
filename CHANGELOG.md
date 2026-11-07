@@ -4,6 +4,26 @@ Semua perubahan penting pada proyek ini dicatat di dokumen ini.
 Format ini berbasis pada [Keep a Changelog](https://keepachangelog.com/id/1.0.0/)
 dan proyek ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Autentikasi inti dengan password hashing argon2id (parameter OWASP: memoryCost 19456, timeCost 2, parallelism 1) pada `src/lib/auth/password.ts` (T1.1).
+- Manajemen sesi berbasis token acak 32-byte (SHA-256 tersimpan di database), rotasi maksimal 5 sesi aktif, dan sliding expiration 7 hari pada `src/lib/auth/session.ts` (T1.1).
+- Pembatasan percobaan login (rate limiting) 5 kali per username atau 20 kali per IP dalam 15 menit pada `src/lib/auth/rateLimit.ts` (T1.1).
+- Proteksi CSRF same-origin untuk seluruh metode HTTP non-GET pada `src/lib/auth/origin.ts` (T1.1).
+- Ekstraksi konteks sesi dan otorisasi role terpusat dengan pemblokiran `mustChangePassword` pada `src/lib/auth/context.ts` (T1.1).
+- Wrapper API standar `withApi` dengan parsing schema Zod strict, serialisasi BigInt/Date, dan pemetaan error otomatis pada `src/lib/api/withApi.ts` (T1.1).
+- Route Handler autentikasi: `POST /api/v1/auth/login`, `POST /api/v1/auth/logout`, `GET /api/v1/auth/me`, dan `POST /api/v1/auth/change-password` (T1.1).
+- Rewrite URL perutean `/auth/:path*` menuju `/api/v1/auth/:path*` pada `next.config.ts` (T1.1).
+- Suite pengujian unit dan integrasi (Tes 17.3 nomor 17) mencakup seluruh skenario kegagalan dan keberhasilan autentikasi (T1.1).
+
+### Security
+
+- Mitigasi serangan timing attack melalui verifikasi hash dummy saat username tidak ditemukan (T1.1).
+- Penegakan atribut cookie sesi aman: `HttpOnly`, `Secure`, `SameSite=Lax`, `Path=/`, `Max-Age=604800` (T1.1).
+- Penyeragaman pesan kegagalan login selalu "Username atau password salah" (T1.1).
+
 ## [0.1.0] - 2026-11-07
 
 ### Added
