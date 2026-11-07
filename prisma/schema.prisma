@@ -1,0 +1,917 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  SUPERADMIN
+  SALES
+}
+
+enum InvoiceTheme {
+  PROFESIONAL
+  FAMILY
+  MINIMALIS
+  MODERN
+  KLASIK
+}
+
+enum CommissionMode {
+  PERCENT_OF_PROFIT
+  PERCENT_OF_REVENUE
+  TIERED_BY_TARGET
+  FIXED_PER_ORDER
+}
+
+enum CommissionTrigger {
+  ON_FULL_PAID
+  ON_DP_PAID
+}
+
+enum CommissionStatus {
+  EARNED
+  PAID
+  REVERSED
+}
+
+enum VendorKind {
+  SUPPLIER
+  TRANSPORT
+}
+
+enum PipelineStage {
+  LEAD
+  PROSPECT
+  DEAL
+  REPEAT
+  LOST
+}
+
+enum PriceField {
+  COST
+  BASE
+  MIN
+  CUSTOMER_MIN
+}
+
+enum DiscountType {
+  NONE
+  PERCENT
+  AMOUNT
+}
+
+enum DiscountSource {
+  MANUAL
+  PROMO
+  SUBSIDY
+}
+
+enum OrderStatus {
+  DRAFT
+  PENDING_APPROVAL
+  REVISION_REQUIRED
+  AWAITING_DP
+  IN_PROCESS
+  FINAL_PENDING_APPROVAL
+  AWAITING_FINAL_PAYMENT
+  COMPLETED
+  CANCELLED
+}
+
+enum InvoiceType {
+  DP
+  FINAL
+}
+
+enum InvoiceStatus {
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+  WITHDRAWN
+  VOID
+}
+
+enum PaymentType {
+  RECEIPT
+  REFUND
+}
+
+enum PaymentMethod {
+  TRANSFER
+  CASH
+  CREDIT
+  OTHER
+}
+
+enum PaymentStatus {
+  PENDING_VERIFICATION
+  VERIFIED
+  REJECTED
+  VOID
+}
+
+enum ShipMethod {
+  OWN_FLEET
+  EXPEDITION
+  TRANSPORT_VENDOR
+}
+
+enum ShipStatus {
+  PREPARING
+  SHIPPED
+  DELIVERED
+}
+
+enum PoStatus {
+  DRAFT
+  ORDERED
+  PARTIAL_RECEIVED
+  RECEIVED
+  CANCELLED
+}
+
+enum StockMoveType {
+  PO_RECEIPT
+  SALE_SHIPMENT
+  RETURN_IN
+  ADJUSTMENT
+  OPNAME
+  VOID_REVERSAL
+}
+
+enum CreditSettlement {
+  OFFSET
+  REFUND
+  CUSTOMER_CREDIT
+}
+
+enum ReminderStatus {
+  ACTIVE
+  PAUSED
+  DONE
+  CANCELLED
+}
+
+enum ReminderSource {
+  AUTO
+  MANUAL
+}
+
+enum InteractionType {
+  CALL
+  VISIT
+  WHATSAPP
+  EMAIL
+  OTHER
+}
+
+model Business {
+  id                    String            @id @default(cuid())
+  code                  String            @unique // kode usaha huruf besar, contoh TRB
+  name                  String
+  legalName             String?
+  address               String?           @db.Text
+  phone                 String?
+  email                 String?
+  npwp                  String?
+  logoPath              String?
+  invoiceTheme          InvoiceTheme      @default(PROFESIONAL)
+  invoiceFooterNote     String?           @db.Text
+  ppnEnabled            Boolean           @default(false)
+  ppnRateBps            Int               @default(1100)
+  allowNegativeStock    Boolean           @default(false)
+  requirePaidBeforeShip Boolean           @default(false)
+  defaultDpBps          Int               @default(5000) // 0 = tanpa DP
+  dueDays               Int               @default(7) // tempo invoice pelunasan
+  defaultRepeatDays     Int               @default(30)
+  commissionMode        CommissionMode    @default(PERCENT_OF_PROFIT)
+  commissionRateBps     Int               @default(1000)
+  commissionFixedAmount BigInt            @default(0)
+  commissionTrigger     CommissionTrigger @default(ON_FULL_PAID)
+  isActive              Boolean           @default(true)
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+  deletedAt             DateTime?
+  bankAccounts          BankAccount[]
+  users                 User[]
+  categories            Category[]
+  vendors               Vendor[]
+  products              Product[]
+  customers             Customer[]
+  orders                Order[]
+  invoices              Invoice[]
+  payments              Payment[]
+  shipments             Shipment[]
+  creditNotes           CreditNote[]
+  purchaseOrders        PurchaseOrder[]
+  catalogs              Catalog[]
+}
+
+model BankAccount {
+  id            String    @id @default(cuid())
+  businessId    String
+  business      Business  @relation(fields: [businessId], references: [id])
+  bankName      String
+  accountNumber String
+  accountHolder String
+  isDefault     Boolean   @default(false)
+  deletedAt     DateTime?
+
+  @@index([businessId])
+}
+
+model User {
+  id                    String             @id @default(cuid())
+  username              String             @unique // selalu disimpan huruf kecil
+  passwordHash          String
+  name                  String
+  role                  Role
+  businessId            String? // null untuk SUPERADMIN
+  business              Business?          @relation(fields: [businessId], references: [id])
+  isActive              Boolean            @default(true)
+  mustChangePassword    Boolean            @default(true)
+  telegramChatId        BigInt?            @unique
+  telegramLinkedAt      DateTime?
+  telegramBlocked       Boolean            @default(false)
+  commissionMode        CommissionMode? // null = ikut pengaturan usaha
+  commissionRateBps     Int?
+  commissionFixedAmount BigInt?
+  lastSeenReleaseAt     DateTime?
+  lastLoginAt           DateTime?
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+  deletedAt             DateTime?
+  sessions              Session[]
+  telegramLinkCodes     TelegramLinkCode[]
+  customers             Customer[]
+
+  @@index([businessId])
+}
+
+model Session {
+  id               String    @id @default(cuid())
+  userId           String
+  user             User      @relation(fields: [userId], references: [id])
+  tokenHash        String    @unique // hash SHA-256 dari token di cookie
+  activeBusinessId String? // dipakai SUPERADMIN
+  userAgent        String?
+  ip               String?
+  createdAt        DateTime  @default(now())
+  lastUsedAt       DateTime  @default(now())
+  expiresAt        DateTime
+  revokedAt        DateTime?
+
+  @@index([userId])
+}
+
+model LoginAttempt {
+  id        String   @id @default(cuid())
+  username  String
+  ip        String
+  success   Boolean
+  createdAt DateTime @default(now())
+
+  @@index([username, createdAt])
+  @@index([ip, createdAt])
+}
+
+model TelegramLinkCode {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id])
+  codeHash  String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+}
+
+model Category {
+  id         String    @id @default(cuid())
+  businessId String
+  business   Business  @relation(fields: [businessId], references: [id])
+  name       String
+  sortOrder  Int       @default(0)
+  deletedAt  DateTime?
+  products   Product[]
+
+  @@unique([businessId, name])
+}
+
+model Vendor {
+  id                String          @id @default(cuid())
+  businessId        String
+  business          Business        @relation(fields: [businessId], references: [id])
+  kind              VendorKind      @default(SUPPLIER)
+  code              String // huruf besar, dipakai di nomor PO
+  name              String
+  picName           String?
+  phone             String?
+  address           String?         @db.Text
+  bankName          String?
+  bankAccountNumber String?
+  bankAccountHolder String?
+  paymentTermDays   Int             @default(0)
+  notes             String?         @db.Text
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  deletedAt         DateTime?
+  products          Product[]
+  purchaseOrders    PurchaseOrder[]
+
+  @@unique([businessId, code])
+}
+
+model Product {
+  id              String         @id @default(cuid())
+  businessId      String
+  business        Business       @relation(fields: [businessId], references: [id])
+  categoryId      String?
+  category        Category?      @relation(fields: [categoryId], references: [id])
+  defaultVendorId String?
+  defaultVendor   Vendor?        @relation(fields: [defaultVendorId], references: [id])
+  sku             String
+  name            String
+  description     String?        @db.Text
+  unit            String // pcs, kg, dus, karung
+  costPrice       BigInt         @default(0) // RAHASIA (HPP)
+  basePrice       BigInt
+  minPrice        BigInt
+  stockQty        Int            @default(0) // jumlah fisik, bisa minus bila diizinkan
+  reservedQty     Int            @default(0) // dipesan order yang sudah disetujui, belum dikirim
+  minStockAlert   Int            @default(0)
+  isActive        Boolean        @default(true)
+  rev             Int            @default(0)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  deletedAt       DateTime?
+  images          ProductImage[]
+
+  @@unique([businessId, sku])
+  @@index([businessId, isActive])
+}
+
+model ProductImage {
+  id         String  @id @default(cuid())
+  businessId String
+  productId  String
+  product    Product @relation(fields: [productId], references: [id])
+  path       String // relatif terhadap UPLOAD_DIR
+  sortOrder  Int     @default(0)
+  isPrimary  Boolean @default(false)
+
+  @@index([businessId, productId])
+}
+
+model PriceHistory {
+  id          String     @id @default(cuid())
+  businessId  String
+  productId   String
+  customerId  String? // terisi bila field = CUSTOMER_MIN
+  field       PriceField
+  oldValue    BigInt?
+  newValue    BigInt
+  reason      String     @db.Text // WAJIB diisi
+  changedById String
+  createdAt   DateTime   @default(now())
+
+  @@index([businessId, productId, createdAt])
+}
+
+model Customer {
+  id                    String                @id @default(cuid())
+  businessId            String
+  business              Business              @relation(fields: [businessId], references: [id])
+  code                  String // huruf besar, contoh TEROBOS
+  name                  String
+  contactName           String?
+  phone                 String?
+  address               String?               @db.Text
+  shippingAddress       String?               @db.Text
+  billingAddress        String?               @db.Text
+  npwp                  String?
+  assignedSalesId       String?
+  assignedSales         User?                 @relation(fields: [assignedSalesId], references: [id])
+  pipelineStage         PipelineStage         @default(LEAD)
+  tags                  String[]
+  notes                 String?               @db.Text
+  rev                   Int                   @default(0)
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+  deletedAt             DateTime?
+  customerMinPrices     CustomerMinPrice[]
+  customerPromos        CustomerPromo[]
+  crmInteractions       CrmInteraction[]
+  crmTasks              CrmTask[]
+  orders                Order[]
+  customerCreditEntries CustomerCreditEntry[]
+  reminders             Reminder[]
+
+  @@unique([businessId, code])
+  @@index([businessId, assignedSalesId])
+}
+
+model CustomerMinPrice {
+  id         String   @id @default(cuid())
+  businessId String
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id])
+  productId  String
+  minPrice   BigInt
+  note       String?
+  updatedAt  DateTime @updatedAt
+
+  @@unique([customerId, productId])
+  @@index([businessId])
+}
+
+model CustomerPromo {
+  id          String         @id @default(cuid())
+  businessId  String
+  customerId  String
+  customer    Customer       @relation(fields: [customerId], references: [id])
+  productId   String? // null = berlaku untuk semua produk
+  label       String
+  source      DiscountSource // PROMO atau SUBSIDY
+  type        DiscountType // PERCENT atau AMOUNT
+  valueBps    Int? // bila PERCENT
+  valueAmount BigInt? // bila AMOUNT: potongan Rupiah PER UNIT
+  validFrom   DateTime
+  validTo     DateTime?
+  isActive    Boolean        @default(true)
+  note        String?
+  createdAt   DateTime       @default(now())
+  deletedAt   DateTime?
+
+  @@index([businessId, customerId])
+}
+
+model CrmInteraction {
+  id             String          @id @default(cuid())
+  businessId     String
+  customerId     String
+  customer       Customer        @relation(fields: [customerId], references: [id])
+  salesId        String
+  type           InteractionType
+  summary        String          @db.Text
+  occurredAt     DateTime
+  nextFollowUpAt DateTime?
+  createdAt      DateTime        @default(now())
+
+  @@index([businessId, customerId, occurredAt])
+}
+
+model CrmTask {
+  id           String    @id @default(cuid())
+  businessId   String
+  customerId   String
+  customer     Customer  @relation(fields: [customerId], references: [id])
+  assignedToId String
+  title        String
+  dueAt        DateTime
+  doneAt       DateTime?
+  createdAt    DateTime  @default(now())
+
+  @@index([businessId, assignedToId, dueAt])
+}
+
+model OwnerSalesNote {
+  id         String   @id @default(cuid())
+  businessId String
+  salesId    String
+  authorId   String
+  note       String   @db.Text
+  createdAt  DateTime @default(now())
+
+  @@index([businessId, salesId])
+}
+
+model SalesTarget {
+  id            String @id @default(cuid())
+  businessId    String
+  salesId       String
+  month         String // format YYYY-MM
+  targetRevenue BigInt
+  targetProfit  BigInt @default(0)
+
+  @@unique([salesId, month])
+}
+
+model CommissionTier {
+  id                String @id @default(cuid())
+  businessId        String
+  minAchievementBps Int // capaian target omzet bulan itu, 10000 = 100%
+  rateBps           Int // persen dari profit order
+
+  @@unique([businessId, minAchievementBps])
+}
+
+model Order {
+  id                 String      @id @default(cuid())
+  businessId         String
+  business           Business    @relation(fields: [businessId], references: [id])
+  customerId         String
+  customer           Customer    @relation(fields: [customerId], references: [id])
+  salesId            String
+  status             OrderStatus @default(DRAFT)
+  version            Int         @default(1) // naik tiap kali diajukan ulang setelah ditolak
+  rev                Int         @default(0) // kunci optimistik
+  customerSeq        Int? // diisi saat invoice pertama disetujui
+  orderNo            String? // KODECUST/INV/DD/MM/YYYY/NNNN (tanpa akhiran)
+  orderDate          DateTime
+  deliveryAddress    String?     @db.Text
+  notes              String?     @db.Text
+  repeatIntervalDays Int?
+  subtotal           BigInt      @default(0) // jumlah harga deal x qty, sebelum diskon
+  discountTotal      BigInt      @default(0)
+  shippingCharge     BigInt      @default(0) // ongkir yang DITAGIHKAN ke customer (boleh 0)
+  ppnEnabled         Boolean     @default(false)
+  ppnRateBps         Int         @default(0)
+  ppnAmount          BigInt      @default(0)
+  grandTotal         BigInt      @default(0)
+  dpBps              Int         @default(0)
+  dpAmount           BigInt      @default(0)
+  hasBelowMin        Boolean     @default(false)
+  belowMinReason     String?     @db.Text
+  overrideNote       String?     @db.Text
+  rejectReason       String?     @db.Text
+  paidTotal          BigInt      @default(0) // pembayaran VERIFIED dikurangi refund VERIFIED
+  creditTotal        BigInt      @default(0) // total credit note bersettlement OFFSET
+  stockReserved      Boolean     @default(false)
+  cancelReason       String?     @db.Text
+  cancelledAt        DateTime?
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+  deletedAt          DateTime?
+  items              OrderItem[]
+
+  @@unique([businessId, orderNo])
+  @@unique([businessId, customerId, customerSeq])
+  @@index([businessId, status])
+  @@index([businessId, salesId, createdAt])
+}
+
+model OrderItem {
+  id             String         @id @default(cuid())
+  businessId     String
+  orderId        String
+  order          Order          @relation(fields: [orderId], references: [id])
+  productId      String
+  productName    String // snapshot
+  sku            String // snapshot
+  unit           String // snapshot
+  qty            Int
+  listPrice      BigInt // snapshot harga dasar
+  unitPrice      BigInt // harga deal sebelum diskon
+  discountType   DiscountType   @default(NONE)
+  discountValue  BigInt         @default(0) // bps bila PERCENT, Rupiah TOTAL BARIS bila AMOUNT
+  discountSource DiscountSource @default(MANUAL)
+  lineSubtotal   BigInt // unitPrice x qty
+  lineDiscount   BigInt // hasil hitung
+  lineNet        BigInt // lineSubtotal - lineDiscount
+  costPrice      BigInt // RAHASIA snapshot HPP
+  floorPrice     BigInt // snapshot harga minimal efektif per unit
+  belowMin       Boolean        @default(false)
+  sortOrder      Int            @default(0)
+
+  @@index([businessId, orderId])
+}
+
+model OrderCost {
+  id          String   @id @default(cuid())
+  businessId  String
+  orderId     String
+  label       String
+  amount      BigInt
+  createdById String
+  createdAt   DateTime @default(now())
+
+  @@index([businessId, orderId])
+}
+
+model Invoice {
+  id            String        @id @default(cuid())
+  businessId    String
+  business      Business      @relation(fields: [businessId], references: [id])
+  orderId       String
+  customerId    String
+  type          InvoiceType
+  status        InvoiceStatus @default(PENDING_APPROVAL)
+  version       Int           @default(1)
+  number        String? // diisi saat disetujui, tidak pernah dipakai ulang
+  amount        BigInt // jumlah yang ditagihkan di invoice ini
+  paidAmount    BigInt        @default(0)
+  issueDate     DateTime?
+  dueDate       DateTime?
+  theme         InvoiceTheme?
+  snapshot      Json? // diisi saat disetujui, DILARANG diubah setelahnya
+  requestedById String
+  requestedAt   DateTime      @default(now())
+  approvedById  String?
+  approvedAt    DateTime?
+  rejectReason  String?       @db.Text
+  voidReason    String?       @db.Text
+  voidedAt      DateTime?
+  printedCount  Int           @default(0)
+  lastPrintedAt DateTime?
+  rev           Int           @default(0)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  deletedAt     DateTime?
+
+  @@unique([businessId, number])
+  @@index([businessId, status])
+  @@index([orderId])
+}
+
+model Payment {
+  id           String        @id @default(cuid())
+  businessId   String
+  business     Business      @relation(fields: [businessId], references: [id])
+  orderId      String
+  invoiceId    String?
+  type         PaymentType   @default(RECEIPT)
+  method       PaymentMethod @default(TRANSFER)
+  status       PaymentStatus @default(PENDING_VERIFICATION)
+  amount       BigInt // selalu positif; arah ditentukan oleh type
+  paidAt       DateTime
+  reference    String?
+  proofPath    String?
+  notes        String?       @db.Text
+  createdById  String
+  verifiedById String?
+  verifiedAt   DateTime?
+  rejectReason String?       @db.Text
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@index([businessId, orderId])
+  @@index([businessId, status])
+}
+
+model Shipment {
+  id            String     @id @default(cuid())
+  businessId    String
+  business      Business   @relation(fields: [businessId], references: [id])
+  orderId       String     @unique // satu pengiriman per order di versi ini
+  deliveryNo    String?    @unique // nomor surat jalan, diisi saat SHIPPED
+  method        ShipMethod
+  transporterId String? // Vendor kind TRANSPORT
+  trackingNo    String?
+  driverName    String?
+  vehiclePlate  String?
+  receiverName  String?
+  status        ShipStatus @default(PREPARING)
+  actualCost    BigInt     @default(0) // RAHASIA: ongkir yang dibayar usaha
+  shippedAt     DateTime?
+  deliveredAt   DateTime?
+  notes         String?    @db.Text
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+}
+
+model CreditNote {
+  id           String           @id @default(cuid())
+  businessId   String
+  business     Business         @relation(fields: [businessId], references: [id])
+  orderId      String
+  customerId   String
+  number       String // KODECUST/CN/DD/MM/YYYY/NNNN
+  reason       String           @db.Text
+  settlement   CreditSettlement
+  amountExPpn  BigInt
+  ppnAmount    BigInt           @default(0)
+  total        BigInt
+  cogsReversed BigInt           @default(0) // RAHASIA
+  createdById  String
+  createdAt    DateTime         @default(now())
+  voidedAt     DateTime?
+  items        CreditNoteItem[]
+
+  @@unique([businessId, number])
+  @@index([businessId, orderId])
+}
+
+model CreditNoteItem {
+  id           String     @id @default(cuid())
+  creditNoteId String
+  creditNote   CreditNote @relation(fields: [creditNoteId], references: [id])
+  orderItemId  String
+  qty          Int
+  creditAmount BigInt
+  restock      Boolean    @default(true)
+  costReversed BigInt     @default(0) // RAHASIA
+}
+
+model CustomerCreditEntry {
+  id           String   @id @default(cuid())
+  businessId   String
+  customerId   String
+  customer     Customer @relation(fields: [customerId], references: [id])
+  amount       BigInt // positif = saldo bertambah, negatif = dipakai atau dikembalikan
+  reason       String
+  orderId      String?
+  creditNoteId String?
+  paymentId    String?
+  createdById  String
+  createdAt    DateTime @default(now())
+
+  @@index([businessId, customerId])
+}
+
+model PurchaseOrder {
+  id           String              @id @default(cuid())
+  businessId   String
+  business     Business            @relation(fields: [businessId], references: [id])
+  vendorId     String
+  vendor       Vendor              @relation(fields: [vendorId], references: [id])
+  vendorSeq    Int?
+  poNo         String? // KODEVENDOR/PO/DD/MM/YYYY/NNNN, diisi saat status ORDERED
+  status       PoStatus            @default(DRAFT)
+  orderDate    DateTime
+  expectedDate DateTime?
+  subtotal     BigInt              @default(0)
+  shippingCost BigInt              @default(0)
+  otherCost    BigInt              @default(0)
+  total        BigInt              @default(0)
+  paidTotal    BigInt              @default(0)
+  notes        String?             @db.Text
+  createdById  String
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  deletedAt    DateTime?
+  items        PurchaseOrderItem[]
+
+  @@unique([businessId, poNo])
+  @@index([businessId, vendorId])
+}
+
+model PurchaseOrderItem {
+  id              String        @id @default(cuid())
+  purchaseOrderId String
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id])
+  productId       String
+  qty             Int
+  receivedQty     Int           @default(0)
+  unitCost        BigInt
+  lineTotal       BigInt
+}
+
+model VendorPayment {
+  id              String        @id @default(cuid())
+  businessId      String
+  vendorId        String
+  purchaseOrderId String?
+  amount          BigInt
+  paidAt          DateTime
+  method          PaymentMethod @default(TRANSFER)
+  reference       String?
+  proofPath       String?
+  notes           String?       @db.Text
+  createdById     String
+  createdAt       DateTime      @default(now())
+  voidedAt        DateTime?
+
+  @@index([businessId, vendorId])
+}
+
+model StockMovement {
+  id           String        @id @default(cuid())
+  businessId   String
+  productId    String
+  type         StockMoveType
+  qtyDelta     Int // + masuk, - keluar
+  balanceAfter Int
+  refType      String? // ORDER, PURCHASE_ORDER, CREDIT_NOTE, MANUAL
+  refId        String?
+  note         String?
+  createdById  String
+  createdAt    DateTime      @default(now())
+
+  @@index([businessId, productId, createdAt])
+}
+
+model CommissionEntry {
+  id          String           @id @default(cuid())
+  businessId  String
+  orderId     String           @unique
+  salesId     String
+  mode        CommissionMode
+  basisAmount BigInt // profit atau omzet yang dipakai
+  rateBps     Int // 0 bila mode nominal tetap
+  amount      BigInt
+  status      CommissionStatus @default(EARNED)
+  earnedAt    DateTime         @default(now())
+  paidAt      DateTime?
+  reversedAt  DateTime?
+  note        String?
+
+  @@index([businessId, salesId, earnedAt])
+}
+
+model Reminder {
+  id             String         @id @default(cuid())
+  businessId     String
+  customerId     String
+  customer       Customer       @relation(fields: [customerId], references: [id])
+  productId      String? // null = pengingat tingkat customer
+  salesId        String
+  intervalDays   Int
+  lastOrderDate  DateTime
+  nextDueDate    DateTime
+  status         ReminderStatus @default(ACTIVE)
+  source         ReminderSource @default(AUTO)
+  snoozedUntil   DateTime?
+  lastNotifiedAt DateTime?
+  escalatedAt    DateTime?
+  note           String?
+
+  @@index([businessId, status, nextDueDate])
+  @@index([customerId, productId])
+}
+
+model Notification {
+  id             String    @id @default(cuid())
+  businessId     String?
+  userId         String
+  type           String // REPEAT_DUE, INVOICE_DUE, APPROVAL_REQUEST, LOW_STOCK, ...
+  title          String
+  body           String    @db.Text
+  linkPath       String?
+  dedupeKey      String    @unique // mencegah notifikasi ganda
+  readAt         DateTime?
+  telegramSentAt DateTime?
+  telegramError  String?
+  createdAt      DateTime  @default(now())
+
+  @@index([userId, createdAt])
+}
+
+model Catalog {
+  id         String        @id @default(cuid())
+  businessId String
+  business   Business      @relation(fields: [businessId], references: [id])
+  ownerId    String // user pembuat
+  customerId String? // bila diisi, floor memakai harga minimal customer itu
+  title      String // contoh: Grosir, Distributor Tunggal, Ecer
+  note       String?       @db.Text
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+  deletedAt  DateTime?
+  items      CatalogItem[]
+
+  @@index([businessId, ownerId])
+}
+
+model CatalogItem {
+  id        String  @id @default(cuid())
+  catalogId String
+  catalog   Catalog @relation(fields: [catalogId], references: [id])
+  productId String
+  price     BigInt
+  sortOrder Int     @default(0)
+
+  @@unique([catalogId, productId])
+}
+
+model DocumentCounter {
+  id         String @id @default(cuid())
+  businessId String
+  scope      String // ORDER_SEQ (scopeId = customerId), PO_SEQ (vendorId), CREDIT_NOTE_SEQ (customerId)
+  scopeId    String
+  lastSeq    Int    @default(0)
+
+  @@unique([businessId, scope, scopeId])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  businessId String?
+  actorId    String?
+  actorRole  Role?
+  action     String // contoh: ORDER_SUBMIT, INVOICE_APPROVE, PRICE_CHANGE, ORDER_PURGE
+  entityType String
+  entityId   String
+  summary    String?
+  before     Json?
+  after      Json?
+  reason     String?  @db.Text
+  ip         String?
+  createdAt  DateTime @default(now())
+
+  @@index([businessId, entityType, entityId])
+  @@index([createdAt])
+}
+
+model ReleaseNote {
+  id           String    @id @default(cuid())
+  version      String
+  title        String
+  bodyMarkdown String    @db.Text
+  createdById  String
+  publishedAt  DateTime? // null = draft
+  broadcastAt  DateTime?
+  createdAt    DateTime  @default(now())
+}

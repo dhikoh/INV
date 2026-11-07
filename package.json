@@ -14,23 +14,30 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "prebuild": "node scripts/clean-next.js"
   },
   "dependencies": {
+    "@prisma/adapter-pg": "7.10.1",
+    "@prisma/client": "7.10.1",
     "next": "15.3.9",
+    "pg": "8.23.1",
     "pino": "9.6.0",
     "react": "19.0.0",
     "react-dom": "19.0.0",
     "zod": "3.24.2"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.5.15",
     "@playwright/test": "1.50.1",
     "@types/node": "22.13.4",
+    "@types/pg": "8.23.1",
     "@types/react": "19.0.8",
     "@types/react-dom": "19.0.4",
     "eslint": "9.20.1",
     "eslint-config-next": "15.3.9",
     "prettier": "3.5.1",
+    "prisma": "7.10.1",
     "typescript": "5.7.3",
     "vitest": "3.0.5"
   }

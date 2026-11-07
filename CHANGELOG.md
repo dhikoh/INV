@@ -23,3 +23,9 @@ dan proyek ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Konfigurasi database development dan testing PostgreSQL pada `docker-compose.dev.yml` (T0.2).
 - Dockerfile multi-stage production dengan headless Chromium dan font terpasang untuk PDF rendering (T0.2).
 - Template variabel environment lengkap `.env.example` (T0.2).
+- Skema database lengkap 40 model dan 24 enum pada `prisma/schema.prisma` (T0.3).
+- Migrasi database awal `20261107000001_init` dan SQL constraints `20261107000002_db_constraints` (T0.3).
+- Jaring pengaman multi-tenant `src/lib/db.ts` dengan extension `TENANT_MODELS` dan `GUARDED_OPS` (T0.3).
+- Integrasi `@prisma/adapter-pg` dan konfigurasi `prisma.config.ts` untuk Prisma 7 (T0.3).
+- Tes integrasi database dengan `@electric-sql/pglite` membuktikan check constraint `product_min_le_base` dan trigger `audit_log_immutable` (T0.3).
+- Dokumen keputusan arsitektur `docs/adr/0003-prisma-7-config.md` (T0.3).
