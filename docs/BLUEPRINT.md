@@ -289,6 +289,7 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
 | `GET`      | `/api/v1/commission/entries`   | Super Admin        | Daftar entri komisi sales dengan filter status, salesId, dan paginasi |
 | `POST`     | `/api/v1/commission/entries/:id/pay` | Super Admin   | Tandai komisi sales telah dibayarkan (status PAID, kunci rekalkulasi) |
 | `GET/PUT`  | `/api/v1/commission/tiers`     | Super Admin        | Ambil & konfigurasi skema komisi target berjenjang (CommissionTier) |
+| `POST`     | `/api/telegram/webhook`        | Publik (Secret Token) | Webhook Telegram Bot (validasi token rahasia x-telegram-bot-api-secret-token) |
 
 ### Antarmuka Pengguna (UI Routes)
 
@@ -356,6 +357,7 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
 1. [ADR 0001: Representasi Uang dan Persentase](file:///D:/Data%20BentoCat/docs/adr/0001-uang-bigint.md) - Penggunaan BigInt Rupiah utuh & basis points (bps).
 2. [ADR 0002: Pemilihan Teknologi Stack](file:///D:/Data%20BentoCat/docs/adr/0002-stack.md) - Next.js App Router, Prisma, Vitest, pg-boss, puppeteer-core.
 3. [ADR 0003: Konfigurasi Datasource Prisma 7 dan Driver Adapter PostgreSQL](file:///D:/Data%20BentoCat/docs/adr/0003-prisma-7-config.md) - Penyesuaian konfigurasi prisma.config.ts, @prisma/adapter-pg, dan pglite.
+4. [ADR 0004: Arsitektur Worker pg-boss dan Bot grammY](file:///D:/Data%20BentoCat/docs/adr/0004-pg-boss-grammy.md) - Pemisahan proses background worker dan integrasi grammY + pg-boss v12.
 
 ---
 
@@ -366,8 +368,8 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
 | **Fase 0** | `v0.1.0`     | Fondasi proyek, env, skema Prisma, rumus domain, infra tes              | **SELESAI** |
 | **Fase 1** | `v0.2.0`     | Login, manajemen usaha, akun sales, master produk & vendor, pembaruan   | **SELESAI**         |
 | **Fase 2** | `v0.3.0`     | Customer CRM, order draft, floor pricing, manajemen stok, PO & vendor ledger | **SELESAI** |
-| **Fase 3** | `v0.4.0`     | Persetujuan invoice, verifikasi pembayaran, mesin cetak PDF, void/retur, profit & komisi, UI persetujuan & invoice | **SELESAI** (T3.8 Selesai) |
-| **Fase 4** | `v0.5.0`     | Bot Telegram, Mini App, pengingat repeat order, katalog PWA             | Belum dimulai       |
+| **Fase 3** | `v0.4.0`     | Persetujuan invoice, verifikasi pembayaran, mesin cetak PDF, void/retur, profit & komisi, UI persetujuan & invoice | **SELESAI** |
+| **Fase 4** | `v0.5.0`     | Bot Telegram, Mini App, pengingat repeat order, katalog PWA             | **DALAM PROGRES** (T4.1 Selesai) |
 | **Fase 5** | `v1.0.0`     | Dashboard profit, evaluasi sales, pengerasan keamanan, Go-Live          | Belum dimulai       |
 
 ---

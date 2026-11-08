@@ -8,6 +8,35 @@ dan proyek ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Bot Telegram Resmi, Webhook Terproteksi, Handler Perintah Dasar, Layanan Notifikasi Idempoten, dan Antrean Job Background pg-boss sesuai Seksi 10.4, 15.1, 15.2, 17.3 nomor 16, dan 19.5 Dokumen Spesifikasi (T4.1):
+  - Integrasi Dependensi:
+    - Instalasi `grammy` (v1.46.0) untuk framework Telegram Bot API dan `pg-boss` (v12.38.1) untuk antrean job terisolasi PostgreSQL.
+    - Penambahan skrip `"worker": "tsx src/worker/index.ts"` di `package.json` untuk menjalankan runner background worker independen.
+  - Webhook Aman Telegram (`src/app/api/telegram/webhook/route.ts`):
+    - Validasi ketat token rahasia webhook via header `x-telegram-bot-api-secret-token` terhadap `env.TELEGRAM_WEBHOOK_SECRET` yang menolak 401 Unauthorized secara langsung sebelum request diproses.
+    - Integrasi `webhookCallback(bot, 'std/http')` native Web Standard API.
+  - Logika dan Perintah Bot Telegram (`src/lib/telegram/bot.ts`):
+    - Pembatasan pesan hanya untuk private chat.
+    - Handler `/start <kode>`: Validasi kode tautan 8 karakter berumur 10 menit dengan verifikasi SHA-256 (`TelegramLinkCode.codeHash`), pembatasan percobaan (rate limit: maksimal 5 percobaan per 10 menit per chat ID), pencegahan penautan ganda (menolak jika chat ID sudah terhubung ke akun lain), dan pembaruan `User.telegramChatId`, `telegramLinkedAt`, serta reset `telegramBlocked = false`.
+    - Handler `/help`: Daftar panduan perintah bot (`/start`, `/me`, `/today`, `/help`).
+    - Handler `/me`: Menampilkan profil akun terhubung (nama, username, peran, unit usaha aktif) atau peringatan belum terhubung.
+    - Handler `/today`: Ringkasan harian cerdas berdasarkan peran:
+      - Super Admin: Jumlah faktur menunggu persetujuan (dengan jumlah pesanan belowMin), pembayaran menunggu verifikasi, dan peringatan produk dengan stok minus/defisit.
+      - Sales: Jumlah tugas follow-up CRM hari ini dan pesanan aktif yang menunggu pembayaran pelanggan.
+  - Format Pesan & Helper Sanitasi (`src/lib/telegram/format.ts`):
+    - `escapeHtml(text)`: Sanitasi karakter HTML Telegram (`&`, `<`, `>`, `"`) untuk mencegah injection pada pesan parse mode HTML.
+    - `prefix(businessCode, text)`: Penandaan unit usaha pada header pesan (`[KODE]`).
+  - Layanan Notifikasi Idempoten (`src/lib/services/notification.ts`):
+    - `createNotification(tx, input)`: Pembuatan entri notifikasi ke basis data dengan jaminan idempoten berbasis `dedupeKey`.
+    - `sendTelegramNotification(notificationId)`: Pengiriman pesan via Telegram Bot API dengan pelacakan `telegramSentAt`. Deteksi otomatis error 403 (bot diblokir oleh user) yang menandai `User.telegramBlocked = true` dan `Notification.telegramError`, serta re-throw pada error 429 (rate-limited) untuk memicu backoff antrean. Idempoten: melewati pengiriman jika notifikasi telah terkirim sebelumnya.
+  - Worker Background pg-boss (`src/worker/boss.ts` dan `src/worker/index.ts`):
+    - Singleton manajemen lifecycle `PgBoss` dengan penanganan graceful shutdown (`SIGINT` dan `SIGTERM`).
+    - Fungsi `enqueueTelegramSend(notificationId)` untuk memasukkan pengiriman pesan ke antrean `telegram.send` dengan konfigurasi retry eksponensial (`retryLimit: 5`, `retryBackoff: true`).
+  - Keputusan Desain & Arsitektur:
+    - `docs/adr/0004-pg-boss-grammy.md`: Keputusan pemisahan proses background worker mandiri dari web server dan integrasi grammY + pg-boss v12.
+  - Pengujian Komprehensif (`tests/integration/telegram-bot.test.ts`):
+    - 11 skenario pengujian komprehensif menguji: penolakan webhook tanpa secret token (401), penerimaan secret token valid (200), penolakan kode /start invalid/kedaluwarsa, rate limiting /start (5 percobaan/10 menit), tautan akun sukses, penolakan tautan chat ID yang telah digunakan akun lain, respon `/me` untuk akun terhubung dan belum terhubung, respon `/today` untuk Super Admin dan Sales, isolasi notifikasi idempoten `dedupeKey`, dan penanganan error 403 bot blocked.
+
 - Antarmuka Pengguna (UI) Antrean Persetujuan Pesanan, Detail Inspeksi Faktur, Daftar dan Detail Faktur Penjualan, serta Verifikasi Pembayaran Terpadu sesuai Seksi 7.4, 7.11, 10.5, 11.4, 14.1, 14.3, dan 19.5 Dokumen Spesifikasi (T3.8):
   - Route Handlers API (`src/app/api/v1/invoices/`):
     - `GET /api/v1/invoices`: Daftar invoice terpaginasi dengan filter status (`PENDING_APPROVAL`, `APPROVED`, `REJECTED`, `VOID`), tipe (`DP` vs `FINAL`), pencarian teks bebas (nomor faktur, nomor order, nama/kode customer), dan isolasi peran ketat (Sales dibatasi hanya pada invoice dari pesanannya sendiri).

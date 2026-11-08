@@ -20,6 +20,7 @@
     "test:int": "vitest run tests/integration",
     "test:coverage": "vitest run --coverage",
     "db:seed": "tsx prisma/seed.ts",
+    "worker": "tsx src/worker/index.ts",
     "release:draft": "tsx scripts/release-draft.ts"
   },
   "prisma": {
@@ -29,9 +30,11 @@
     "@prisma/adapter-pg": "7.10.1",
     "@prisma/client": "7.10.1",
     "argon2": "0.45.2",
+    "grammy": "^1.46.0",
     "lucide-react": "0.475.0",
     "next": "15.3.9",
     "pg": "8.23.1",
+    "pg-boss": "^12.38.1",
     "pino": "9.6.0",
     "puppeteer-core": "^25.16.0",
     "react": "19.0.0",
