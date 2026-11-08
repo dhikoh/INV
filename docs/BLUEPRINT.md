@@ -228,6 +228,11 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
 | `POST`     | `/api/v1/customers/:id/reassign` | Super Admin      | Alihkan pelanggan ke sales lain (+ opsi open orders) |
 | `GET`      | `/api/v1/customers/:id/timeline` | Super Admin, Sales | Linimasa kronologis gabungan interaksi CRM dan order |
 | `GET/POST` | `/api/v1/customers/:id/interactions` | Super Admin, Sales | Catat interaksi CRM; otomatis buat CrmTask jika follow-up diisi |
+| `GET`      | `/api/v1/customers/:id/pricing` | Super Admin, Sales | Harga dasar, floor efektif, promo aktif per produk (costPrice dirahasiakan) |
+| `GET/PUT/DELETE` | `/api/v1/customers/:id/min-prices` | Super Admin | Kelola harga dasar minimal khusus pelanggan (CustomerMinPrice), catat PriceHistory & audit log |
+| `GET/POST` | `/api/v1/customers/:id/promos` | Super Admin        | Kelola promo & subsidi khusus pelanggan (CustomerPromo) |
+| `GET/PATCH/DELETE` | `/api/v1/customer-promos/:id` | Super Admin | Detail, perbarui status/tenggat, soft delete promo pelanggan |
+| `GET`      | `/api/v1/customers/:id/price-history` | Super Admin | Riwayat penyesuaian harga minimal customer (CUSTOMER_MIN) |
 | `GET/POST` | `/api/v1/crm/tasks`            | Super Admin, Sales | Daftar tugas CRM (filter status & isolasi sales)     |
 | `GET/PATCH/DELETE` | `/api/v1/crm/tasks/:id` | Super Admin, Sales | Detail, centang selesai (doneAt), tenggat, hapus tugas |
 | `POST`     | `/api/v1/orders/preview`       | Super Admin, Sales | Pratinjau hitungan total & floor              |

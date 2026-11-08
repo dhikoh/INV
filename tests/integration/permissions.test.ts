@@ -66,6 +66,21 @@ import {
 } from '@/app/api/v1/updates/[id]/route';
 import { POST as publishUpdateHandler } from '@/app/api/v1/updates/[id]/publish/route';
 import { POST as reassignCustomerHandler } from '@/app/api/v1/customers/[id]/reassign/route';
+import {
+  GET as getCustomerMinPricesHandler,
+  PUT as setCustomerMinPriceHandler,
+  DELETE as deleteCustomerMinPriceHandler,
+} from '@/app/api/v1/customers/[id]/min-prices/route';
+import {
+  GET as getCustomerPromosHandler,
+  POST as createCustomerPromoHandler,
+} from '@/app/api/v1/customers/[id]/promos/route';
+import {
+  GET as getCustomerPromoDetailHandler,
+  PATCH as updateCustomerPromoHandler,
+  DELETE as deleteCustomerPromoHandler,
+} from '@/app/api/v1/customer-promos/[id]/route';
+import { GET as getCustomerPriceHistoryHandler } from '@/app/api/v1/customers/[id]/price-history/route';
 
 describe('Matriks Hak Akses Berbasis Tabel (Seksi 5.1 & 17.4 b)', () => {
   const APP_URL = 'http://localhost:3000';
@@ -375,6 +390,73 @@ describe('Matriks Hak Akses Berbasis Tabel (Seksi 5.1 & 17.4 b)', () => {
       handler: (req, r) => reassignCustomerHandler(req, r),
       params: { id: 'cust_1' },
       body: { salesId: 'sales_2' },
+    },
+    {
+      name: 'GET /api/v1/customers/:id/min-prices',
+      method: 'GET',
+      path: '/api/v1/customers/cust_1/min-prices',
+      handler: (req, r) => getCustomerMinPricesHandler(req, r),
+      params: { id: 'cust_1' },
+    },
+    {
+      name: 'PUT /api/v1/customers/:id/min-prices',
+      method: 'PUT',
+      path: '/api/v1/customers/cust_1/min-prices',
+      handler: (req, r) => setCustomerMinPriceHandler(req, r),
+      params: { id: 'cust_1' },
+      body: { productId: 'p1', minPrice: 50000, reason: 'Alasan diskon' },
+    },
+    {
+      name: 'DELETE /api/v1/customers/:id/min-prices',
+      method: 'DELETE',
+      path: '/api/v1/customers/cust_1/min-prices',
+      handler: (req, r) => deleteCustomerMinPriceHandler(req, r),
+      params: { id: 'cust_1' },
+      body: { productId: 'p1', reason: 'Alasan reset' },
+    },
+    {
+      name: 'GET /api/v1/customers/:id/promos',
+      method: 'GET',
+      path: '/api/v1/customers/cust_1/promos',
+      handler: (req, r) => getCustomerPromosHandler(req, r),
+      params: { id: 'cust_1' },
+    },
+    {
+      name: 'POST /api/v1/customers/:id/promos',
+      method: 'POST',
+      path: '/api/v1/customers/cust_1/promos',
+      handler: (req, r) => createCustomerPromoHandler(req, r),
+      params: { id: 'cust_1' },
+      body: { label: 'Promo', source: 'PROMO', type: 'PERCENT', valueBps: 500, validFrom: new Date() },
+    },
+    {
+      name: 'GET /api/v1/customer-promos/:id',
+      method: 'GET',
+      path: '/api/v1/customer-promos/promo_1',
+      handler: (req, r) => getCustomerPromoDetailHandler(req, r),
+      params: { id: 'promo_1' },
+    },
+    {
+      name: 'PATCH /api/v1/customer-promos/:id',
+      method: 'PATCH',
+      path: '/api/v1/customer-promos/promo_1',
+      handler: (req, r) => updateCustomerPromoHandler(req, r),
+      params: { id: 'promo_1' },
+      body: { label: 'Ubah' },
+    },
+    {
+      name: 'DELETE /api/v1/customer-promos/:id',
+      method: 'DELETE',
+      path: '/api/v1/customer-promos/promo_1',
+      handler: (req, r) => deleteCustomerPromoHandler(req, r),
+      params: { id: 'promo_1' },
+    },
+    {
+      name: 'GET /api/v1/customers/:id/price-history',
+      method: 'GET',
+      path: '/api/v1/customers/cust_1/price-history',
+      handler: (req, r) => getCustomerPriceHistoryHandler(req, r),
+      params: { id: 'cust_1' },
     },
   ];
 
