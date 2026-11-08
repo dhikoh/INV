@@ -290,6 +290,13 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
 | `POST`     | `/api/v1/commission/entries/:id/pay` | Super Admin   | Tandai komisi sales telah dibayarkan (status PAID, kunci rekalkulasi) |
 | `GET/PUT`  | `/api/v1/commission/tiers`     | Super Admin        | Ambil & konfigurasi skema komisi target berjenjang (CommissionTier) |
 | `POST`     | `/api/telegram/webhook`        | Publik (Secret Token) | Webhook Telegram Bot (validasi token rahasia x-telegram-bot-api-secret-token) |
+| `POST`     | `/api/v1/auth/telegram`        | Publik (initData)  | Autologin Telegram Mini App berbasis HMAC-SHA256, penerbitan sesi aman |
+| `DELETE`   | `/api/v1/auth/telegram`        | Super Admin, Sales | Putus tautan akun Telegram pengguna (audit log USER_TELEGRAM_UNLINK)   |
+| `POST`     | `/api/v1/downloads`            | Super Admin, Sales | Terbitkan token unduh PDF bertanda tangan HMAC-SHA256 (durasi 5 menit) |
+| `GET`      | `/api/v1/dl/:token`            | Publik (Token)     | Akses unduh PDF bertanda tangan sekali buka tanpa sesi cookie           |
+| `GET/POST` | `/api/v1/reminders`            | Super Admin, Sales | Daftar pengingat repeat order (filter status/due) & buat pengingat manual |
+| `PATCH/DELETE` | `/api/v1/reminders/:id`    | Super Admin, Sales | Ubah interval (MANUAL), snooze, jeda, aktifkan, atau batalkan pengingat |
+| `GET`      | `/api/v1/receivables`          | Super Admin, Sales | Daftar umur piutang (5 aging bucket), ringkasan overdue, Zero-Leakage  |
 
 ### Antarmuka Pengguna (UI Routes)
 
@@ -321,6 +328,8 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
 | `/purchase-orders/:id` | Super Admin        | Detail PO, aksi terbitkan pesan, terima barang (+ update HPP master), bayar vendor, batal PO |
 | `/vendors/:id`         | Super Admin        | Detail profil vendor & tab Buku Transaksi Vendor (Vendor Ledger) dengan linimasa saldo hutang berjalan |
 | `/tg`                  | Super Admin, Sales | Pintu masuk Telegram Mini App (TMA), autologin initData aman, & panduan tautan akun |
+| `/reminders`           | Super Admin, Sales | Daftar & manajemen pengingat repeat order pelanggan (snooze, ubah interval, kontak WA) |
+| `/receivables`         | Super Admin, Sales | Monitoring umur piutang (5 aging bucket), ringkasan piutang overdue, tagih WA, link faktur |
 
 ---
 
@@ -337,11 +346,13 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
    - Otorisasi ketat peran Super Admin pada eksekusi callback data Telegram.
    - Pintu masuk Telegram Mini App (TMA) pada rute `/tg` dengan validasi aman HMAC-SHA256 atas `initData` (`POST /api/v1/auth/telegram`).
    - Tautan unduh PDF bertanda tangan sekali buka (`POST /api/v1/downloads` dan `GET /api/v1/dl/:token`) berdurasi 5 menit untuk pembukaan dokumen via browser eksternal Telegram tanpa kebocoran sesi.
-2. **Job Terjadwal (`pg-boss`)**:
+2. **Job Terjadwal (`pg-boss` - Timezone Asia/Jakarta)**:
    - `telegram.send`: Antrean pengiriman pesan notifikasi ke bot Telegram dengan retry backoff eksponensial (5x) dan jeda aman 50 ms antar pesan.
-   - `reminder-check`: Evaluasi repeat order pelanggan berdasarkan siklus interval pembelian.
-   - `aging-ar-summary`: Rekapitulasi umur piutang jatuh tempo.
-   - `telegram-retry`: Pengiriman ulang pesan notifikasi yang tertunda akibat rate-limit.
+   - `reminders.repeat.scan` (Setiap hari 08:00 WIB): Memindai pengingat repeat order aktif, kirim notifikasi H-3, H-0, dan terlambat ke sales, eskalasi keterlambatan >= 3 hari ke Super Admin.
+   - `invoices.due.scan` (Setiap hari 08:00 WIB): Memindai faktur jatuh tempo H-3, H-0, dan keterlambatan setiap 2 hari ke sales. Hari Senin 08:00 WIB: kirim ringkasan total piutang menunggak ke Super Admin.
+   - `crm.tasks.scan` (Setiap hari 08:00 WIB): Notifikasi tugas CRM yang jatuh tempo hari ini ke staf sales penanggung jawab.
+   - `owner.digest` (Setiap hari 08:00 WIB): Ringkasan pagi operasional usaha ke Super Admin (persetujuan menunggu, pembayaran pending, piutang menunggak, produk stok kritis).
+   - `housekeeping` (Setiap hari 03:00 WIB): Pembersihan data sesi kedaluwarsa/dicabut > 30 hari, LoginAttempt > 30 hari, TelegramLinkCode terpakai/kedaluwarsa > 1 hari.
 
 ---
 
@@ -378,7 +389,7 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
 | **Fase 1** | `v0.2.0`     | Login, manajemen usaha, akun sales, master produk & vendor, pembaruan   | **SELESAI**         |
 | **Fase 2** | `v0.3.0`     | Customer CRM, order draft, floor pricing, manajemen stok, PO & vendor ledger | **SELESAI** |
 | **Fase 3** | `v0.4.0`     | Persetujuan invoice, verifikasi pembayaran, mesin cetak PDF, void/retur, profit & komisi, UI persetujuan & invoice | **SELESAI** |
-| **Fase 4** | `v0.5.0`     | Bot Telegram, Mini App, pengingat repeat order, katalog PWA             | **DALAM PROGRES** (T4.1, T4.2, T4.3 Selesai) |
+| **Fase 4** | `v0.5.0`     | Bot Telegram, Mini App, pengingat repeat order, katalog PWA             | **DALAM PROGRES** (T4.1, T4.2, T4.3, T4.4 Selesai) |
 | **Fase 5** | `v1.0.0`     | Dashboard profit, evaluasi sales, pengerasan keamanan, Go-Live          | Belum dimulai       |
 
 ---

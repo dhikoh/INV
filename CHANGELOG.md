@@ -8,6 +8,34 @@ dan proyek ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Pengingat Otomatis Siklus Repeat Order Pelanggan, Job Terjadwal 13.2, dan Umur Piutang sesuai Seksi 13.1–13.3, 17.3 nomor 15, dan 19.5 Dokumen Spesifikasi (T4.4):
+  - Logika Domain Umur Piutang (`src/lib/domain/receivable.ts`):
+    - 5 aging bucket standar piutang: `CURRENT` (belum jatuh tempo), `DAYS_1_7` (1–7 hari terlambat), `DAYS_8_30` (8–30 hari), `DAYS_31_60` (31–60 hari), dan `DAYS_OVER_60` (> 60 hari terlambat).
+    - Fungsi kalkulasi saldo piutang `calculateReceivableBalance(invoice)`, penghitung hari terlambat `getDaysOverdue`, dan penentu bucket `getAgingBucket`.
+  - Otomasi Pembuatan & Penjadwalan Pengingat Repeat Order (`src/lib/services/reminder.ts`):
+    - Terintegrasi langsung dengan transisi pesanan menjadi `COMPLETED` di `maybeComplete` (`src/lib/services/payment.ts`).
+    - Algoritma perhitungan interval repeat order cerdas `suggestInterval` (median dari 4 selisih pengiriman terakhir, fallback ke `repeatIntervalDays` pesanan atau `defaultRepeatDays` profil usaha).
+    - Pembuatan pengingat baru bertipe `AUTO` atau pembaruan tanggal jatuh tempo tanpa mengubah interval pada pengingat `MANUAL`.
+    - Fungsi rekalkulasi & penataan ulang pengingat `rebuildRemindersForCustomer` saat pesanan selesai dibatalkan (void).
+  - 5 Job Terjadwal Background Pekerja Otomatis (Seksi 13.2 & `src/worker/index.ts`):
+    - `reminders.repeat.scan` (Setiap hari 08:00 WIB): Memindai pengingat aktif, mengirim notifikasi H-3, H-0, dan setiap hari saat terlambat ke sales penanggung jawab. Otomatis eskalasi satu kali ke Super Admin jika terlambat >= 3 hari. Melewati notifikasi jika pelanggan sudah memiliki pesanan baru setelah `lastOrderDate` atau sedang dalam masa snooze.
+    - `invoices.due.scan` (Setiap hari 08:00 WIB): Mengirim notifikasi jatuh tempo H-3 dan H-0 ke sales pemilik pesanan. Mengirim notifikasi keterlambatan setiap 2 hari (hari genap). Setiap Senin 08:00 WIB mengirim ringkasan total piutang usaha yang menunggak ke seluruh Super Admin.
+    - `crm.tasks.scan` (Setiap hari 08:00 WIB): Mengirim notifikasi tugas CRM yang jatuh tempo hari ini (zona waktu WIB) kepada staf sales penanggung jawab.
+    - `owner.digest` (Setiap hari 08:00 WIB): Mengirim ringkasan pagi operasional usaha ke Super Admin (persetujuan menunggu, pembayaran pending, piutang menunggak, dan produk stok kritis). Diabaikan jika seluruh metrik bernilai nol.
+    - `housekeeping` (Setiap hari 03:00 WIB): Membersihkan sesi kedaluwarsa/dicabut > 30 hari, riwayat login > 30 hari, serta kode penautan Telegram kedaluwarsa > 1 hari.
+  - Endpoint REST API Terproteksi Multitenansi & Hak Akses:
+    - `GET /api/v1/reminders`: Daftar pengingat dengan filter status, jatuh tempo (`all`, `today`, `week`, `overdue`), dan pelanggan, terisolasi per sales.
+    - `POST /api/v1/reminders`: Pembuatan pengingat manual baru oleh sales/super admin.
+    - `PATCH /api/v1/reminders/:id`: Pembaruan interval (menjadi `MANUAL`), penundaan (`snooze`), jeda (`PAUSED`), atau pengaktifan kembali.
+    - `DELETE /api/v1/reminders/:id`: Pembatalan pengingat (`CANCELLED`).
+    - `GET /api/v1/receivables`: Daftar faktur belum lunas beserta klasifikasi umur piutang, metadata agregasi ringkasan 5 bucket, proteksi keras zero-leakage (tanpa kebocoran HPP, margin, atau profit).
+  - Antarmuka Pengguna (UI) Modern & Responsif 360 px:
+    - Halaman Pengingat Repeat Order (`src/app/(app)/reminders/page.tsx`): Kartu metrik (Jatuh Tempo Hari Ini, Terlambat, Minggu Ini, Total Aktif), filter status & periode, tombol aksi snooze instan (3 hari, 7 hari, 14 hari), modal ubah interval manual, tautan WhatsApp follow-up otomatis dengan template pesan ramah, dan tombol buat pesanan baru.
+    - Halaman Umur Piutang (`src/app/(app)/receivables/page.tsx`): 5 kartu distribusi aging bucket interaktif, metrik total outstanding dan tagihan overdue, pencarian, filter status & bucket, tautan tagih via WhatsApp, dan link langsung ke faktur terkait.
+    - Pembaruan Navigasi Menu (`src/components/AppShell.tsx`): Penambahan menu `Piutang` (`/receivables`) dan `Pengingat` (`/reminders`).
+  - Pengujian Integrasi Komprehensif (`tests/integration/reminders-and-jobs.test.ts`):
+    - 19 skenario pengujian komprehensif mencakup logika aging bucket, auto-creation pengingat saat COMPLETED, penanganan interval MANUAL vs AUTO, pembatalan saat void, pemindaian 5 job background 13.2, idempotensi dedupe notification, eskalasi keterlambatan >= 3 hari, isolasi otorisasi sales, dan uji zero-leakage data rahasia.
+
 - Telegram Mini App (TMA), Autologin initData Aman, dan Tautan Unduh Bertanda Tangan Sekali Buka sesuai Seksi 11.5, 12.3, 16.3, dan 19.5 Dokumen Spesifikasi (T4.3):
   - Algoritma Validasi `initData` Telegram (`src/lib/telegram/initData.ts`):
     - Implementasi verifikasi tanda tangan resmi Telegram WebApp menggunakan HMAC-SHA256 (`WebAppData` sebagai secret key derivasi dari bot token).
@@ -490,6 +518,34 @@ dan proyek ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 ## [0.1.0] - 2026-11-07
 
 ### Added
+
+- Pengingat Otomatis Siklus Repeat Order Pelanggan, Job Terjadwal 13.2, dan Umur Piutang sesuai Seksi 13.1–13.3, 17.3 nomor 15, dan 19.5 Dokumen Spesifikasi (T4.4):
+  - Logika Domain Umur Piutang (`src/lib/domain/receivable.ts`):
+    - 5 aging bucket standar piutang: `CURRENT` (belum jatuh tempo), `DAYS_1_7` (1–7 hari terlambat), `DAYS_8_30` (8–30 hari), `DAYS_31_60` (31–60 hari), dan `DAYS_OVER_60` (> 60 hari terlambat).
+    - Fungsi kalkulasi saldo piutang `calculateReceivableBalance(invoice)`, penghitung hari terlambat `getDaysOverdue`, dan penentu bucket `getAgingBucket`.
+  - Otomasi Pembuatan & Penjadwalan Pengingat Repeat Order (`src/lib/services/reminder.ts`):
+    - Terintegrasi langsung dengan transisi pesanan menjadi `COMPLETED` di `maybeComplete` (`src/lib/services/payment.ts`).
+    - Algoritma perhitungan interval repeat order cerdas `suggestInterval` (median dari 4 selisih pengiriman terakhir, fallback ke `repeatIntervalDays` pesanan atau `defaultRepeatDays` profil usaha).
+    - Pembuatan pengingat baru bertipe `AUTO` atau pembaruan tanggal jatuh tempo tanpa mengubah interval pada pengingat `MANUAL`.
+    - Fungsi rekalkulasi & penataan ulang pengingat `rebuildRemindersForCustomer` saat pesanan selesai dibatalkan (void).
+  - 5 Job Terjadwal Background Pekerja Otomatis (Seksi 13.2 & `src/worker/index.ts`):
+    - `reminders.repeat.scan` (Setiap hari 08:00 WIB): Memindai pengingat aktif, mengirim notifikasi H-3, H-0, dan setiap hari saat terlambat ke sales penanggung jawab. Otomatis eskalasi satu kali ke Super Admin jika terlambat >= 3 hari. Melewati notifikasi jika pelanggan sudah memiliki pesanan baru setelah `lastOrderDate` atau sedang dalam masa snooze.
+    - `invoices.due.scan` (Setiap hari 08:00 WIB): Mengirim notifikasi jatuh tempo H-3 dan H-0 ke sales pemilik pesanan. Mengirim notifikasi keterlambatan setiap 2 hari (hari genap). Setiap Senin 08:00 WIB mengirim ringkasan total piutang usaha yang menunggak ke seluruh Super Admin.
+    - `crm.tasks.scan` (Setiap hari 08:00 WIB): Mengirim notifikasi tugas CRM yang jatuh tempo hari ini (zona waktu WIB) kepada staf sales penanggung jawab.
+    - `owner.digest` (Setiap hari 08:00 WIB): Mengirim ringkasan pagi operasional usaha ke Super Admin (persetujuan menunggu, pembayaran pending, piutang menunggak, dan produk stok kritis). Diabaikan jika seluruh metrik bernilai nol.
+    - `housekeeping` (Setiap hari 03:00 WIB): Membersihkan sesi kedaluwarsa/dicabut > 30 hari, riwayat login > 30 hari, serta kode penautan Telegram kedaluwarsa > 1 hari.
+  - Endpoint REST API Terproteksi Multitenansi & Hak Akses:
+    - `GET /api/v1/reminders`: Daftar pengingat dengan filter status, jatuh tempo (`all`, `today`, `week`, `overdue`), dan pelanggan, terisolasi per sales.
+    - `POST /api/v1/reminders`: Pembuatan pengingat manual baru oleh sales/super admin.
+    - `PATCH /api/v1/reminders/:id`: Pembaruan interval (menjadi `MANUAL`), penundaan (`snooze`), jeda (`PAUSED`), atau pengaktifan kembali.
+    - `DELETE /api/v1/reminders/:id`: Pembatalan pengingat (`CANCELLED`).
+    - `GET /api/v1/receivables`: Daftar faktur belum lunas beserta klasifikasi umur piutang, metadata agregasi ringkasan 5 bucket, proteksi keras zero-leakage (tanpa kebocoran HPP, margin, atau profit).
+  - Antarmuka Pengguna (UI) Modern & Responsif 360 px:
+    - Halaman Pengingat Repeat Order (`src/app/(app)/reminders/page.tsx`): Kartu metrik (Jatuh Tempo Hari Ini, Terlambat, Minggu Ini, Total Aktif), filter status & periode, tombol aksi snooze instan (3 hari, 7 hari, 14 hari), modal ubah interval manual, tautan WhatsApp follow-up otomatis dengan template pesan ramah, dan tombol buat pesanan baru.
+    - Halaman Umur Piutang (`src/app/(app)/receivables/page.tsx`): 5 kartu distribusi aging bucket interaktif, metrik total outstanding dan tagihan overdue, pencarian, filter status & bucket, tautan tagih via WhatsApp, dan link langsung ke faktur terkait.
+    - Pembaruan Navigasi Menu (`src/components/AppShell.tsx`): Penambahan menu `Piutang` (`/receivables`) dan `Pengingat` (`/reminders`).
+  - Pengujian Integrasi Komprehensif (`tests/integration/reminders-and-jobs.test.ts`):
+    - 19 skenario pengujian komprehensif mencakup logika aging bucket, auto-creation pengingat saat COMPLETED, penanganan interval MANUAL vs AUTO, pembatalan saat void, pemindaian 5 job background 13.2, idempotensi dedupe notification, eskalasi keterlambatan >= 3 hari, isolasi otorisasi sales, dan uji zero-leakage data rahasia.
 
 - Layanan pencatatan pembayaran (`createPayment`), verifikasi pelunasan (`verifyPayment`), penolakan pembayaran (`rejectPayment`), pembatalan/void pembayaran (`voidPayment`), rekonsiliasi total pembayaran pesanan (`recalculateOrderPayments`), dan evaluasi penyelesaian pesanan (`maybeComplete`) pada `src/lib/services/payment.ts` sesuai Seksi 7.12, 8.2, 8.3, 8.4, 9.2, 9.4, 19.5, dan Kriteria Tes 17.3 nomor 8 (T3.3):
   - `createPayment(tx, ctx, input)`: Pencatatan pembayaran pelanggan via transfer/kas/kredit/lainnya dengan bukti transfer file upload (gambar/PDF max 5MB) atau URL. Mengunci pesanan secara pesimistik `lockOrder`, memvalidasi status pesanan (menolak status `DRAFT`, `PENDING_APPROVAL`, `REVISION_REQUIRED`, `CANCELLED` dengan 409 `INVALID_STATE`), memvalidasi invoice tertaut (`APPROVED` only), mencegah overpayment pesanan maupun invoice (422 `OVERPAYMENT`), memvalidasi metode `CREDIT` hanya untuk Super Admin dan memastikan kecukupan saldo kredit pelanggan `CustomerCreditEntry` (422 `INSUFFICIENT_CREDIT`), mendukung `autoVerify` langsung oleh Super Admin (status awal `VERIFIED`) atau default `PENDING_VERIFICATION`, mencatat `AuditLog` (`PAYMENT_CREATE` & `PAYMENT_VERIFY`), dan mengirimkan notifikasi internal.

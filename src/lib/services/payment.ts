@@ -13,6 +13,7 @@ import { DomainError, formatRupiah } from '../domain/money';
 import { lockOrder } from './orderGuard';
 import { Ctx } from '../auth/context';
 import { evaluateOrderCommission } from './commission';
+import { updateRemindersForCompletedOrder } from './reminder';
 
 export type TxClient = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
 
@@ -229,6 +230,9 @@ export async function maybeComplete(
         dedupeKey: `order_completed_${order.id}`,
       },
     });
+
+    // Otomatisasi pengingat repeat order (Seksi 13.1 & 19.6 T4.4)
+    await updateRemindersForCompletedOrder(tx, order.id);
   }
 }
 
