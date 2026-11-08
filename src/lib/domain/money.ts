@@ -49,3 +49,9 @@ export function formatRupiah(n: Rupiah): string {
     maximumFractionDigits: 0,
   }).format(n);
 }
+
+export function formatPercentFromBps(bps: Bps): string {
+  const percent = bps / 100;
+  return `${Number(percent.toFixed(2))}%`;
+}
+

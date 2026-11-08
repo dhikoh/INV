@@ -5,6 +5,7 @@ import {
   fromDb,
   toDb,
   formatRupiah,
+  formatPercentFromBps,
   DomainError,
 } from '@/lib/domain/money';
 
@@ -45,5 +46,11 @@ describe('Domain: money.ts (7.1, 17.2)', () => {
   it('formatRupiah memformat mata uang Indonesia tanpa pecahan', () => {
     const formatted = formatRupiah(1500000);
     expect(formatted).toContain('1.500.000');
+  });
+
+  it('formatPercentFromBps memformat basis points ke persentase string', () => {
+    expect(formatPercentFromBps(1100)).toBe('11%');
+    expect(formatPercentFromBps(250)).toBe('2.5%');
+    expect(formatPercentFromBps(0)).toBe('0%');
   });
 });

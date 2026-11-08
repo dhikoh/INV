@@ -8,6 +8,34 @@ dan proyek ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Antarmuka formulir pesanan interaktif `src/components/orders/OrderForm.tsx` (digunakan pada `/orders/new` dan `/orders/[id]/edit`) sesuai Seksi 10.4, 11.1, 11.3, dan 11.4:
+  - Pencarian dan pemilihan pelanggan dengan pengisian otomatis alamat pengiriman bawaan customer.
+  - Tambah, ubah, dan hapus baris produk dengan dukungan jenis diskon fleksibel (persen via `PercentInput`, nominal total baris via `MoneyInput`, atau pilihan promo/subsidi aktif dari `/customers/:id/pricing`).
+  - Deteksi harga di bawah batas minimal (`belowMin`) dengan highlight visual border/background merah dan banner peringatan resmi.
+  - Penegakan validasi wajib `belowMinReason` (minimal 5 karakter) jika terdapat item yang dijual di bawah floor price.
+  - Panel kalkulasi ringkasan real-time via `POST /api/v1/orders/preview` (debounced 300 ms): subtotal, total diskon, barang bersih, ongkir ditagihkan, PPN usaha, grand total, uang muka (DP), dan sisa pelunasan (UI tidak menghitung sendiri).
+  - Panel simulasi profit real-time khusus Super Admin: pendapatan barang bersih, total HPP (COGS), biaya kirim riil, estimasi laba bersih, margin %, dan indikator peringatan merah bila laba negatif.
+  - Modal konfirmasi draf pesanan sebelum penyimpanan (`POST /orders` atau `PATCH /orders/:id`).
+- Halaman daftar pesanan `/orders` (`src/app/(app)/orders/page.tsx`):
+  - Pencarian debounced 300 ms (nomor order, kode, atau nama pelanggan).
+  - Filter status lengkap (`DRAFT`, `PENDING_APPROVAL`, `AWAITING_DP`, `IN_PROCESS`, `FINAL_PENDING_APPROVAL`, `AWAITING_FINAL_PAYMENT`, `COMPLETED`, `REVISION_REQUIRED`, `CANCELLED`).
+  - Filter pelanggan dan rentang tanggal pesanan (`from` - `to`).
+  - Tampilan dual responsif: tabel desktop dengan info item & status, serta kartu mobile responsif hingga lebar 360 px tanpa scroll horizontal.
+  - Paginasi server lengkap (`page`, `limit`, `totalPages`, navigasi sebelumnya/selanjutnya).
+  - 3 Keadaan UI standar: `Skeleton` saat memuat, `EmptyState` jika data kosong dengan aksi reset filter/buat pesanan, dan `ErrorState` dengan tombol coba lagi.
+- Halaman detail pesanan `/orders/[id]` (`src/app/(app)/orders/[id]/page.tsx`):
+  - Header nomor dokumen / draf, tanggal order, versi & rev, status badge, serta badge harga di bawah batas minimal.
+  - Kartu informasi pelanggan, alamat pengiriman, catatan, dan pengingat siklus interval pesanan berulang.
+  - Banner peringatan alasan di bawah minimal, catatan revisi penolakan, dan catatan persetujuan khusus (override).
+  - Tabel rincian produk (desktop) dan kartu produk mobile dengan rincian harga deal, diskon, subtotal bersih, status belowMin, serta HPP khusus Super Admin.
+  - Kartu ringkasan keuangan lengkap (subtotal, diskon, barang bersih, ongkir, PPN, grand total, DP, sisa pelunasan).
+  - Panel simulasi profit khusus Super Admin dengan alert bila profit/margin negatif.
+  - Aksi tombol "Edit Draf" untuk status `DRAFT` atau `REVISION_REQUIRED` menuju `/orders/[id]/edit`.
+  - Aksi tombol "Hapus Draf" khusus Super Admin dengan modal `ConfirmTypeDialog` (wajib mengetikkan nomor dokumen/ID).
+- Halaman pembuatan draf baru `/orders/new` (`src/app/(app)/orders/new/page.tsx`) dan halaman edit draf `/orders/[id]/edit` (`src/app/(app)/orders/[id]/edit/page.tsx`) dengan proteksi status (hanya status `DRAFT` atau `REVISION_REQUIRED` yang dapat diedit).
+- Helper domain pemformatan persentase dari basis points `formatPercentFromBps` di `src/lib/domain/money.ts` disertai pengujian unit di `tests/unit/money.test.ts`.
+
+
 - Layanan perhitungan snapshot order `buildOrderSnapshot` (`src/lib/services/order.ts`) yang memvalidasi pelanggan (isolasi sales), menolak produk duplikat (422 `DUPLICATE_PRODUCT`), memeriksa keaktifan produk dan promo (`PROMO_NOT_VALID`), menerapkan floor bertingkat (`baseFloor`, `lineFloor`), mendeteksi harga di bawah batas (`belowMin`), menghitung PPN usaha, serta menghasilkan simulasi profit (T2.5 & Seksi 10.4).
 - Skema validasi Zod order (`src/lib/validation/order.ts`): `OrderLineSchema`, `OrderCreateSchema`, `OrderUpdateSchema`, dan `OrderDeleteSchema` (T2.5 & Seksi 10.4).
 - Endpoint pratinjau kalkulasi pesanan `POST /api/v1/orders/preview` (Super Admin & Sales) untuk menghitung total order real-time, DP, PPN, dan daftar peringatan harga di bawah minimal tanpa menyimpan ke database (T2.5 & Seksi 10.4).
