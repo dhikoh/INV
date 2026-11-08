@@ -8,6 +8,18 @@ dan proyek ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Layanan perhitungan snapshot order `buildOrderSnapshot` (`src/lib/services/order.ts`) yang memvalidasi pelanggan (isolasi sales), menolak produk duplikat (422 `DUPLICATE_PRODUCT`), memeriksa keaktifan produk dan promo (`PROMO_NOT_VALID`), menerapkan floor bertingkat (`baseFloor`, `lineFloor`), mendeteksi harga di bawah batas (`belowMin`), menghitung PPN usaha, serta menghasilkan simulasi profit (T2.5 & Seksi 10.4).
+- Skema validasi Zod order (`src/lib/validation/order.ts`): `OrderLineSchema`, `OrderCreateSchema`, `OrderUpdateSchema`, dan `OrderDeleteSchema` (T2.5 & Seksi 10.4).
+- Endpoint pratinjau kalkulasi pesanan `POST /api/v1/orders/preview` (Super Admin & Sales) untuk menghitung total order real-time, DP, PPN, dan daftar peringatan harga di bawah minimal tanpa menyimpan ke database (T2.5 & Seksi 10.4).
+- Endpoint CRUD draf pesanan (`src/app/api/v1/orders/route.ts` & `src/app/api/v1/orders/[id]/route.ts`):
+  - `POST /api/v1/orders` (Super Admin & Sales) membuat draf pesanan baru (`status: DRAFT`, `version: 1`, `rev: 0`) dengan audit log `ORDER_CREATE` (T2.5 & Seksi 10.5).
+  - `GET /api/v1/orders` (Super Admin & Sales) mengambil daftar order dengan filter status, customer, sales (khusus Super Admin), rentang tanggal, pencarian, dan paginasi; Sales dibatasi hanya melihat order miliknya sendiri (T2.5 & Seksi 10.5).
+  - `GET /api/v1/orders/:id` (Super Admin & Sales) detail lengkap pesanan dengan penegakan DTO per role (Sales tidak pernah menerima `costPrice`, HPP, atau objek `profit`; Super Admin menerima rincian `costPrice` dan simulasi `profit`) (T2.5 & Seksi 10.3).
+  - `PATCH /api/v1/orders/:id` (Super Admin & Sales) memperbarui draf pesanan hanya pada status `DRAFT` atau `REVISION_REQUIRED` dengan verifikasi penguncian optimistik versi `rev` (penolakan 409 `OPTIMISTIC_LOCK_ERROR` atau `INVALID_STATE`) dan audit log `ORDER_UPDATE` (T2.5 & Seksi 10.5).
+  - `DELETE /api/v1/orders/:id` (khusus Super Admin; Sales ditolak 403 `FORBIDDEN`) melakukan soft delete order dengan verifikasi ketik ulang teks konfirmasi (`confirm === orderNo ?? id`, 422 `CONFIRM_MISMATCH`) dan audit log `ORDER_DELETE` (T2.5 & Seksi 9.5).
+- Rangkaian pengujian integrasi pesanan `tests/integration/orders.test.ts` (8 skenario tes) membuktikan: kesesuaian angka total dengan Fixture 7.7, perlindungan absolut HPP/profit dari Sales (`assertNoSecretKeys`), penolakan produk ganda, validasi promo kedaluwarsa, penurunan floor oleh promo valid, penandaan `belowMin`, siklus hidup draf order (create -> get -> patch -> delete), dan isolasi sales (T2.5).
+- Perluasan matriks hak akses `tests/integration/permissions.test.ts` memverifikasi penolakan (403 `FORBIDDEN`) terhadap Sales pada endpoint `DELETE /api/v1/orders/:id` (T2.5 & Seksi 17.4 b).
+
 - Layanan penomoran urut dokumen atomik `nextSeq` (`src/lib/services/counter.ts`) berbasis PostgreSQL UPSERT (`INSERT INTO "DocumentCounter" ... ON CONFLICT DO UPDATE SET "lastSeq" = "DocumentCounter"."lastSeq" + 1 RETURNING "lastSeq"`), menjamin nomor urut unik, berurutan, dan tidak meninggalkan lubang (T2.4 & Seksi 7.8).
 - Konstanta scope penomoran `CounterScope` (`ORDER_SEQ`, `PO_SEQ`, `CREDIT_NOTE_SEQ`) serta fungsi helper alokasi: `allocateCustomerOrderSeq`, `allocateVendorPoSeq`, dan `allocateCustomerCreditNoteSeq` (T2.4).
 - Helper domain format nomor dokumen resmi di `src/lib/domain/numbering.ts`: `orderNumber`, `suratJalanNumber`, `creditNoteNumber`, dan `purchaseOrderNumber` terintegrasi dengan zona waktu WIB (Asia/Jakarta) dan format `KODE/JENIS/DD/MM/YYYY/NNNN` (T2.4 & Seksi 7.8).

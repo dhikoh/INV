@@ -81,6 +81,7 @@ import {
   DELETE as deleteCustomerPromoHandler,
 } from '@/app/api/v1/customer-promos/[id]/route';
 import { GET as getCustomerPriceHistoryHandler } from '@/app/api/v1/customers/[id]/price-history/route';
+import { DELETE as deleteOrderHandler } from '@/app/api/v1/orders/[id]/route';
 
 describe('Matriks Hak Akses Berbasis Tabel (Seksi 5.1 & 17.4 b)', () => {
   const APP_URL = 'http://localhost:3000';
@@ -457,6 +458,14 @@ describe('Matriks Hak Akses Berbasis Tabel (Seksi 5.1 & 17.4 b)', () => {
       path: '/api/v1/customers/cust_1/price-history',
       handler: (req, r) => getCustomerPriceHistoryHandler(req, r),
       params: { id: 'cust_1' },
+    },
+    {
+      name: 'DELETE /api/v1/orders/:id',
+      method: 'DELETE',
+      path: '/api/v1/orders/ord_1',
+      handler: (req, r) => deleteOrderHandler(req, r),
+      params: { id: 'ord_1' },
+      body: { confirm: 'ord_1' },
     },
   ];
 

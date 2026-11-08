@@ -241,8 +241,10 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
 | `GET`      | `/api/v1/customers/:id/price-history` | Super Admin | Riwayat penyesuaian harga minimal customer (CUSTOMER_MIN) |
 | `GET/POST` | `/api/v1/crm/tasks`            | Super Admin, Sales | Daftar tugas CRM (filter status & isolasi sales)     |
 | `GET/PATCH/DELETE` | `/api/v1/crm/tasks/:id` | Super Admin, Sales | Detail, centang selesai (doneAt), tenggat, hapus tugas |
-| `POST`     | `/api/v1/orders/preview`       | Super Admin, Sales | Pratinjau hitungan total & floor              |
-| `GET/POST` | `/api/v1/orders`               | Super Admin, Sales | Pencatatan & daftar order                     |
+| `POST`     | `/api/v1/orders/preview`       | Super Admin, Sales | Pratinjau hitungan total, floor, diskon, dan PPN |
+| `GET/POST` | `/api/v1/orders`               | Super Admin, Sales | Buat draf (201) & daftar order (isolasi sales) |
+| `GET/PATCH`| `/api/v1/orders/:id`           | Super Admin, Sales | Detail (DTO per role) & ubah draf (kunci rev)  |
+| `DELETE`   | `/api/v1/orders/:id`           | Super Admin        | Soft delete order ke Tempat Sampah (wajib confirm) |
 | `POST`     | `/api/v1/orders/:id/submit`    | Sales              | Mengajukan order ke Super Admin               |
 | `POST`     | `/api/v1/invoices/:id/approve` | Super Admin        | Persetujuan invoice                           |
 | `POST`     | `/api/v1/payments`             | Super Admin, Sales | Pencatatan pembayaran & bukti transfer        |
