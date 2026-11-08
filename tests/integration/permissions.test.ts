@@ -65,6 +65,7 @@ import {
   DELETE as deleteUpdateHandler,
 } from '@/app/api/v1/updates/[id]/route';
 import { POST as publishUpdateHandler } from '@/app/api/v1/updates/[id]/publish/route';
+import { POST as reassignCustomerHandler } from '@/app/api/v1/customers/[id]/reassign/route';
 
 describe('Matriks Hak Akses Berbasis Tabel (Seksi 5.1 & 17.4 b)', () => {
   const APP_URL = 'http://localhost:3000';
@@ -366,6 +367,14 @@ describe('Matriks Hak Akses Berbasis Tabel (Seksi 5.1 & 17.4 b)', () => {
       path: '/api/v1/updates/upd_1',
       handler: (req, r) => deleteUpdateHandler(req, r),
       params: { id: 'upd_1' },
+    },
+    {
+      name: 'POST /api/v1/customers/:id/reassign',
+      method: 'POST',
+      path: '/api/v1/customers/cust_1/reassign',
+      handler: (req, r) => reassignCustomerHandler(req, r),
+      params: { id: 'cust_1' },
+      body: { salesId: 'sales_2' },
     },
   ];
 

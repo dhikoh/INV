@@ -66,6 +66,27 @@ export function StatusBadge({ status, className = '' }: StatusBadgeProps) {
         label = 'Dibatalkan';
         colorClasses = 'bg-red-50 text-red-700 border-red-200';
         break;
+      case 'LEAD':
+        label = 'Lead';
+        colorClasses = 'bg-sky-50 text-sky-700 border-sky-200';
+        break;
+      case 'PROSPECT':
+      case 'PROSPEK':
+        label = 'Prospek';
+        colorClasses = 'bg-amber-50 text-amber-700 border-amber-200';
+        break;
+      case 'DEAL':
+        label = 'Deal';
+        colorClasses = 'bg-emerald-50 text-emerald-700 border-emerald-200';
+        break;
+      case 'REPEAT':
+        label = 'Repeat';
+        colorClasses = 'bg-purple-50 text-purple-700 border-purple-200';
+        break;
+      case 'LOST':
+        label = 'Lost';
+        colorClasses = 'bg-rose-50 text-rose-700 border-rose-200';
+        break;
       default:
         label = status;
         colorClasses = 'bg-slate-50 text-slate-700 border-slate-200';

@@ -8,6 +8,17 @@ dan proyek ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Master Customer CRUD (`/api/v1/customers` dan `/api/v1/customers/:id`) dengan kode kapital unik per unit usaha dan pencatatan audit log `CUSTOMER_CREATE`, `CUSTOMER_UPDATE`, `CUSTOMER_DELETE` (T2.1 & Seksi 10.3).
+- Helper isolasi hak akses pelanggan `customerScope` (`src/lib/services/scopes.ts`) menegakkan isolasi multi-usaha dan isolasi sales: staf sales hanya melihat dan mengelola customer miliknya sendiri (`assignedSalesId = ctx.user.id`), sedangkan Super Admin melihat seluruh customer di unit usaha aktif (T2.1 & Seksi 16.2).
+- Penugasan otomatis sales pada pendaftaran pelanggan baru: saat Sales membuat pelanggan, sistem secara otomatis mengunci `assignedSalesId = ctx.user.id` tanpa dapat menugaskan ke staf lain (T2.1 & Seksi 10.3).
+- Aturan imutabilitas kode pelanggan (Seksi 18.1 nomor 15): penolakan perubahan kode pelanggan (409 `INVALID_STATE`) begitu pelanggan telah memiliki faktur/invoice.
+- Penguncian optimistik (`rev`): verifikasi versi revisi saat edit pelanggan untuk mencegah race condition penulisan bersamaan (409 `OPTIMISTIC_LOCK_ERROR`).
+- Endpoint pengalihan sales `POST /api/v1/customers/:id/reassign` khusus Super Admin (Sales ditolak 403 `FORBIDDEN`) dengan opsi pemindahan seluruh pesanan berjalan `moveOpenOrders: true`, serta pengalihan otomatis pengingat (`Reminder`) dan tugas tindak lanjut (`CrmTask`) (T2.1 & Seksi 18.1 nomor 16).
+- Proteksi soft delete pelanggan (Seksi 18.1 nomor 19): penolakan penghapusan pelanggan (409 `HAS_ACTIVE_ORDERS`) apabila masih memiliki pesanan berjalan yang belum selesai (`COMPLETED`) atau dibatalkan (`CANCELLED`).
+- Antarmuka pengguna responsif `/customers` dengan pencarian debounced 300 ms, filter tahap pipeline CRM (`LEAD`, `PROSPECT`, `DEAL`, `REPEAT`, `LOST`), filter staf sales untuk Super Admin, kartu mobile responsif 360 px, modal tambah/edit pelanggan, modal pengalihan sales, dan dialog konfirmasi pengetikan kode pelanggan untuk penghapusan (T2.1 & Seksi 11.2).
+- Suite pengujian integrasi pelanggan `tests/integration/customers.test.ts` (9 skenario pengujian) mencakup CRUD, isolasi sales, isolasi antar-usaha, imutabilitas kode pelanggan, optimistik lock, pengalihan sales dengan pemindahan order terbuka, proteksi soft delete terhadap pesanan aktif, dan uji kebocoran kunci rahasia (`assertNoSecretKeys`) (T2.1 & Seksi 17.4 d).
+- Perluasan matriks hak akses `tests/integration/permissions.test.ts` memverifikasi penolakan (403 `FORBIDDEN`) terhadap akun Sales pada endpoint pengalihan sales `POST /api/v1/customers/:id/reassign` (T2.1 & Seksi 17.4 b).
+
 - Route Handler CRUD catatan pembaruan sistem (`ReleaseNote`): `GET /api/v1/updates`, `GET /api/v1/updates/unread-count`, `POST /api/v1/updates/mark-seen`, `POST /api/v1/updates`, `GET /api/v1/updates/:id`, `PATCH /api/v1/updates/:id`, `POST /api/v1/updates/:id/publish`, dan `DELETE /api/v1/updates/:id` (T1.8 & Seksi 4.3).
 - Otorisasi dan proteksi peran rilis: Sales hanya dapat melihat rilis berstatus terbit dan ditolak (403 FORBIDDEN) saat mencoba membuat, mengubah, menerbitkan, atau menghapus catatan rilis (T1.8 & Seksi 5.1).
 - Penghitungan unread releases dinamis berbasis `publishedAt > (user.lastSeenReleaseAt ?? new Date(0))` serta pembaruan otomatis timestamp `lastSeenReleaseAt` saat pengguna membuka halaman rilis (T1.8 & Seksi 4.3).
