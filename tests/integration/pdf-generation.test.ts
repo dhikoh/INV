@@ -106,6 +106,16 @@ vi.mock('@/lib/pdf/snapshot', async (importOriginal) => {
   };
 });
 
+// Mock renderHtmlToPdf dan renderReactToPdf agar tidak memerlukan browser Chrome headless di lingkungan test runner
+vi.mock('@/lib/pdf/engine', async (importOriginal) => {
+  const actual: any = await importOriginal();
+  return {
+    ...actual,
+    renderHtmlToPdf: vi.fn(async (_html: string) => Buffer.from('%PDF-1.4 mock pdf data')),
+    renderReactToPdf: vi.fn(async (_element: any) => Buffer.from('%PDF-1.4 mock pdf data')),
+  };
+});
+
 describe('T3.5: Mesin Cetak PDF, 5 Desain Tema, dan Surat Jalan (Seksi 14 & 17.3)', () => {
   afterAll(async () => {
     await closeBrowser();

@@ -108,6 +108,7 @@ import { POST as verifyPaymentHandler } from '@/app/api/v1/payments/[id]/verify/
 import { POST as rejectPaymentHandler } from '@/app/api/v1/payments/[id]/reject/route';
 import { POST as voidPaymentHandler } from '@/app/api/v1/payments/[id]/void/route';
 import { GET as getInvoicePreviewHandler } from '@/app/api/v1/businesses/[id]/invoice-preview/route';
+import { POST as voidCreditNoteHandler } from '@/app/api/v1/credit-notes/[id]/void/route';
 
 describe('Matriks Hak Akses Berbasis Tabel (Seksi 5.1 & 17.4 b)', () => {
   const APP_URL = 'http://localhost:3000';
@@ -654,6 +655,14 @@ describe('Matriks Hak Akses Berbasis Tabel (Seksi 5.1 & 17.4 b)', () => {
       path: '/api/v1/businesses/biz_1/invoice-preview',
       handler: (req, r) => getInvoicePreviewHandler(req, r),
       params: { id: 'biz_1' },
+    },
+    {
+      name: 'POST /api/v1/credit-notes/:id/void',
+      method: 'POST',
+      path: '/api/v1/credit-notes/cn_1/void',
+      handler: (req, r) => voidCreditNoteHandler(req, r),
+      params: { id: 'cn_1' },
+      body: { reason: 'Dibatalkan karena salah input barang retur' },
     },
   ];
 

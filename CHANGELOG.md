@@ -8,6 +8,37 @@ dan proyek ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Retur Penjualan dan Nota Kredit (Credit Note) Multi-Settlement, Pemulihan Stok Fisik, Deposit Saldo Kredit Pelanggan, dan Jaminan Anti-Bocor HPP sesuai Seksi 7.13, 7.14, 8.2, 8.3, 10, dan 19.5 Dokumen Spesifikasi (T3.6):
+  - Layanan Domain Credit Note (`src/lib/services/credit-note.ts`):
+    - `createCreditNote(tx, ctx, orderId, input)`: Penerbitan Nota Kredit atas pesanan terkirim (`SHIPPED`, `DELIVERED`, `COMPLETED`). Memvalidasi hak akses (Sales dibatasi hanya pada pesanannya sendiri), mencegah pengembalian melebihi kuantitas yang dapat diretur (akumulasi non-void CNs), kalkulasi kredit murni tanpa pembulatan desimal per baris via `creditThisReturn` dan `creditNoteTotals`.
+    - Tiga Opsi Penyelesaian (`CreditSettlement`):
+      1. `OFFSET`: Memotong sisa tagihan pesanan secara langsung (`order.creditTotal += total`, evaluasi otomatis penyelesaian pesanan via `maybeComplete`).
+      2. `CUSTOMER_CREDIT`: Mengalihkan seluruh nilai retur menjadi saldo deposit kredit pelanggan untuk pesanan berikutnya dengan pencatatan mutasi positif pada `CustomerCreditEntry`.
+      3. `REFUND`: Pengembalian dana kas/transfer langsung kepada pembeli, memvalidasi agar total refund tidak melebihi pembayaran terverifikasi yang telah diterima (`paidTotal`), membuat record `Payment` bertipe `REFUND` berstatus `VERIFIED`, serta memperbarui `order.paidTotal`.
+    - Pemulihan Stok Fisik Gudang: Jika opsi `restock = true`, mencatat mutasi stok masuk `StockMoveType.RETURN_IN` dan memulihkan HPP internal (`costReversed`). Jika `restock = false`, mutasi stok dilewati dan `costReversed = 0`.
+    - Penomoran Atomik: Alokasi nomor nota kredit resmi berformat `KODECUST/CN/DD/MM/YYYY/NNNN` via `allocateCustomerCreditNoteSeq`.
+    - `voidCreditNote(tx, ctx, id, input)`: Pembatalan nota kredit khusus Super Admin (Sales ditolak 403 `FORBIDDEN`) dengan alasan minimal 5 karakter. Membalikkan efek settlement secara akurat: mendiskon kembali `order.creditTotal` (OFFSET), membuat record penyesuaian negatif `CustomerCreditEntry` bila saldo deposit pelanggan masih mencukupi (menolak 409 `CREDIT_ALREADY_USED` bila saldo telah terpakai di pesanan lain), atau membatalkan record pembayaran refund (REFUND). Menarik kembali stok fisik gudang melalui mutasi `StockMoveType.VOID_REVERSAL`, menandai waktu `voidedAt`, mencatat AuditLog `CREDIT_NOTE_VOID`, dan mengirim notifikasi internal.
+    - Zero-Leakage Guarantee: Melindungi kerahasiaan `cogsReversed` dan `costReversed` per baris barang dari staf Sales (`ctx.user.role !== Role.SUPERADMIN`), diverifikasi dengan alat uji `assertNoSecretKeys`.
+    - `listOrderCreditNotes`, `listCreditNotes`, `getCreditNote`, dan `getCustomerCreditBalance`: Penarikan daftar dan rincian transaksi nota kredit dengan paginasi, pencarian nomor/alasan, filter pelanggan/pesanan/settlement, serta ringkasan saldo deposit pelanggan.
+  - Skema Validasi Zod (`src/lib/validation/credit-note.ts`):
+    - `CreditNoteCreateSchema`: Validasi alasan (min 5 karakter), enum settlement (`OFFSET`, `REFUND`, `CUSTOMER_CREDIT`), dan baris item (ID item valid, kuantitas positif, toggle restock boolean default true).
+    - `CreditNoteVoidSchema`: Validasi alasan pembatalan void (min 5 karakter).
+    - `CreditNoteQuerySchema`: Filter pencarian, relasi, settlement, dan paginasi (page & limit).
+  - Route Handlers API:
+    - `POST /api/v1/orders/:id/credit-notes`: Penerbitan nota kredit pesanan (Super Admin & Sales).
+    - `GET /api/v1/orders/:id/credit-notes`: Daftar nota kredit untuk pesanan tertentu.
+    - `GET /api/v1/credit-notes`: Daftar global nota kredit dengan filter pencarian dan isolasi role.
+    - `GET /api/v1/credit-notes/:id`: Detail nota kredit dengan proteksi Zero-Leakage.
+    - `POST /api/v1/credit-notes/:id/void`: Pembatalan nota kredit (khusus Super Admin).
+    - `GET /api/v1/customers/:id/credit-balance`: Saldo deposit kredit pelanggan & riwayat mutasi kredit.
+  - Antarmuka Pengguna (UI) Detail Pesanan (`src/app/(app)/orders/[id]/page.tsx`):
+    - Kartu Nota Kredit & Retur Penjualan: Daftar nota kredit pesanan dengan nomor atomik, badge status (AKTIF vs DIBATALKAN/VOID), badge settlement (Potong Tagihan, Deposit Pelanggan, Pengembalian Kas), rincian produk yang diretur beserta status restock gudang, dan tombol void untuk Super Admin.
+    - Modal Penerbitan Nota Kredit: Pilihan metode penyelesaian, tabel barang interaktif dengan batas kuantitas yang tersisa, toggle restock ke gudang, live preview estimasi nilai kredit, dan validasi alasan.
+    - Modal Pembatalan (Void): Dialog konfirmasi pembatalan permanen khusus Super Admin dengan input alasan minimal 5 karakter.
+    - Integrasi Ringkasan Keuangan: Menampilkan baris pemotongan kredit retur (`Kredit Retur (Offset): -Rp X`) dan kartu informasi deposit kredit pelanggan aktif.
+  - Pengujian Integrasi (`tests/integration/credit-notes.test.ts`):
+    - 15 skenario pengujian menyeluruh mencakup: validasi status pesanan belum terkirim, batas retur melebihi pesanan, isolasi role Sales pesanan orang lain, settlement OFFSET & restock fisik, settlement CUSTOMER_CREDIT & mutasi ledger saldo pelanggan, settlement REFUND melebihi pembayaran, penolakan void oleh Sales, eksekusi void oleh Super Admin dengan rollback stok & saldo, penolakan void saldo deposit yang telah digunakan, pengujian Zero-Leakage (assertNoSecretKeys), dan filter pencarian daftar global.
+
 - Mesin Cetak PDF, Desain 5 Tema, Snapshot Anti-Bocor, Watermark Draf/Lunas/Batal, dan Surat Jalan (`DeliveryNote`) sesuai Seksi 14.1, 14.2, 14.3, 14.4, 14.5, 14.6, 17.3 nomor 20, 17.5, dan 19.5 (T3.5):
   - Arsitektur Mesin PDF Puppeteer-Core (`src/lib/pdf/engine.ts`):
     - Penggunaan browser instance headless Chromium/Edge dengan argumen efisiensi (`--no-sandbox`, `--disable-dev-shm-usage`, `--disable-gpu`, `--font-render-hinting=none`).

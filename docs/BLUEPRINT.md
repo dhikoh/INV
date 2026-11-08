@@ -275,6 +275,12 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
 | `GET`      | `/api/v1/invoices/:id/pdf`     | Super Admin, Sales | Unduh/cetak berkas PDF invoice resmi (isolasi sales, watermark draf/lunas/batal, counter cetak) |
 | `GET`      | `/api/v1/businesses/:id/invoice-preview` | Super Admin | Pratinjau desain 5 tema faktur PDF dummy dengan watermark CONTOH |
 | `GET`      | `/api/v1/orders/:id/delivery-note/pdf` | Super Admin, Sales | Unduh/cetak berkas PDF Surat Jalan resmi (wajib SHIPPED/DELIVERED, anti-bocor tanpa harga) |
+| `POST`     | `/api/v1/orders/:id/credit-notes` | Super Admin, Sales | Menerbitkan Nota Kredit & retur penjualan (multi-settlement: OFFSET/CUSTOMER_CREDIT/REFUND, restock fisik, alokasi nomor atomik) |
+| `GET`      | `/api/v1/orders/:id/credit-notes` | Super Admin, Sales | Daftar seluruh nota kredit untuk pesanan tertentu (isolasi sales) |
+| `GET`      | `/api/v1/credit-notes`         | Super Admin, Sales | Daftar global nota kredit dengan filter pencarian, pelanggan, pesanan, dan penyelesaian |
+| `GET`      | `/api/v1/credit-notes/:id`     | Super Admin, Sales | Detail nota kredit (jaminan anti-bocor cogsReversed/costReversed dirahasiakan dari Sales) |
+| `POST`     | `/api/v1/credit-notes/:id/void` | Super Admin        | Pembatalan (void) nota kredit (alasan min 5 karakter, rollback settlement & stok fisik VOID_REVERSAL) |
+| `GET`      | `/api/v1/customers/:id/credit-balance` | Super Admin, Sales | Ringkasan saldo deposit kredit pelanggan dan riwayat mutasi kredit |
 
 ### Antarmuka Pengguna (UI Routes)
 
@@ -349,7 +355,7 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
 | **Fase 0** | `v0.1.0`     | Fondasi proyek, env, skema Prisma, rumus domain, infra tes              | **SELESAI** |
 | **Fase 1** | `v0.2.0`     | Login, manajemen usaha, akun sales, master produk & vendor, pembaruan   | **SELESAI**         |
 | **Fase 2** | `v0.3.0`     | Customer CRM, order draft, floor pricing, manajemen stok, PO & vendor ledger | **SELESAI** |
-| **Fase 3** | `v0.4.0`     | Persetujuan invoice, verifikasi pembayaran, mesin cetak PDF, void/retur | Sedang Berjalan (T3.5 Selesai) |
+| **Fase 3** | `v0.4.0`     | Persetujuan invoice, verifikasi pembayaran, mesin cetak PDF, void/retur | **SELESAI** (T3.6 Selesai) |
 | **Fase 4** | `v0.5.0`     | Bot Telegram, Mini App, pengingat repeat order, katalog PWA             | Belum dimulai       |
 | **Fase 5** | `v1.0.0`     | Dashboard profit, evaluasi sales, pengerasan keamanan, Go-Live          | Belum dimulai       |
 

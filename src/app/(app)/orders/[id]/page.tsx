@@ -163,6 +163,33 @@ interface ShipmentDto {
   updatedAt: string;
 }
 
+interface CreditNoteItemDto {
+  id: string;
+  orderItemId: string;
+  qty: number;
+  creditAmount: number;
+  restock: boolean;
+  costReversed?: number;
+}
+
+interface CreditNoteDto {
+  id: string;
+  businessId: string;
+  orderId: string;
+  customerId: string;
+  number: string;
+  reason: string;
+  settlement: 'OFFSET' | 'REFUND' | 'CUSTOMER_CREDIT';
+  amountExPpn: number;
+  ppnAmount: number;
+  total: number;
+  cogsReversed?: number;
+  createdById: string;
+  createdAt: string;
+  voidedAt: string | null;
+  items: CreditNoteItemDto[];
+}
+
 export default function OrderDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -275,17 +302,37 @@ export default function OrderDetailPage() {
   const [deliveringOrder, setDeliveringOrder] = useState(false);
   const [deliverOrderError, setDeliverOrderError] = useState<string | null>(null);
 
+  // Data Nota Kredit & Retur Penjualan (Credit Notes)
+  const [creditNotes, setCreditNotes] = useState<CreditNoteDto[]>([]);
+  const [customerCreditBalance, setCustomerCreditBalance] = useState<number | null>(null);
+
+  // Modal Buat Nota Kredit (Create Credit Note)
+  const [showCreateCreditNoteModal, setShowCreateCreditNoteModal] = useState(false);
+  const [cnReason, setCnReason] = useState('');
+  const [cnSettlement, setCnSettlement] = useState<'OFFSET' | 'CUSTOMER_CREDIT' | 'REFUND'>('OFFSET');
+  const [cnItems, setCnItems] = useState<{ [orderItemId: string]: { qty: number; restock: boolean } }>({});
+  const [creatingCreditNote, setCreatingCreditNote] = useState(false);
+  const [creditNoteError, setCreditNoteError] = useState<string | null>(null);
+
+  // Modal Batalkan (Void) Nota Kredit (Super Admin)
+  const [showVoidCreditNoteModal, setShowVoidCreditNoteModal] = useState(false);
+  const [selectedVoidCreditNote, setSelectedVoidCreditNote] = useState<CreditNoteDto | null>(null);
+  const [voidCreditNoteReason, setVoidCreditNoteReason] = useState('');
+  const [voidingCreditNote, setVoidingCreditNote] = useState(false);
+  const [voidCreditNoteError, setVoidCreditNoteError] = useState<string | null>(null);
+
   const fetchOrderDetail = useCallback(async () => {
     if (!id) return;
     try {
       setLoading(true);
       setError(null);
 
-      const [orderRes, meRes, paymentsRes, shipmentRes] = await Promise.all([
+      const [orderRes, meRes, paymentsRes, shipmentRes, creditNotesRes] = await Promise.all([
         fetch(`/api/v1/orders/${id}`),
         fetch('/api/v1/auth/me'),
         fetch(`/api/v1/orders/${id}/payments`),
         fetch(`/api/v1/orders/${id}/shipment`),
+        fetch(`/api/v1/orders/${id}/credit-notes`),
       ]);
 
       if (!orderRes.ok) {
@@ -312,6 +359,22 @@ export default function OrderDetailPage() {
       if (shipmentRes.ok) {
         const shipJson = await shipmentRes.json();
         setShipment(shipJson.data || null);
+      }
+
+      if (creditNotesRes.ok) {
+        const cnJson = await creditNotesRes.json();
+        setCreditNotes(cnJson.data || []);
+      }
+
+      if (orderJson.data?.customerId) {
+        fetch(`/api/v1/customers/${orderJson.data.customerId}/credit-balance`)
+          .then((r) => (r.ok ? r.json() : null))
+          .then((cJson) => {
+            if (cJson?.data?.balance !== undefined) {
+              setCustomerCreditBalance(cJson.data.balance);
+            }
+          })
+          .catch(() => {});
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Terjadi kesalahan sistem.');
@@ -830,6 +893,106 @@ export default function OrderDetailPage() {
     }
   };
 
+  // Helper & Handlers Retur & Nota Kredit (Credit Notes)
+  const openCreateCreditNoteModal = () => {
+    if (!order?.items) return;
+    const initial: { [id: string]: { qty: number; restock: boolean } } = {};
+    order.items.forEach((item) => {
+      initial[item.id] = { qty: 0, restock: true };
+    });
+    setCnItems(initial);
+    setCnReason('');
+    setCnSettlement('OFFSET');
+    setCreditNoteError(null);
+    setShowCreateCreditNoteModal(true);
+  };
+
+  const handleCreateCreditNote = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!order) return;
+    if (cnReason.trim().length < 5) {
+      setCreditNoteError('Alasan retur minimal 5 karakter');
+      return;
+    }
+
+    const itemsToReturn = Object.entries(cnItems)
+      .filter(([, val]) => val.qty > 0)
+      .map(([orderItemId, val]) => ({
+        orderItemId,
+        qty: val.qty,
+        restock: val.restock,
+      }));
+
+    if (itemsToReturn.length === 0) {
+      setCreditNoteError('Pilih minimal satu barang dengan jumlah retur lebih dari 0');
+      return;
+    }
+
+    try {
+      setCreatingCreditNote(true);
+      setCreditNoteError(null);
+
+      const res = await fetch(`/api/v1/orders/${order.id}/credit-notes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          reason: cnReason.trim(),
+          settlement: cnSettlement,
+          items: itemsToReturn,
+        }),
+      });
+
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(json.error?.message || 'Gagal menerbitkan nota kredit');
+      }
+
+      setShowCreateCreditNoteModal(false);
+      setSubmitSuccess('Nota Kredit & Retur Penjualan berhasil diterbitkan!');
+      fetchOrderDetail();
+    } catch (err) {
+      setCreditNoteError(err instanceof Error ? err.message : 'Terjadi kesalahan sistem');
+    } finally {
+      setCreatingCreditNote(false);
+    }
+  };
+
+  const handleVoidCreditNote = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedVoidCreditNote) return;
+    if (voidCreditNoteReason.trim().length < 5) {
+      setVoidCreditNoteError('Alasan pembatalan minimal 5 karakter');
+      return;
+    }
+
+    try {
+      setVoidingCreditNote(true);
+      setVoidCreditNoteError(null);
+
+      const res = await fetch(`/api/v1/credit-notes/${selectedVoidCreditNote.id}/void`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          reason: voidCreditNoteReason.trim(),
+        }),
+      });
+
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(json.error?.message || 'Gagal membatalkan nota kredit');
+      }
+
+      setShowVoidCreditNoteModal(false);
+      setSelectedVoidCreditNote(null);
+      setSubmitSuccess('Nota Kredit berhasil dibatalkan (VOID)! Saldo dan stok telah dipulihkan.');
+      fetchOrderDetail();
+    } catch (err) {
+      setVoidCreditNoteError(err instanceof Error ? err.message : 'Terjadi kesalahan sistem');
+    } finally {
+      setVoidingCreditNote(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="w-full max-w-7xl mx-auto px-4 py-8 space-y-6">
@@ -886,6 +1049,33 @@ export default function OrderDetailPage() {
   const canManageShipment = ['IN_PROCESS', 'FINAL_PENDING_APPROVAL', 'AWAITING_FINAL_PAYMENT'].includes(order.status);
   const canShip = order.status === 'AWAITING_FINAL_PAYMENT' && (!shipment || shipment.status === 'PREPARING');
   const canDeliver = shipment?.status === 'SHIPPED';
+  const isOrderDeliveredOrShipped =
+    shipment?.status === 'SHIPPED' ||
+    shipment?.status === 'DELIVERED' ||
+    order.status === 'COMPLETED' ||
+    order.status === 'SHIPPED' ||
+    order.status === 'DELIVERED';
+
+  const getAlreadyReturnedQty = (orderItemId: string) => {
+    return creditNotes
+      .filter((cn) => !cn.voidedAt)
+      .reduce((sum, cn) => {
+        const item = cn.items?.find((i) => i.orderItemId === orderItemId);
+        return sum + (item ? item.qty : 0);
+      }, 0);
+  };
+
+  const hasReturnableItems = (order.items || []).some((item) => {
+    const returned = getAlreadyReturnedQty(item.id);
+    return item.qty - returned > 0;
+  });
+
+  const canCreateCreditNote =
+    !isDraftOrRevision &&
+    !isPendingApproval &&
+    order.status !== 'CANCELLED' &&
+    isOrderDeliveredOrShipped &&
+    hasReturnableItems;
   const items = order.items || [];
   const confirmTarget = order.orderNo ?? order.id;
 
@@ -1781,6 +1971,179 @@ export default function OrderDetailPage() {
               )}
             </div>
           </div>
+
+          {/* Kartu Nota Kredit & Retur Penjualan (Credit Notes) */}
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <RotateCcw className="w-5 h-5 text-indigo-600" />
+                <h2 className="text-base font-bold text-slate-900">
+                  Nota Kredit & Retur Penjualan
+                </h2>
+                <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-700">
+                  {creditNotes.length}
+                </span>
+              </div>
+
+              {canCreateCreditNote && (
+                <button
+                  type="button"
+                  onClick={openCreateCreditNoteModal}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold transition-colors shadow-sm"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>+ Buat Nota Kredit</span>
+                </button>
+              )}
+            </div>
+
+            <div className="space-y-3">
+              {creditNotes.length === 0 ? (
+                <p className="text-xs text-slate-500 py-3 text-center">
+                  Belum ada nota kredit atau retur penjualan untuk pesanan ini.
+                </p>
+              ) : (
+                creditNotes.map((cn) => {
+                  const isVoided = Boolean(cn.voidedAt);
+                  return (
+                    <div
+                      key={cn.id}
+                      className={`p-4 rounded-xl border transition-colors space-y-3 ${
+                        isVoided
+                          ? 'bg-slate-50 border-slate-200 opacity-75'
+                          : 'bg-white border-slate-200 hover:border-slate-300'
+                      }`}
+                    >
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-slate-900 text-sm font-mono">
+                              {cn.number}
+                            </span>
+                            {isVoided ? (
+                              <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-rose-100 text-rose-800">
+                                DIBATALKAN (VOID)
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-100 text-emerald-800">
+                                AKTIF
+                              </span>
+                            )}
+                            <span
+                              className={`px-2 py-0.5 rounded text-[11px] font-medium ${
+                                cn.settlement === 'OFFSET'
+                                  ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                                  : cn.settlement === 'CUSTOMER_CREDIT'
+                                    ? 'bg-purple-50 text-purple-700 border border-purple-200'
+                                    : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                              }`}
+                            >
+                              {cn.settlement === 'OFFSET'
+                                ? 'Potong Tagihan'
+                                : cn.settlement === 'CUSTOMER_CREDIT'
+                                  ? 'Deposit Pelanggan'
+                                  : 'Pengembalian Kas'}
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-500 mt-0.5">
+                            Diterbitkan pada{' '}
+                            {new Date(cn.createdAt).toLocaleDateString('id-ID', {
+                              day: 'numeric',
+                              month: 'short',
+                              year: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-3">
+                          <div className="text-right">
+                            <span className="text-xs text-slate-500 block">Total Nilai Kredit</span>
+                            <span className="text-sm font-bold text-slate-900">
+                              {formatRupiah(cn.total)}
+                            </span>
+                            {isSuperAdmin && cn.cogsReversed !== undefined && (
+                              <span className="text-[11px] text-slate-500 block">
+                                HPP Dipulihkan: {formatRupiah(cn.cogsReversed)}
+                              </span>
+                            )}
+                          </div>
+
+                          {isSuperAdmin && !isVoided && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedVoidCreditNote(cn);
+                                setVoidCreditNoteReason('');
+                                setVoidCreditNoteError(null);
+                                setShowVoidCreditNoteModal(true);
+                              }}
+                              className="px-2.5 py-1 rounded border border-rose-300 text-rose-700 hover:bg-rose-50 text-xs font-semibold transition-colors"
+                              title="Batalkan Nota Kredit Ini"
+                            >
+                              Void
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="text-xs space-y-1">
+                        <div className="text-slate-700">
+                          <span className="font-semibold text-slate-600">Alasan Retur: </span>
+                          <span>{cn.reason}</span>
+                        </div>
+                        {isVoided && (
+                          <div className="text-rose-600 italic">
+                            Dibatalkan pada {new Date(cn.voidedAt!).toLocaleDateString('id-ID')}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Rincian Barang yang Diretur */}
+                      <div className="bg-slate-50 rounded-lg p-2.5 space-y-1.5 text-xs">
+                        <span className="font-semibold text-slate-700 block">
+                          Barang yang Diretur:
+                        </span>
+                        <div className="space-y-1">
+                          {cn.items?.map((cni) => {
+                            const matchedOrderItem = order.items?.find(
+                              (oi) => oi.id === cni.orderItemId
+                            );
+                            return (
+                              <div
+                                key={cni.id}
+                                className="flex items-center justify-between text-slate-600"
+                              >
+                                <div className="flex items-center gap-2">
+                                  <span>
+                                    {matchedOrderItem?.productName || 'Produk'} ({cni.qty}{' '}
+                                    {matchedOrderItem?.unit || 'unit'})
+                                  </span>
+                                  <span
+                                    className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                                      cni.restock
+                                        ? 'bg-blue-50 text-blue-700'
+                                        : 'bg-amber-50 text-amber-700'
+                                    }`}
+                                  >
+                                    {cni.restock ? 'Kembali ke Gudang' : 'Tanpa Restock'}
+                                  </span>
+                                </div>
+                                <span className="font-medium text-slate-900">
+                                  {formatRupiah(cni.creditAmount)}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
         </div>
 
         {/* Kolom Kanan: Ringkasan Pembayaran & Simulasi Profit */}
@@ -1867,6 +2230,14 @@ export default function OrderDetailPage() {
                     {formatRupiah(order.paidTotal || 0)}
                   </span>
                 </div>
+                {order.creditTotal > 0 && (
+                  <div className="flex justify-between text-slate-700">
+                    <span>Kredit Retur (Offset)</span>
+                    <span className="font-bold text-indigo-600">
+                      -{formatRupiah(order.creditTotal)}
+                    </span>
+                  </div>
+                )}
                 <div className="flex justify-between text-slate-700">
                   <span>Sisa Tagihan</span>
                   <span
@@ -1878,6 +2249,13 @@ export default function OrderDetailPage() {
                   </span>
                 </div>
               </div>
+
+              {customerCreditBalance !== null && customerCreditBalance > 0 && (
+                <div className="mt-2 p-2.5 bg-purple-50 border border-purple-200 rounded-lg text-xs flex items-center justify-between">
+                  <span className="text-purple-700 font-medium">Deposit Kredit Pelanggan:</span>
+                  <span className="font-bold text-purple-900">{formatRupiah(customerCreditBalance)}</span>
+                </div>
+              )}
 
               {canRecordPayment && (
                 <button
@@ -3167,6 +3545,311 @@ export default function OrderDetailPage() {
                   className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition-colors shadow-sm"
                 >
                   {deliveringOrder ? 'Memproses...' : 'Tandai Diterima'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Buat Nota Kredit & Retur Penjualan */}
+      {showCreateCreditNoteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-xl shadow-xl border border-slate-200 w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between p-4 border-b border-slate-100">
+              <div className="flex items-center gap-2 text-indigo-700">
+                <RotateCcw className="w-5 h-5" />
+                <h3 className="font-bold text-slate-900 text-base">
+                  Buat Nota Kredit & Retur Penjualan
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCreateCreditNoteModal(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateCreditNote} className="flex flex-col flex-1 overflow-hidden">
+              <div className="p-5 overflow-y-auto space-y-4 flex-1">
+                {/* Alasan Retur */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Alasan Retur / Nota Kredit <span className="text-rose-500">*</span>
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={cnReason}
+                    onChange={(e) => setCnReason(e.target.value)}
+                    placeholder="Contoh: Kemasan sobek saat pengiriman / salah varian produk"
+                    className="w-full text-xs p-2.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-800"
+                    required
+                  />
+                  <span className="text-[11px] text-slate-400">Minimal 5 karakter.</span>
+                </div>
+
+                {/* Pilihan Penyelesaian (Settlement) */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-2">
+                    Metode Penyelesaian Kredit <span className="text-rose-500">*</span>
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                    <label
+                      className={`p-3 rounded-lg border text-xs cursor-pointer transition-colors ${
+                        cnSettlement === 'OFFSET'
+                          ? 'border-indigo-600 bg-indigo-50/50 text-indigo-900'
+                          : 'border-slate-200 hover:bg-slate-50 text-slate-700'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="settlement"
+                        value="OFFSET"
+                        checked={cnSettlement === 'OFFSET'}
+                        onChange={() => setCnSettlement('OFFSET')}
+                        className="sr-only"
+                      />
+                      <span className="font-bold block mb-1">Potong Tagihan</span>
+                      <span className="text-[11px] text-slate-500 block">
+                        Memotong sisa tagihan pesanan ini langsung.
+                      </span>
+                    </label>
+
+                    <label
+                      className={`p-3 rounded-lg border text-xs cursor-pointer transition-colors ${
+                        cnSettlement === 'CUSTOMER_CREDIT'
+                          ? 'border-indigo-600 bg-indigo-50/50 text-indigo-900'
+                          : 'border-slate-200 hover:bg-slate-50 text-slate-700'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="settlement"
+                        value="CUSTOMER_CREDIT"
+                        checked={cnSettlement === 'CUSTOMER_CREDIT'}
+                        onChange={() => setCnSettlement('CUSTOMER_CREDIT')}
+                        className="sr-only"
+                      />
+                      <span className="font-bold block mb-1">Deposit Pelanggan</span>
+                      <span className="text-[11px] text-slate-500 block">
+                        Disimpan sebagai deposit saldo untuk pesanan berikutnya.
+                      </span>
+                    </label>
+
+                    <label
+                      className={`p-3 rounded-lg border text-xs cursor-pointer transition-colors ${
+                        cnSettlement === 'REFUND'
+                          ? 'border-indigo-600 bg-indigo-50/50 text-indigo-900'
+                          : 'border-slate-200 hover:bg-slate-50 text-slate-700'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="settlement"
+                        value="REFUND"
+                        checked={cnSettlement === 'REFUND'}
+                        onChange={() => setCnSettlement('REFUND')}
+                        className="sr-only"
+                      />
+                      <span className="font-bold block mb-1">Pengembalian Kas</span>
+                      <span className="text-[11px] text-slate-500 block">
+                        Pengembalian uang tunai/transfer (maks {formatRupiah(order.paidTotal || 0)}).
+                      </span>
+                    </label>
+                  </div>
+                </div>
+
+                {/* Tabel Barang yang Diretur */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-2">
+                    Pilih Barang & Jumlah Retur
+                  </label>
+                  <div className="border border-slate-200 rounded-lg overflow-hidden">
+                    <table className="w-full text-xs text-left">
+                      <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
+                        <tr>
+                          <th className="p-2.5">Produk</th>
+                          <th className="p-2.5 text-center">Dipesan</th>
+                          <th className="p-2.5 text-center">Sisa</th>
+                          <th className="p-2.5 text-center w-24">Qty Retur</th>
+                          <th className="p-2.5 text-center">Restock</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {order.items?.map((item) => {
+                          const alreadyReturned = getAlreadyReturnedQty(item.id);
+                          const returnable = Math.max(0, item.qty - alreadyReturned);
+                          const currentQty = cnItems[item.id]?.qty || 0;
+                          const currentRestock = cnItems[item.id]?.restock ?? true;
+
+                          return (
+                            <tr key={item.id} className="hover:bg-slate-50/50">
+                              <td className="p-2.5">
+                                <span className="font-semibold text-slate-800 block">
+                                  {item.productName}
+                                </span>
+                                <span className="text-[11px] text-slate-400 font-mono">
+                                  {item.sku}
+                                </span>
+                              </td>
+                              <td className="p-2.5 text-center text-slate-600">
+                                {item.qty} {item.unit}
+                              </td>
+                              <td className="p-2.5 text-center font-semibold text-indigo-700">
+                                {returnable} {item.unit}
+                              </td>
+                              <td className="p-2.5 text-center">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max={returnable}
+                                  value={currentQty}
+                                  disabled={returnable === 0}
+                                  onChange={(e) => {
+                                    const val = Math.max(
+                                      0,
+                                      Math.min(returnable, Number(e.target.value) || 0)
+                                    );
+                                    setCnItems((prev) => ({
+                                      ...prev,
+                                      [item.id]: {
+                                        qty: val,
+                                        restock: prev[item.id]?.restock ?? true,
+                                      },
+                                    }));
+                                  }}
+                                  className="w-16 p-1 text-center border border-slate-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 font-semibold"
+                                />
+                              </td>
+                              <td className="p-2.5 text-center">
+                                <input
+                                  type="checkbox"
+                                  checked={currentRestock}
+                                  disabled={currentQty === 0}
+                                  onChange={(e) => {
+                                    setCnItems((prev) => ({
+                                      ...prev,
+                                      [item.id]: {
+                                        qty: prev[item.id]?.qty || 0,
+                                        restock: e.target.checked,
+                                      },
+                                    }));
+                                  }}
+                                  className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500"
+                                  title="Kembalikan barang ke stok gudang"
+                                />
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {creditNoteError && (
+                  <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-700 flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                    <span>{creditNoteError}</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center justify-end gap-2 p-4 border-t border-slate-100 bg-slate-50">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateCreditNoteModal(false)}
+                  disabled={creatingCreditNote}
+                  className="px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-200 rounded-lg transition-colors"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={creatingCreditNote}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition-colors shadow-sm flex items-center gap-1.5"
+                >
+                  {creatingCreditNote ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Menerbitkan...</span>
+                    </>
+                  ) : (
+                    <span>Terbitkan Nota Kredit</span>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Batalkan (Void) Nota Kredit (Super Admin) */}
+      {showVoidCreditNoteModal && selectedVoidCreditNote && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-xl shadow-xl border border-slate-200 w-full max-w-md p-5 space-y-4 animate-in zoom-in-95 duration-200">
+            <div className="flex items-center gap-2 text-rose-700">
+              <AlertTriangle className="w-6 h-6 shrink-0" />
+              <h3 className="font-semibold text-slate-800 text-base">
+                Batalkan (Void) Nota Kredit
+              </h3>
+            </div>
+
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-800 space-y-1">
+              <p className="font-semibold">Perhatian Tindakan Permanen:</p>
+              <p>
+                Membatalkan nota kredit <strong>{selectedVoidCreditNote.number}</strong> senilai{' '}
+                <strong>{formatRupiah(selectedVoidCreditNote.total)}</strong> akan membatalkan pemotongan tagihan atau saldo deposit pelanggan, serta menarik kembali stok fisik gudang bila sebelumnya direstock.
+              </p>
+            </div>
+
+            <form onSubmit={handleVoidCreditNote} className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Alasan Pembatalan <span className="text-rose-500">*</span>
+                </label>
+                <textarea
+                  rows={2}
+                  value={voidCreditNoteReason}
+                  onChange={(e) => setVoidCreditNoteReason(e.target.value)}
+                  placeholder="Contoh: Kesepakatan ulang retur dibatalkan oleh pihak pembeli"
+                  className="w-full text-xs p-2.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-rose-500 text-slate-800"
+                  required
+                />
+                <span className="text-[11px] text-slate-400">Minimal 5 karakter.</span>
+              </div>
+
+              {voidCreditNoteError && (
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-700 flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>{voidCreditNoteError}</span>
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowVoidCreditNoteModal(false)}
+                  disabled={voidingCreditNote}
+                  className="px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                >
+                  Tutup
+                </button>
+                <button
+                  type="submit"
+                  disabled={voidingCreditNote}
+                  className="px-4 py-2 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition-colors shadow-sm flex items-center gap-1.5"
+                >
+                  {voidingCreditNote ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Membatalkan...</span>
+                    </>
+                  ) : (
+                    <span>Konfirmasi Void</span>
+                  )}
                 </button>
               </div>
             </form>
