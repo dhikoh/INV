@@ -5,6 +5,7 @@ import { OrderUpdateSchema, OrderDeleteSchema } from '@/lib/validation/order';
 import { buildOrderSnapshot, formatOrderDto, formatInvoiceDto } from '@/lib/services/order';
 import { formatRupiah, DomainError } from '@/lib/domain/money';
 import { OrderStatus, InvoiceStatus, Role } from '@prisma/client';
+import { reverseOrderCommission } from '@/lib/services/commission';
 
 /**
  * GET /api/v1/orders/:id
@@ -276,6 +277,9 @@ export const DELETE = withApi(
           deletedAt: new Date(),
         },
       });
+
+      // Batalkan entri komisi jika ada
+      await reverseOrderCommission(tx, existing.id, 'Pesanan dihapus ke Tempat Sampah');
 
       await tx.auditLog.create({
         data: {

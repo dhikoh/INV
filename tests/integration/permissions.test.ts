@@ -109,6 +109,18 @@ import { POST as rejectPaymentHandler } from '@/app/api/v1/payments/[id]/reject/
 import { POST as voidPaymentHandler } from '@/app/api/v1/payments/[id]/void/route';
 import { GET as getInvoicePreviewHandler } from '@/app/api/v1/businesses/[id]/invoice-preview/route';
 import { POST as voidCreditNoteHandler } from '@/app/api/v1/credit-notes/[id]/void/route';
+import { GET as getOrderProfitHandler } from '@/app/api/v1/orders/[id]/profit/route';
+import {
+  GET as getOrderCostsHandler,
+  POST as createOrderCostHandler,
+} from '@/app/api/v1/orders/[id]/costs/route';
+import { DELETE as deleteOrderCostHandler } from '@/app/api/v1/orders/[id]/costs/[costId]/route';
+import { GET as getCommissionEntriesHandler } from '@/app/api/v1/commission/entries/route';
+import { POST as payCommissionEntryHandler } from '@/app/api/v1/commission/entries/[id]/pay/route';
+import {
+  GET as getCommissionTiersHandler,
+  PUT as setCommissionTiersHandler,
+} from '@/app/api/v1/commission/tiers/route';
 
 describe('Matriks Hak Akses Berbasis Tabel (Seksi 5.1 & 17.4 b)', () => {
   const APP_URL = 'http://localhost:3000';
@@ -663,6 +675,62 @@ describe('Matriks Hak Akses Berbasis Tabel (Seksi 5.1 & 17.4 b)', () => {
       handler: (req, r) => voidCreditNoteHandler(req, r),
       params: { id: 'cn_1' },
       body: { reason: 'Dibatalkan karena salah input barang retur' },
+    },
+    {
+      name: 'GET /api/v1/orders/:id/profit',
+      method: 'GET',
+      path: '/api/v1/orders/ord_1/profit',
+      handler: (req, r) => getOrderProfitHandler(req, r),
+      params: { id: 'ord_1' },
+    },
+    {
+      name: 'GET /api/v1/orders/:id/costs',
+      method: 'GET',
+      path: '/api/v1/orders/ord_1/costs',
+      handler: (req, r) => getOrderCostsHandler(req, r),
+      params: { id: 'ord_1' },
+    },
+    {
+      name: 'POST /api/v1/orders/:id/costs',
+      method: 'POST',
+      path: '/api/v1/orders/ord_1/costs',
+      handler: (req, r) => createOrderCostHandler(req, r),
+      params: { id: 'ord_1' },
+      body: { label: 'Biaya Bongkar Muat', amount: 50000 },
+    },
+    {
+      name: 'DELETE /api/v1/orders/:id/costs/:costId',
+      method: 'DELETE',
+      path: '/api/v1/orders/ord_1/costs/cost_1',
+      handler: (req, r) => deleteOrderCostHandler(req, r),
+      params: { id: 'ord_1', costId: 'cost_1' },
+    },
+    {
+      name: 'GET /api/v1/commission/entries',
+      method: 'GET',
+      path: '/api/v1/commission/entries',
+      handler: (req) => getCommissionEntriesHandler(req),
+    },
+    {
+      name: 'POST /api/v1/commission/entries/:id/pay',
+      method: 'POST',
+      path: '/api/v1/commission/entries/comm_1/pay',
+      handler: (req, r) => payCommissionEntryHandler(req, r),
+      params: { id: 'comm_1' },
+      body: { note: 'Pembayaran komisi transfer bank' },
+    },
+    {
+      name: 'GET /api/v1/commission/tiers',
+      method: 'GET',
+      path: '/api/v1/commission/tiers',
+      handler: (req) => getCommissionTiersHandler(req),
+    },
+    {
+      name: 'PUT /api/v1/commission/tiers',
+      method: 'PUT',
+      path: '/api/v1/commission/tiers',
+      handler: (req) => setCommissionTiersHandler(req),
+      body: { tiers: [{ minAchievementBps: 10000, rateBps: 1500 }] },
     },
   ];
 

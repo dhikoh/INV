@@ -17,6 +17,7 @@ import { creditNoteNumber } from '@/lib/domain/numbering';
 import { allocateCustomerCreditNoteSeq } from './counter';
 import { lockProducts, moveStock } from './stock';
 import { maybeComplete, recalculateOrderPayments } from './payment';
+import { recalculateOrderCommission } from './commission';
 
 export type TxClient = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
 
@@ -491,6 +492,9 @@ export async function createCreditNote(
     },
   });
 
+  // Rekalkulasi komisi pesanan jika ada retur barang
+  await recalculateOrderCommission(tx, order.id);
+
   return formatCreditNoteDto(creditNote, order, order.customer, isSuperAdmin, orderItemsMap);
 }
 
@@ -698,6 +702,9 @@ export async function voidCreditNote(
       dedupeKey: `cn_void_${creditNote.id}_${order.salesId}`,
     },
   });
+
+  // Rekalkulasi komisi setelah pembatalan nota kredit
+  await recalculateOrderCommission(tx, order.id);
 
   const orderItemsMap = new Map(order.items.map((oi) => [oi.id, oi]));
   return formatCreditNoteDto(updatedCn, order, order.customer, true, orderItemsMap);

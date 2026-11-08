@@ -12,6 +12,7 @@ import { prisma } from '@/lib/db';
 import { DomainError, formatRupiah } from '../domain/money';
 import { lockOrder } from './orderGuard';
 import { Ctx } from '../auth/context';
+import { evaluateOrderCommission } from './commission';
 
 export type TxClient = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
 
@@ -628,6 +629,9 @@ export async function verifyPayment(
 
   // Evaluasi penyelesaian pesanan
   await maybeComplete(tx, ctx, order.id);
+
+  // Evaluasi komisi pesanan (ON_DP_PAID atau ON_FULL_PAID)
+  await evaluateOrderCommission(tx, order.id);
 
   // Audit log verifikasi pembayaran
   await tx.auditLog.create({

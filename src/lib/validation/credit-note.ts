@@ -34,3 +34,4 @@ export type CreditNoteItemInput = z.infer<typeof CreditNoteItemInputSchema>;
 export type CreditNoteCreateInput = z.infer<typeof CreditNoteCreateSchema>;
 export type CreditNoteVoidInput = z.infer<typeof CreditNoteVoidSchema>;
 export type CreditNoteQueryInput = z.infer<typeof CreditNoteQuerySchema>;
+

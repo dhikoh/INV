@@ -28,6 +28,7 @@ import {
   ExternalLink,
   Printer,
   Eye,
+  Plus,
 } from 'lucide-react';
 import { Skeleton, ErrorState } from '@/components/ui/States';
 import { StatusBadge } from '@/components/ui/StatusBadge';
@@ -190,6 +191,45 @@ interface CreditNoteDto {
   items: CreditNoteItemDto[];
 }
 
+interface OrderCostItemDto {
+  id: string;
+  label: string;
+  amount: number;
+  createdById: string;
+  createdAt: string;
+}
+
+interface OrderProfitDetailDto {
+  orderId: string;
+  goodsRevenue: number;
+  shippingCharge: number;
+  revenue: number;
+  cogs: number;
+  shippingActualCost: number;
+  shippingSubsidy: number;
+  extraCosts: number;
+  profit: number;
+  marginBps: number;
+  discountBySource: {
+    MANUAL: number;
+    PROMO: number;
+    SUBSIDY: number;
+  };
+  costs: OrderCostItemDto[];
+  commission?: {
+    id: string;
+    mode: string;
+    basisAmount: number;
+    rateBps: number;
+    amount: number;
+    status: 'EARNED' | 'PAID' | 'REVERSED';
+    earnedAt: string;
+    paidAt: string | null;
+    reversedAt: string | null;
+    note: string | null;
+  } | null;
+}
+
 export default function OrderDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -321,6 +361,23 @@ export default function OrderDetailPage() {
   const [voidingCreditNote, setVoidingCreditNote] = useState(false);
   const [voidCreditNoteError, setVoidCreditNoteError] = useState<string | null>(null);
 
+  // Data Profit Riil & Komisi (Khusus Super Admin)
+  const [orderProfit, setOrderProfit] = useState<OrderProfitDetailDto | null>(null);
+
+  // Modal Tambah Biaya Lain (OrderCost)
+  const [showAddCostModal, setShowAddCostModal] = useState(false);
+  const [costLabel, setCostLabel] = useState('');
+  const [costAmount, setCostAmount] = useState('');
+  const [addingCost, setAddingCost] = useState(false);
+  const [deletingCostId, setDeletingCostId] = useState<string | null>(null);
+  const [costError, setCostError] = useState<string | null>(null);
+
+  // Modal Bayar Komisi (Super Admin)
+  const [showPayCommissionModal, setShowPayCommissionModal] = useState(false);
+  const [payCommissionNote, setPayCommissionNote] = useState('');
+  const [payingCommission, setPayingCommission] = useState(false);
+  const [payCommissionError, setPayCommissionError] = useState<string | null>(null);
+
   const fetchOrderDetail = useCallback(async () => {
     if (!id) return;
     try {
@@ -349,6 +406,14 @@ export default function OrderDetailPage() {
       if (meRes.ok) {
         const meJson = await meRes.json();
         setCurrentUser(meJson.data.user);
+        if (meJson.data?.user?.role === 'SUPERADMIN') {
+          fetch(`/api/v1/orders/${id}/profit`)
+            .then((r) => (r.ok ? r.json() : null))
+            .then((pJson) => {
+              if (pJson?.data) setOrderProfit(pJson.data);
+            })
+            .catch(() => {});
+        }
       }
 
       if (paymentsRes.ok) {
@@ -990,6 +1055,91 @@ export default function OrderDetailPage() {
       setVoidCreditNoteError(err instanceof Error ? err.message : 'Terjadi kesalahan sistem');
     } finally {
       setVoidingCreditNote(false);
+    }
+  };
+
+  // Handlers Biaya Tambahan (OrderCost) & Komisi
+  const handleAddCost = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!order) return;
+    const amt = Number(costAmount);
+    if (!costLabel.trim()) {
+      setCostError('Label biaya wajib diisi');
+      return;
+    }
+    if (isNaN(amt) || amt <= 0) {
+      setCostError('Nominal biaya harus bilangan bulat lebih besar dari 0');
+      return;
+    }
+
+    try {
+      setAddingCost(true);
+      setCostError(null);
+      const res = await fetch(`/api/v1/orders/${order.id}/costs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label: costLabel.trim(), amount: amt }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(json.error?.message || 'Gagal menambahkan biaya');
+      }
+      setShowAddCostModal(false);
+      setCostLabel('');
+      setCostAmount('');
+      setSubmitSuccess('Biaya tambahan berhasil dicatat!');
+      fetchOrderDetail();
+    } catch (err) {
+      setCostError(err instanceof Error ? err.message : 'Terjadi kesalahan sistem');
+    } finally {
+      setAddingCost(false);
+    }
+  };
+
+  const handleDeleteCost = async (costId: string) => {
+    if (!order) return;
+    if (!confirm('Apakah Anda yakin ingin menghapus biaya tambahan ini?')) return;
+    try {
+      setDeletingCostId(costId);
+      const res = await fetch(`/api/v1/orders/${order.id}/costs/${costId}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        throw new Error(json.error?.message || 'Gagal menghapus biaya');
+      }
+      setSubmitSuccess('Biaya tambahan berhasil dihapus.');
+      fetchOrderDetail();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Gagal menghapus biaya');
+    } finally {
+      setDeletingCostId(null);
+    }
+  };
+
+  const handlePayCommission = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!orderProfit?.commission) return;
+    try {
+      setPayingCommission(true);
+      setPayCommissionError(null);
+      const res = await fetch(`/api/v1/commission/entries/${orderProfit.commission.id}/pay`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ note: payCommissionNote.trim() || undefined }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(json.error?.message || 'Gagal menandai komisi dibayar');
+      }
+      setShowPayCommissionModal(false);
+      setPayCommissionNote('');
+      setSubmitSuccess('Komisi berhasil ditandai telah dibayarkan!');
+      fetchOrderDetail();
+    } catch (err) {
+      setPayCommissionError(err instanceof Error ? err.message : 'Terjadi kesalahan sistem');
+    } finally {
+      setPayingCommission(false);
     }
   };
 
@@ -2274,92 +2424,273 @@ export default function OrderDetailPage() {
             </div>
           </div>
 
-          {/* Panel Simulasi Profit (Khusus Super Admin) */}
-          {isSuperAdmin && order.profitSimulation && (
-            <div className="bg-emerald-50/60 rounded-xl border border-emerald-200 shadow-sm p-5 space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-emerald-900 flex items-center gap-1.5">
-                  <ShieldAlert className="w-4 h-4 text-emerald-700" />
-                  <span>Simulasi Profit (Khusus Admin)</span>
-                </h3>
-                {order.profitSimulation.profit >= 0 ? (
-                  <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">
-                    <TrendingUp className="w-3.5 h-3.5" />
-                    <span>Laba Positif</span>
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1 text-xs font-semibold text-rose-700 bg-rose-100 px-2 py-0.5 rounded-full">
-                    <TrendingDown className="w-3.5 h-3.5" />
-                    <span>Rugi / Negatif</span>
-                  </span>
-                )}
-              </div>
+          {/* Panel Simulasi Profit & Komisi (Khusus Super Admin) */}
+          {isSuperAdmin && (orderProfit || order.profitSimulation) && (() => {
+            const profitData = orderProfit || {
+              goodsRevenue: order.profitSimulation!.goodsRevenue,
+              shippingCharge: order.shippingCharge,
+              revenue: order.profitSimulation!.revenue,
+              cogs: order.profitSimulation!.cogs,
+              shippingActualCost: order.profitSimulation!.shippingActualCost,
+              shippingSubsidy: Math.max(0, order.profitSimulation!.shippingActualCost - order.shippingCharge),
+              extraCosts: order.profitSimulation!.extraCosts,
+              profit: order.profitSimulation!.profit,
+              marginBps: order.profitSimulation!.marginBps,
+              costs: [],
+              commission: null,
+            };
 
-              <div className="space-y-2 text-xs divide-y divide-emerald-100/80">
-                <div className="flex justify-between pt-1 text-slate-700">
-                  <span>Pendapatan Barang (Net)</span>
-                  <span className="font-medium">
-                    {formatRupiah(order.profitSimulation.goodsRevenue)}
-                  </span>
+            const comm = profitData.commission;
+
+            return (
+              <div className="bg-emerald-50/60 rounded-xl border border-emerald-200 shadow-sm p-5 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-emerald-900 flex items-center gap-1.5">
+                    <ShieldAlert className="w-4 h-4 text-emerald-700" />
+                    <span>Laba Riil & Komisi (Khusus Admin)</span>
+                  </h3>
+                  {profitData.profit >= 0 ? (
+                    <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">
+                      <TrendingUp className="w-3.5 h-3.5" />
+                      <span>Laba Positif</span>
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-xs font-semibold text-rose-700 bg-rose-100 px-2 py-0.5 rounded-full">
+                      <TrendingDown className="w-3.5 h-3.5" />
+                      <span>Rugi / Negatif</span>
+                    </span>
+                  )}
                 </div>
-                <div className="flex justify-between pt-2 text-slate-700">
-                  <span>Total HPP Produk (COGS)</span>
-                  <span className="font-medium text-rose-700">
-                    -{formatRupiah(order.profitSimulation.cogs)}
-                  </span>
-                </div>
-                {order.profitSimulation.shippingActualCost > 0 && (
+
+                {/* Rincian Finansial Pesanan */}
+                <div className="space-y-2 text-xs divide-y divide-emerald-100/80">
+                  <div className="flex justify-between pt-1 text-slate-700">
+                    <span>Pendapatan Barang (Net)</span>
+                    <span className="font-medium">
+                      {formatRupiah(profitData.goodsRevenue)}
+                    </span>
+                  </div>
+                  {profitData.shippingCharge > 0 && (
+                    <div className="flex justify-between pt-2 text-slate-700">
+                      <span>Ongkos Kirim Diterima</span>
+                      <span className="font-medium text-slate-900">
+                        {formatRupiah(profitData.shippingCharge)}
+                      </span>
+                    </div>
+                  )}
                   <div className="flex justify-between pt-2 text-slate-700">
-                    <span>Biaya Kirim Riil</span>
+                    <span>Total HPP Produk (COGS)</span>
                     <span className="font-medium text-rose-700">
-                      -{formatRupiah(order.profitSimulation.shippingActualCost)}
+                      -{formatRupiah(profitData.cogs)}
+                    </span>
+                  </div>
+                  {profitData.shippingActualCost > 0 && (
+                    <div className="flex justify-between pt-2 text-slate-700">
+                      <div>
+                        <span>Biaya Kirim Riil</span>
+                        {profitData.shippingSubsidy > 0 && (
+                          <span className="text-[10px] text-amber-700 block">
+                            (Subsidi: {formatRupiah(profitData.shippingSubsidy)})
+                          </span>
+                        )}
+                      </div>
+                      <span className="font-medium text-rose-700">
+                        -{formatRupiah(profitData.shippingActualCost)}
+                      </span>
+                    </div>
+                  )}
+                  {profitData.extraCosts > 0 && (
+                    <div className="flex justify-between pt-2 text-slate-700">
+                      <span>Biaya Ekstra Operasional</span>
+                      <span className="font-medium text-rose-700">
+                        -{formatRupiah(profitData.extraCosts)}
+                      </span>
+                    </div>
+                  )}
+                  <div className="flex justify-between pt-2 font-bold text-sm">
+                    <span className="text-slate-900">Laba Bersih Riil</span>
+                    <span
+                      className={
+                        profitData.profit >= 0
+                          ? 'text-emerald-700'
+                          : 'text-rose-700 font-extrabold'
+                      }
+                    >
+                      {formatRupiah(profitData.profit)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between pt-2 text-xs">
+                    <span className="text-slate-600">Margin Keuntungan</span>
+                    <span
+                      className={`font-semibold ${
+                        profitData.marginBps >= 0
+                          ? 'text-emerald-700'
+                          : 'text-rose-700'
+                      }`}
+                    >
+                      {formatPercentFromBps(profitData.marginBps)}
+                    </span>
+                  </div>
+                </div>
+
+                {profitData.profit < 0 && (
+                  <div className="p-2.5 bg-rose-100/80 border border-rose-300 rounded-lg text-rose-900 text-xs font-semibold flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 text-rose-700 shrink-0" />
+                    <span>
+                      Peringatan: Pesanan ini menghasilkan kerugian riil bagi usaha!
                     </span>
                   </div>
                 )}
-                {order.profitSimulation.extraCosts > 0 && (
-                  <div className="flex justify-between pt-2 text-slate-700">
-                    <span>Biaya Tambahan Lain</span>
-                    <span className="font-medium text-rose-700">
-                      -{formatRupiah(order.profitSimulation.extraCosts)}
-                    </span>
+
+                {/* Sub-panel Biaya Tambahan (OrderCost) */}
+                <div className="pt-3 border-t border-emerald-200/70 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-800">Biaya Ekstra Pesanan</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCostLabel('');
+                        setCostAmount('');
+                        setCostError(null);
+                        setShowAddCostModal(true);
+                      }}
+                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 hover:text-emerald-900 bg-emerald-100/80 hover:bg-emerald-200/80 px-2 py-0.5 rounded transition-colors"
+                    >
+                      <Plus className="w-3 h-3" />
+                      <span>Tambah Biaya</span>
+                    </button>
                   </div>
-                )}
-                <div className="flex justify-between pt-2 font-bold text-sm">
-                  <span className="text-slate-900">Estimasi Laba Bersih</span>
-                  <span
-                    className={
-                      order.profitSimulation.profit >= 0
-                        ? 'text-emerald-700'
-                        : 'text-rose-700 font-extrabold'
-                    }
-                  >
-                    {formatRupiah(order.profitSimulation.profit)}
-                  </span>
+
+                  {profitData.costs && profitData.costs.length > 0 ? (
+                    <div className="space-y-1.5">
+                      {profitData.costs.map((c) => (
+                        <div
+                          key={c.id}
+                          className="flex items-center justify-between bg-white/70 border border-emerald-100 px-2.5 py-1.5 rounded-lg text-xs"
+                        >
+                          <div>
+                            <span className="font-medium text-slate-800 block">{c.label}</span>
+                            <span className="text-[10px] text-slate-400">
+                              {new Date(c.createdAt).toLocaleDateString('id-ID')}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-rose-700">
+                              {formatRupiah(c.amount)}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteCost(c.id)}
+                              disabled={deletingCostId === c.id}
+                              className="p-1 text-slate-400 hover:text-rose-600 rounded transition-colors disabled:opacity-50"
+                              title="Hapus Biaya"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-[11px] text-slate-500 italic">
+                      Belum ada biaya ekstra dicatat (cth: packaging kayu, asuransi khusus).
+                    </p>
+                  )}
                 </div>
-                <div className="flex justify-between pt-2 text-xs">
-                  <span className="text-slate-600">Margin Keuntungan</span>
-                  <span
-                    className={`font-semibold ${
-                      order.profitSimulation.marginBps >= 0
-                        ? 'text-emerald-700'
-                        : 'text-rose-700'
-                    }`}
-                  >
-                    {formatPercentFromBps(order.profitSimulation.marginBps)}
-                  </span>
+
+                {/* Sub-panel Komisi Sales */}
+                <div className="pt-3 border-t border-emerald-200/70 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-800">Komisi Sales</span>
+                    {comm && (
+                      <span
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                          comm.status === 'PAID'
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : comm.status === 'REVERSED'
+                            ? 'bg-rose-100 text-rose-800'
+                            : 'bg-amber-100 text-amber-800'
+                        }`}
+                      >
+                        {comm.status === 'PAID'
+                          ? 'SUDAH DIBAYAR'
+                          : comm.status === 'REVERSED'
+                          ? 'DIBATALKAN'
+                          : 'BELUM DIBAYAR'}
+                      </span>
+                    )}
+                  </div>
+
+                  {comm ? (
+                    <div className="bg-white/80 border border-emerald-100 rounded-lg p-2.5 space-y-1.5 text-xs">
+                      <div className="flex justify-between text-slate-600">
+                        <span>Skema Komisi</span>
+                        <span className="font-medium text-slate-900">
+                          {comm.mode === 'PERCENT_OF_PROFIT'
+                            ? 'Persentase Laba Bersih'
+                            : comm.mode === 'PERCENT_OF_REVENUE'
+                            ? 'Persentase Omzet Penjualan'
+                            : comm.mode === 'TIERED_BY_TARGET'
+                            ? 'Target Bulanan Berjenjang'
+                            : 'Nominal Tetap per Pesanan'}
+                        </span>
+                      </div>
+                      {comm.mode !== 'FIXED_PER_ORDER' && (
+                        <>
+                          <div className="flex justify-between text-slate-600">
+                            <span>Basis Perhitungan</span>
+                            <span className="font-medium text-slate-900">
+                              {formatRupiah(comm.basisAmount)}
+                            </span>
+                          </div>
+                          <div className="flex justify-between text-slate-600">
+                            <span>Tarif Komisi</span>
+                            <span className="font-medium text-slate-900">
+                              {formatPercentFromBps(comm.rateBps)}
+                            </span>
+                          </div>
+                        </>
+                      )}
+                      <div className="flex justify-between font-bold text-slate-900 pt-1 border-t border-emerald-50">
+                        <span>Nilai Komisi</span>
+                        <span className="text-emerald-700 font-bold">
+                          {formatRupiah(comm.amount)}
+                        </span>
+                      </div>
+
+                      {comm.status === 'PAID' && comm.paidAt && (
+                        <div className="text-[10px] text-slate-500 pt-1">
+                          Dibayar pada {new Date(comm.paidAt).toLocaleDateString('id-ID')}
+                          {comm.note ? ` (${comm.note})` : ''}
+                        </div>
+                      )}
+
+                      {comm.status === 'EARNED' && (
+                        <div className="pt-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPayCommissionNote('');
+                              setPayCommissionError(null);
+                              setShowPayCommissionModal(true);
+                            }}
+                            className="w-full py-1.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs rounded-lg transition-colors shadow-sm flex items-center justify-center gap-1.5"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <span>Tandai Komisi Sudah Dibayar</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-[11px] text-slate-500 italic">
+                      Komisi belum diterbitkan (menunggu syarat pelunasan/pembayaran DP terpenuhi).
+                    </p>
+                  )}
                 </div>
               </div>
-
-              {order.profitSimulation.profit < 0 && (
-                <div className="p-2.5 bg-rose-100/80 border border-rose-300 rounded-lg text-rose-900 text-xs font-semibold flex items-center gap-2">
-                  <AlertTriangle className="w-4 h-4 text-rose-700 shrink-0" />
-                  <span>
-                    Peringatan: Pesanan ini menghasilkan estimasi kerugian bersih!
-                  </span>
-                </div>
-              )}
-            </div>
-          )}
+            );
+          })()}
         </div>
       </div>
 
@@ -3849,6 +4180,184 @@ export default function OrderDetailPage() {
                     </>
                   ) : (
                     <span>Konfirmasi Void</span>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Tambah Biaya Ekstra (OrderCost) */}
+      {showAddCostModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-xl shadow-xl border border-slate-200 w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-slate-50">
+              <div className="flex items-center gap-2 text-indigo-600">
+                <DollarSign className="w-5 h-5" />
+                <h3 className="font-semibold text-slate-800">Tambah Biaya Ekstra Pesanan</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAddCostModal(false);
+                  setCostError(null);
+                }}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 min-h-[44px] min-w-[44px] flex items-center justify-center"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddCost} className="p-5 space-y-4">
+              <p className="text-xs text-slate-600">
+                Biaya ekstra (seperti packing kayu, asuransi, bongkar muat, retribusi) akan mengurangi laba bersih riil pesanan dan memperbarui komisi sales.
+              </p>
+
+              {costError && (
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-rose-700 text-xs flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  <span>{costError}</span>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Nama / Label Biaya <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Contoh: Packing Kayu, Biaya Karantina"
+                  value={costLabel}
+                  onChange={(e) => setCostLabel(e.target.value)}
+                  className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Nominal Biaya (Rp) <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="number"
+                  required
+                  min="1"
+                  step="1"
+                  placeholder="Contoh: 50000"
+                  value={costAmount}
+                  onChange={(e) => setCostAmount(e.target.value)}
+                  className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAddCostModal(false);
+                    setCostError(null);
+                  }}
+                  disabled={addingCost}
+                  className="px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={addingCost}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition-colors shadow-sm flex items-center gap-1.5"
+                >
+                  {addingCost ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Menyimpan...</span>
+                    </>
+                  ) : (
+                    <span>Simpan Biaya</span>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Tandai Komisi Sudah Dibayar */}
+      {showPayCommissionModal && orderProfit?.commission && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-xl shadow-xl border border-slate-200 w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-slate-50">
+              <div className="flex items-center gap-2 text-emerald-600">
+                <CheckCircle2 className="w-5 h-5" />
+                <h3 className="font-semibold text-slate-800">Tandai Komisi Dibayar</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowPayCommissionModal(false);
+                  setPayCommissionError(null);
+                }}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 min-h-[44px] min-w-[44px] flex items-center justify-center"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handlePayCommission} className="p-5 space-y-4">
+              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-xs space-y-1">
+                <div className="text-slate-600">
+                  Nominal Komisi: <strong className="text-emerald-800 text-sm">{formatRupiah(orderProfit.commission.amount)}</strong>
+                </div>
+                <div className="text-slate-500">
+                  Setelah ditandai dibayar (PAID), entri komisi ini dikunci dan tidak akan berubah meski terjadi penambahan biaya ekstra atau retur.
+                </div>
+              </div>
+
+              {payCommissionError && (
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-rose-700 text-xs flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  <span>{payCommissionError}</span>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Catatan Pembayaran (Opsional)
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="Contoh: Ditransfer via BCA Payroll tanggal 25"
+                  value={payCommissionNote}
+                  onChange={(e) => setPayCommissionNote(e.target.value)}
+                  className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowPayCommissionModal(false);
+                    setPayCommissionError(null);
+                  }}
+                  disabled={payingCommission}
+                  className="px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={payingCommission}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition-colors shadow-sm flex items-center gap-1.5"
+                >
+                  {payingCommission ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Memproses...</span>
+                    </>
+                  ) : (
+                    <span>Konfirmasi Bayar</span>
                   )}
                 </button>
               </div>

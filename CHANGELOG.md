@@ -8,6 +8,47 @@ dan proyek ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Perhitungan Profit Riil, Biaya Ekstra Pesanan (OrderCost), dan Sistem Komisi Sales Multi-Skema sesuai Seksi 7.4, 7.6, 17.3 nomor 14, dan 19.5 Dokumen Spesifikasi (T3.7):
+  - Layanan Domain Komisi Sales (`src/lib/services/commission.ts`):
+    - `evaluateOrderCommission(tx, orderId)`: Mengevaluasi syarat pemicu komisi (`ON_DP_PAID` vs `ON_FULL_PAID`) saat pembayaran diverifikasi. Menghitung komisi murni tanpa kebocoran HPP sesuai skema efektif (konfigurasi tingkat pengguna `User.commission*` mengesampingkan default usaha `Business.commission*`).
+    - 4 Mode Komisi Lengkap (`CommissionMode`):
+      1. `PERCENT_OF_PROFIT`: Persentase dari laba bersih riil (`profit = revenue - cogs - shippingActualCost - extraCosts`). Basis dikunci minimal 0 jika pesanan mengalami kerugian.
+      2. `PERCENT_OF_REVENUE`: Persentase dari total omzet penjualan (`goodsRevenue + shippingCharge`).
+      3. `TIERED_BY_TARGET`: Skema berjenjang dinamis berdasarkan pencapaian target omzet bulanan sales (`SalesTarget.targetRevenue`) dalam zona waktu Asia/Jakarta (WIB). Mengabaikan pesanan berstatus `CANCELLED`, mengurangkan retur penjualan (`CreditNote`), dan memilih tarif berjenjang tertinggi yang terpenuhi dari `CommissionTier`.
+      4. `FIXED_PER_ORDER`: Nilai komisi nominal tetap per pesanan yang berhasil diselesaikan.
+    - `recalculateOrderCommission(tx, orderId)`: Rekalkulasi otomatis besaran komisi berstatus `EARNED` saat terjadi transaksi retur penjualan (`CreditNote`) atau penambahan/penghapusan biaya ekstra (`OrderCost`). Mengunci entri komisi yang telah berstatus `PAID` agar tidak terdampak rekalkulasi sepihak.
+    - `reverseOrderCommission(tx, orderId, note)`: Membatalkan komisi dan mengubah status menjadi `REVERSED` beserta pencatatan waktu `reversedAt` saat pesanan dibatalkan atau dihapus.
+    - `payCommissionEntry(tx, ctx, id, note)`: Super Admin menandai komisi telah dibayarkan (`PAID`) dengan catatan opsional dan pencatatan audit log `COMMISSION_PAID`.
+    - `getCommissionTiers(tx, businessId)` dan `setCommissionTiers(tx, ctx, tiers)`: Pengaturan batas pencapaian target (`minAchievementBps`) dan tarif komisi (`rateBps`) per usaha.
+  - Layanan Domain Analisis Profit & Biaya Ekstra (`src/lib/services/profit.ts`):
+    - `getOrderProfit(tx, ctx, orderId)`: Analisis komprehensif profitabilitas pesanan khusus Super Admin (Sales ditolak 403 `FORBIDDEN` - Zero-Leakage Guarantee). Menghitung `goodsRevenue`, `shippingCharge`, `revenue`, `cogs`, `shippingActualCost`, `shippingSubsidy`, `extraCosts`, `profit`, `marginBps`, rincian diskon per sumber (`MANUAL`, `PROMO`, `SUBSIDY`), daftar biaya ekstra `OrderCost`, serta status dan nilai komisi.
+    - `createOrderCost(tx, ctx, orderId, input)`: Pencatatan biaya operasional tambahan pesanan (label min 1 karakter, nominal positif) yang memicu rekalkulasi profit dan komisi sales secara otomatis.
+    - `deleteOrderCost(tx, ctx, orderId, costId)`: Penghapusan biaya ekstra yang memicu pemulihan nilai komisi.
+    - `listOrderCosts(tx, ctx, orderId)`: Daftar biaya ekstra pesanan.
+  - Skema Validasi Zod:
+    - `OrderCostCreateSchema` (`src/lib/validation/order-cost.ts`): Validasi label dan nominal biaya ekstra integer positif.
+    - `CommissionPaySchema`, `CommissionTiersUpdateSchema`, `CommissionQuerySchema` (`src/lib/validation/commission.ts`): Validasi pembayaran komisi, daftar tier berjenjang, dan query filter komisi.
+  - Route Handlers API (Khusus Super Admin):
+    - `GET /api/v1/orders/:id/profit`: Rincian finansial profit & margin pesanan.
+    - `GET /api/v1/orders/:id/costs`: Daftar biaya ekstra pesanan.
+    - `POST /api/v1/orders/:id/costs`: Tambah biaya ekstra pesanan.
+    - `DELETE /api/v1/orders/:id/costs/:costId`: Hapus biaya ekstra pesanan.
+    - `GET /api/v1/commission/entries`: Daftar entri komisi dengan filter sales, status, dan paginasi.
+    - `POST /api/v1/commission/entries/:id/pay`: Tandai komisi telah dibayar.
+    - `GET /api/v1/commission/tiers`: Daftar tier komisi target berjenjang.
+    - `PUT /api/v1/commission/tiers`: Konfigurasi tier komisi target berjenjang.
+  - Lifecycle Hooks Otomatis:
+    - Terintegrasi pada verifikasi pembayaran (`verifyPayment` di `src/lib/services/payment.ts`): Memanggil `evaluateOrderCommission`.
+    - Terintegrasi pada retur penjualan (`createCreditNote` & `voidCreditNote` di `src/lib/services/credit-note.ts`): Memanggil `recalculateOrderCommission`.
+    - Terintegrasi pada penghapusan pesanan (`DELETE /api/v1/orders/:id`): Memanggil `reverseOrderCommission`.
+  - Antarmuka Pengguna (UI) Detail Pesanan (`src/app/(app)/orders/[id]/page.tsx`):
+    - Panel Analisis Laba Riil & Komisi (Khusus Super Admin): Visualisasi breakdown pendapatan, COGS, ongkir riil & subsidi usaha, biaya ekstra, laba bersih, margin bps, serta badge peringatan bila merugi.
+    - Komponen Biaya Ekstra: Daftar biaya operasional dengan tombol hapus dan tombol "+ Tambah Biaya" yang membuka modal interaktif.
+    - Komponen Komisi Sales: Rincian skema, basis perhitungan, tarif bps, nominal komisi, status badge (BELUM DIBAYAR, SUDAH DIBAYAR, DIBATALKAN), dan tombol "Tandai Komisi Sudah Dibayar".
+  - Pengujian Integrasi (`tests/integration/commission-and-profit.test.ts`):
+    - 8 skenario pengujian komprehensif menguji: akurasi kalkulasi profit Fixture 7.7, Zero-Leakage (Sales 403 FORBIDDEN & `assertNoSecretKeys`), CRUD OrderCost & rekalkulasi komisi, pemicu `ON_DP_PAID` vs `ON_FULL_PAID`, 4 mode komisi, override per sales user, rekalkulasi saat retur/void CN, penguncian status PAID, dan pembatalan REVERSED.
+    - Penambahan 7 endpoint baru ke tabel matriks hak akses `tests/integration/permissions.test.ts` (79/79 lulus).
+
 - Retur Penjualan dan Nota Kredit (Credit Note) Multi-Settlement, Pemulihan Stok Fisik, Deposit Saldo Kredit Pelanggan, dan Jaminan Anti-Bocor HPP sesuai Seksi 7.13, 7.14, 8.2, 8.3, 10, dan 19.5 Dokumen Spesifikasi (T3.6):
   - Layanan Domain Credit Note (`src/lib/services/credit-note.ts`):
     - `createCreditNote(tx, ctx, orderId, input)`: Penerbitan Nota Kredit atas pesanan terkirim (`SHIPPED`, `DELIVERED`, `COMPLETED`). Memvalidasi hak akses (Sales dibatasi hanya pada pesanannya sendiri), mencegah pengembalian melebihi kuantitas yang dapat diretur (akumulasi non-void CNs), kalkulasi kredit murni tanpa pembulatan desimal per baris via `creditThisReturn` dan `creditNoteTotals`.
