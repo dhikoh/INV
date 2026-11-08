@@ -99,6 +99,7 @@ import { POST as receivePurchaseOrderHandler } from '@/app/api/v1/purchase-order
 import { POST as cancelPurchaseOrderHandler } from '@/app/api/v1/purchase-orders/[id]/cancel/route';
 import { POST as createVendorPaymentHandler } from '@/app/api/v1/vendors/[id]/payments/route';
 import { GET as getVendorTransactionsHandler } from '@/app/api/v1/vendors/[id]/transactions/route';
+import { GET as getApprovalsHandler } from '@/app/api/v1/approvals/route';
 
 describe('Matriks Hak Akses Berbasis Tabel (Seksi 5.1 & 17.4 b)', () => {
   const APP_URL = 'http://localhost:3000';
@@ -579,6 +580,12 @@ describe('Matriks Hak Akses Berbasis Tabel (Seksi 5.1 & 17.4 b)', () => {
       path: '/api/v1/vendors/v1/transactions',
       handler: (req, r) => getVendorTransactionsHandler(req, r),
       params: { id: 'v1' },
+    },
+    {
+      name: 'GET /api/v1/approvals',
+      method: 'GET',
+      path: '/api/v1/approvals',
+      handler: (req) => getApprovalsHandler(req),
     },
   ];
 

@@ -1,4 +1,4 @@
-import { Role } from '@prisma/client';
+import { Role, OrderStatus, InvoiceType, InvoiceStatus, InvoiceTheme } from '@prisma/client';
 import { Ctx } from '@/lib/auth/context';
 import { DomainError } from '@/lib/domain/money';
 import { calcLine, calcOrderTotals } from '@/lib/domain/order';
@@ -7,6 +7,7 @@ import { calcProfit } from '@/lib/domain/profit';
 import { formatRupiah } from '@/lib/domain/money';
 import { OrderCreateSchema } from '@/lib/validation/order';
 import { prisma } from '@/lib/db';
+import { lockOrder, assertStatus } from './orderGuard';
 import { z } from 'zod';
 
 export type OrderInputType =
@@ -528,4 +529,327 @@ export function formatOrderDto(
   }
 
   return baseOrder;
+}
+
+/**
+ * Format DTO Invoice untuk respons API
+ */
+export function formatInvoiceDto(invoice: {
+  id: string;
+  businessId: string;
+  orderId: string;
+  customerId: string;
+  type: InvoiceType;
+  status: InvoiceStatus;
+  version: number;
+  number?: string | null;
+  amount: bigint | number;
+  paidAmount: bigint | number;
+  issueDate?: Date | null;
+  dueDate?: Date | null;
+  theme?: InvoiceTheme | null;
+  requestedById: string;
+  requestedAt: Date;
+  approvedById?: string | null;
+  approvedAt?: Date | null;
+  rejectReason?: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}) {
+  return {
+    id: invoice.id,
+    businessId: invoice.businessId,
+    orderId: invoice.orderId,
+    customerId: invoice.customerId,
+    type: invoice.type,
+    status: invoice.status,
+    version: invoice.version,
+    number: invoice.number || null,
+    amount: Number(invoice.amount),
+    paidAmount: Number(invoice.paidAmount),
+    issueDate: invoice.issueDate || null,
+    dueDate: invoice.dueDate || null,
+    theme: invoice.theme || null,
+    requestedById: invoice.requestedById,
+    requestedAt: invoice.requestedAt,
+    approvedById: invoice.approvedById || null,
+    approvedAt: invoice.approvedAt || null,
+    rejectReason: invoice.rejectReason || null,
+    createdAt: invoice.createdAt,
+    updatedAt: invoice.updatedAt,
+  };
+}
+
+/**
+ * Mengajukan draf pesanan untuk persetujuan Super Admin (submit).
+ *
+ * Rujukan: Seksi 8.2 & Seksi 19.5 (T3.1) Dokumen Spesifikasi.
+ */
+export async function submitOrder(
+  tx: TxClient,
+  ctx: Ctx,
+  orderId: string,
+  options?: { belowMinReason?: string }
+) {
+  const businessId = ctx.businessId ?? ctx.user.businessId;
+  if (!businessId) {
+    throw new DomainError('BUSINESS_REQUIRED', 'Unit usaha aktif diperlukan', 400);
+  }
+
+  await lockOrder(tx, orderId, businessId);
+
+  const order = await tx.order.findFirst({
+    where: { id: orderId, businessId, deletedAt: null },
+    include: {
+      items: true,
+      customer: true,
+    },
+  });
+
+  if (!order) {
+    throw new DomainError('ORDER_NOT_FOUND', 'Order tidak ditemukan', 404);
+  }
+
+  // Otorisasi Sales: hanya boleh submit order miliknya sendiri
+  if (ctx.user.role === Role.SALES) {
+    if (order.salesId !== ctx.user.id) {
+      throw new DomainError('FORBIDDEN', 'Anda tidak memiliki hak akses atas pesanan ini', 403);
+    }
+  }
+
+  // Pengajuan kedua saat sudah PENDING_APPROVAL menghasilkan 409 INVOICE_ALREADY_PENDING
+  if (order.status === OrderStatus.PENDING_APPROVAL) {
+    throw new DomainError(
+      'INVOICE_ALREADY_PENDING',
+      'Order sudah berstatus PENDING_APPROVAL dan sedang menunggu persetujuan',
+      409
+    );
+  }
+
+  // Hanya boleh submit saat status DRAFT atau REVISION_REQUIRED
+  assertStatus(order.status, [OrderStatus.DRAFT, OrderStatus.REVISION_REQUIRED], 'submit');
+
+  // Minimal satu baris produk
+  if (order.items.length === 0) {
+    throw new DomainError('EMPTY_ITEMS', 'Minimal satu baris produk', 422);
+  }
+
+  // Tidak ada produk ganda
+  const productIds = order.items.map((i) => i.productId);
+  if (new Set(productIds).size !== productIds.length) {
+    throw new DomainError('DUPLICATE_PRODUCT', 'Terdapat produk duplikat dalam pesanan', 422);
+  }
+
+  // Validasi alasan belowMin (minimal 5 karakter) bila ada baris di bawah floor
+  const belowMinReason = options?.belowMinReason?.trim() || order.belowMinReason?.trim();
+  if (order.hasBelowMin) {
+    if (!belowMinReason || belowMinReason.length < 5) {
+      throw new DomainError(
+        'BELOW_MIN_REASON_REQUIRED',
+        'Alasan harga di bawah minimal wajib diisi minimal 5 karakter',
+        422
+      );
+    }
+  }
+
+  // Pastikan tidak ada invoice aktif yang masih PENDING_APPROVAL
+  const pendingInvoice = await tx.invoice.findFirst({
+    where: {
+      orderId: order.id,
+      businessId,
+      status: InvoiceStatus.PENDING_APPROVAL,
+      deletedAt: null,
+    },
+  });
+
+  if (pendingInvoice) {
+    throw new DomainError(
+      'INVOICE_ALREADY_PENDING',
+      'Invoice untuk order ini sedang menunggu persetujuan',
+      409
+    );
+  }
+
+  // Tipe invoice: DP bila dpBps > 0, selain itu FINAL
+  const invoiceType = order.dpBps > 0 ? InvoiceType.DP : InvoiceType.FINAL;
+  const invoiceAmount = invoiceType === InvoiceType.DP ? order.dpAmount : order.grandTotal;
+
+  // version = 1 + jumlah invoice sebelumnya (tipe sama) yang REJECTED, VOID, atau WITHDRAWN
+  const previousInvoicesCount = await tx.invoice.count({
+    where: {
+      orderId: order.id,
+      businessId,
+      type: invoiceType,
+      status: { in: [InvoiceStatus.REJECTED, InvoiceStatus.VOID, InvoiceStatus.WITHDRAWN] },
+    },
+  });
+  const version = 1 + previousInvoicesCount;
+
+  // Buat Invoice baru
+  const invoice = await tx.invoice.create({
+    data: {
+      businessId,
+      orderId: order.id,
+      customerId: order.customerId,
+      type: invoiceType,
+      status: InvoiceStatus.PENDING_APPROVAL,
+      version,
+      amount: invoiceAmount,
+      requestedById: ctx.user.id,
+      requestedAt: new Date(),
+    },
+  });
+
+  // Perbarui Order ke PENDING_APPROVAL
+  await tx.order.updateMany({
+    where: { id: order.id, businessId },
+    data: {
+      status: OrderStatus.PENDING_APPROVAL,
+      belowMinReason: order.hasBelowMin ? belowMinReason : order.belowMinReason,
+      rev: { increment: 1 },
+    },
+  });
+
+  // Audit log
+  await tx.auditLog.create({
+    data: {
+      businessId,
+      actorId: ctx.user.id,
+      actorRole: ctx.user.role,
+      action: 'ORDER_SUBMIT',
+      entityType: 'Order',
+      entityId: order.id,
+      summary: `Order #${order.orderNo || order.id.slice(-6)} diajukan untuk persetujuan (Invoice ${invoiceType} v${version} senilai ${formatRupiah(Number(invoiceAmount))})`,
+      reason: order.hasBelowMin ? belowMinReason : undefined,
+    },
+  });
+
+  // Notifikasi untuk Super Admin
+  const admins = await tx.user.findMany({
+    where: { role: Role.SUPERADMIN, isActive: true },
+    select: { id: true },
+  });
+
+  for (const admin of admins) {
+    await tx.notification.create({
+      data: {
+        businessId,
+        userId: admin.id,
+        type: 'APPROVAL_REQUEST',
+        title: 'Pengajuan Pesanan Baru',
+        body: `Pesanan #${order.orderNo || order.id.slice(-6)} diajukan oleh ${ctx.user.name} untuk persetujuan Invoice ${invoiceType}`,
+        linkPath: '/approvals',
+        dedupeKey: `approval_req_${invoice.id}_${admin.id}`,
+      },
+    });
+  }
+
+  const updatedOrder = await tx.order.findFirstOrThrow({
+    where: { id: order.id, businessId },
+    include: {
+      customer: true,
+      items: true,
+    },
+  });
+
+  return {
+    order: formatOrderDto(updatedOrder, ctx.user.role),
+    invoice: formatInvoiceDto(invoice),
+  };
+}
+
+/**
+ * Menarik kembali pengajuan pesanan yang sedang menunggu persetujuan (withdraw).
+ *
+ * Rujukan: Seksi 8.2 & Seksi 19.5 (T3.1) Dokumen Spesifikasi.
+ */
+export async function withdrawOrder(
+  tx: TxClient,
+  ctx: Ctx,
+  orderId: string
+) {
+  const businessId = ctx.businessId ?? ctx.user.businessId;
+  if (!businessId) {
+    throw new DomainError('BUSINESS_REQUIRED', 'Unit usaha aktif diperlukan', 400);
+  }
+
+  await lockOrder(tx, orderId, businessId);
+
+  const order = await tx.order.findFirst({
+    where: { id: orderId, businessId, deletedAt: null },
+    include: { customer: true },
+  });
+
+  if (!order) {
+    throw new DomainError('ORDER_NOT_FOUND', 'Order tidak ditemukan', 404);
+  }
+
+  // Otorisasi Sales: hanya boleh withdraw order miliknya sendiri
+  if (ctx.user.role === Role.SALES) {
+    if (order.salesId !== ctx.user.id) {
+      throw new DomainError('FORBIDDEN', 'Anda tidak memiliki hak akses atas pesanan ini', 403);
+    }
+  }
+
+  // Hanya boleh withdraw saat status PENDING_APPROVAL
+  assertStatus(order.status, [OrderStatus.PENDING_APPROVAL], 'withdraw');
+
+  // Cari invoice yang masih PENDING_APPROVAL
+  const pendingInvoice = await tx.invoice.findFirst({
+    where: {
+      orderId: order.id,
+      businessId,
+      status: InvoiceStatus.PENDING_APPROVAL,
+      deletedAt: null,
+    },
+  });
+
+  if (!pendingInvoice) {
+    throw new DomainError(
+      'NO_PENDING_INVOICE',
+      'Tidak ada invoice yang sedang menunggu persetujuan',
+      409
+    );
+  }
+
+  // Invoice menjadi WITHDRAWN
+  await tx.invoice.updateMany({
+    where: { id: pendingInvoice.id, businessId },
+    data: { status: InvoiceStatus.WITHDRAWN },
+  });
+
+  // Order kembali ke DRAFT
+  await tx.order.updateMany({
+    where: { id: order.id, businessId },
+    data: {
+      status: OrderStatus.DRAFT,
+      rev: { increment: 1 },
+    },
+  });
+
+  // Audit log
+  await tx.auditLog.create({
+    data: {
+      businessId,
+      actorId: ctx.user.id,
+      actorRole: ctx.user.role,
+      action: 'ORDER_WITHDRAW',
+      entityType: 'Order',
+      entityId: order.id,
+      summary: `Pengajuan order #${order.orderNo || order.id.slice(-6)} ditarik kembali ke DRAFT`,
+    },
+  });
+
+  const updatedOrder = await tx.order.findFirstOrThrow({
+    where: { id: order.id, businessId },
+    include: {
+      customer: true,
+      items: true,
+    },
+  });
+
+  return {
+    order: formatOrderDto(updatedOrder, ctx.user.role),
+    withdrawnInvoiceId: pendingInvoice.id,
+  };
 }

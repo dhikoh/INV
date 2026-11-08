@@ -8,6 +8,24 @@ dan proyek ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Layanan pengajuan (`submitOrder`) dan penarikan (`withdrawOrder`) pesanan `src/lib/services/order.ts` serta penjaga status pesimistik `src/lib/services/orderGuard.ts` sesuai Seksi 8.2, 8.4, dan 19.5 (T3.1):
+  - `lockOrder(tx, orderId, businessId)`: Penguncian baris pesanan pesimistik terisolasi per tenant (`SELECT FOR UPDATE`) untuk mencegah kondisi balapan (*race condition*) pada seluruh mutasi status order.
+  - `assertStatus(current, allowed, action)`: Penegakan status transisi pesanan yang sah, menolak 409 `INVALID_STATE` bila tidak sesuai.
+  - `assertRev(clientRev, dbRev)`: Penegakan kunci optimistik revisi (`rev`) guna mencegah tabrakan data usang (*stale data*).
+  - `submitOrder(tx, ctx, orderId, options)`: Pengajuan draf pesanan (`DRAFT` atau `REVISION_REQUIRED` -> `PENDING_APPROVAL`), validasi minimal satu produk (`EMPTY_ITEMS`), proteksi produk duplikat (`DUPLICATE_PRODUCT`), validasi wajib alasan harga di bawah minimal minimal 5 karakter jika `hasBelowMin = true` (`BELOW_MIN_REASON_REQUIRED`), penolakan pengajuan ganda 409 `INVOICE_ALREADY_PENDING`, pembuatan entri `Invoice` berstatus `PENDING_APPROVAL` bertipe `DP` (jika `dpBps > 0`) atau `FINAL` (jika `dpBps = 0`), penentuan versi faktur atomik (`version = 1 + count(REJECTED/VOID/WITHDRAWN)`), kenaikan versi optimistik `Order.rev`, pencatatan `AuditLog` bertipe `ORDER_SUBMIT`, dan pengiriman notifikasi `APPROVAL_REQUEST` ke seluruh Super Admin aktif.
+  - `withdrawOrder(tx, ctx, orderId)`: Penarikan kembali pengajuan pesanan dari `PENDING_APPROVAL` ke `DRAFT`, penolakan status selain pending (409 `INVALID_STATE`), pembaruan invoice aktif yang berstatus `PENDING_APPROVAL` menjadi `WITHDRAWN`, kenaikan versi optimistik `Order.rev`, dan pencatatan `AuditLog` bertipe `ORDER_WITHDRAW`.
+  - Otorisasi Sales: Penegakan aturan bahwa staf Sales hanya berhak mengajukan dan menarik pesanan miliknya sendiri (`salesId === ctx.user.id`), percobaan mengakses order milik sales lain ditolak 403 `FORBIDDEN`.
+- Route Handler API Alur Pengajuan dan Antrean Persetujuan:
+  - `POST /api/v1/orders/:id/submit`: Endpoint pengajuan draf pesanan untuk persetujuan Super Admin (Role: Super Admin & Sales pemilik order).
+  - `POST /api/v1/orders/:id/withdraw`: Endpoint penarikan kembali pengajuan pesanan ke status draf (Role: Super Admin & Sales pemilik order).
+  - `GET /api/v1/approvals`: Endpoint antrean persetujuan pesanan & faktur khusus Super Admin (Sales ditolak 403 `FORBIDDEN`) dengan pengurutan FIFO (`createdAt: asc`), filter harga di bawah minimal (`hasBelowMin`), pencarian debounced nomor order / nama pelanggan, ringkasan metrik pending, data sales penanggung jawab, pending invoice, dan simulasi profitabilitas real-time.
+- Rangkaian pengujian integrasi alur persetujuan:
+  - `tests/integration/order-approval-workflow.test.ts` (18 skenario tes): Verifikasi transisi submit order, pembuatan invoice DP vs FINAL, increment versi invoice pasca-penarikan ulang (v1 -> WITHDRAWN -> v2), penegakan alasan belowMin wajib >= 5 karakter, proteksi item kosong & produk duplikat, transisi withdraw kembali ke DRAFT, isolasi otorisasi sales, dan endpoint antrean `/approvals` Super Admin.
+  - `tests/integration/permissions.test.ts`: Penambahan tes otorisasi untuk endpoint `GET /api/v1/approvals` (total 62 tes matriks izin lulus tanpa kegagalan).
+- Antarmuka Pengguna (UI) Responsif (hingga 360 px):
+  - `/approvals` (`src/app/(app)/approvals/page.tsx`): Halaman antrean persetujuan Super Admin dengan kartu metrik total pending & belowMin, filter cepat, pencarian nomor pesanan / pelanggan, rincian invoice DP/FINAL, simulasi laba/margin per order, serta navigasi langsung ke detail pesanan.
+  - `/orders/[id]` (`src/app/(app)/orders/[id]/page.tsx`): Penambahan tombol "Ajukan Pesanan" dengan modal konfirmasi dan input alasan belowMin (validasi minimal 5 karakter), tombol "Tarik Pengajuan" dengan modal konfirmasi konsekuensi penarikan ke draf, banner status pesanan saat `PENDING_APPROVAL`, serta notifikasi toast sukses.
+
 - Layanan manajemen stok dan mutasi fisik produk `src/lib/services/stock.ts` sesuai Seksi 7.9, 8.2, 8.3, dan Kriteria Tes 17.3 nomor 7:
   - `lockProducts(tx, ids)`: Penguncian baris produk pesimistik terurut (`SELECT FOR UPDATE`) untuk mencegah kondisi balapan (*race condition*) dan deadlock.
   - `moveStock(tx, params)`: Gerbang mutasi tunggal kuantitas fisik produk (`Product.stockQty`), secara atomik menerbitkan entri `StockMovement` (+ masuk, - keluar) dengan `balanceAfter`.

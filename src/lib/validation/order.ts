@@ -48,8 +48,16 @@ export const OrderDeleteSchema = z
   })
   .strict();
 
+export const OrderSubmitSchema = z
+  .object({
+    belowMinReason: z.string().trim().min(5, 'Alasan harga di bawah minimal wajib minimal 5 karakter').max(1000).optional(),
+  })
+  .strict()
+  .optional();
+
 export type OrderLineInput = z.infer<typeof OrderLineSchema>;
 export type OrderCreateInput = z.infer<typeof OrderCreateSchema>;
 export type OrderUpdateInput = z.infer<typeof OrderUpdateSchema>;
 export type OrderDeleteInput = z.infer<typeof OrderDeleteSchema>;
+export type OrderSubmitInput = z.infer<typeof OrderSubmitSchema>;
 

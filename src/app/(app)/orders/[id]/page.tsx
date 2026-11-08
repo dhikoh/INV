@@ -20,6 +20,10 @@ import {
   CheckCircle2,
   XCircle,
   Package,
+  Send,
+  RotateCcw,
+  X,
+  Loader2,
 } from 'lucide-react';
 import { Skeleton, ErrorState } from '@/components/ui/States';
 import { StatusBadge } from '@/components/ui/StatusBadge';
@@ -112,6 +116,18 @@ export default function OrderDetailPage() {
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
+  // Modal Ajukan Pesanan (Submit)
+  const [showSubmitModal, setShowSubmitModal] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [submitSuccess, setSubmitSuccess] = useState<string | null>(null);
+  const [submitBelowMinReason, setSubmitBelowMinReason] = useState('');
+
+  // Modal Tarik Pengajuan (Withdraw)
+  const [showWithdrawModal, setShowWithdrawModal] = useState(false);
+  const [withdrawing, setWithdrawing] = useState(false);
+  const [withdrawError, setWithdrawError] = useState<string | null>(null);
+
   const fetchOrderDetail = useCallback(async () => {
     if (!id) return;
     try {
@@ -179,6 +195,67 @@ export default function OrderDetailPage() {
     }
   };
 
+  const handleSubmitOrder = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!order) return;
+    try {
+      setSubmitting(true);
+      setSubmitError(null);
+
+      if (order.hasBelowMin && submitBelowMinReason.trim().length < 5) {
+        setSubmitError('Alasan harga di bawah minimal wajib diisi minimal 5 karakter');
+        setSubmitting(false);
+        return;
+      }
+
+      const res = await fetch(`/api/v1/orders/${order.id}/submit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          belowMinReason: order.hasBelowMin ? submitBelowMinReason.trim() : undefined,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.message || data.error?.message || 'Gagal mengajukan pesanan');
+      }
+
+      setSubmitSuccess('Pesanan berhasil diajukan dan sedang menunggu persetujuan Super Admin.');
+      setShowSubmitModal(false);
+      fetchOrderDetail();
+    } catch (err: unknown) {
+      setSubmitError(err instanceof Error ? err.message : 'Gagal mengajukan pesanan');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleWithdrawOrder = async () => {
+    if (!order) return;
+    try {
+      setWithdrawing(true);
+      setWithdrawError(null);
+
+      const res = await fetch(`/api/v1/orders/${order.id}/withdraw`, {
+        method: 'POST',
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.message || data.error?.message || 'Gagal menarik pengajuan pesanan');
+      }
+
+      setSubmitSuccess('Pengajuan pesanan berhasil ditarik kembali ke draf.');
+      setShowWithdrawModal(false);
+      fetchOrderDetail();
+    } catch (err: unknown) {
+      setWithdrawError(err instanceof Error ? err.message : 'Gagal menarik pengajuan pesanan');
+    } finally {
+      setWithdrawing(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="w-full max-w-7xl mx-auto px-4 py-8 space-y-6">
@@ -217,6 +294,7 @@ export default function OrderDetailPage() {
 
   const isSuperAdmin = currentUser?.role === 'SUPERADMIN';
   const isDraftOrRevision = order.status === 'DRAFT' || order.status === 'REVISION_REQUIRED';
+  const isPendingApproval = order.status === 'PENDING_APPROVAL';
   const sisaPelunasan = Math.max(0, order.grandTotal - order.dpAmount);
   const items = order.items || [];
   const confirmTarget = order.orderNo ?? order.id;
@@ -269,7 +347,38 @@ export default function OrderDetailPage() {
         </div>
 
         {/* Tombol Aksi */}
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Tombol Ajukan Pesanan */}
+          {isDraftOrRevision && (
+            <button
+              type="button"
+              onClick={() => {
+                setSubmitBelowMinReason(order.belowMinReason || '');
+                setSubmitError(null);
+                setShowSubmitModal(true);
+              }}
+              className="inline-flex items-center justify-center gap-1.5 min-h-[44px] px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg text-sm transition-colors shadow-sm"
+            >
+              <Send className="w-4 h-4" />
+              <span>Ajukan Pesanan</span>
+            </button>
+          )}
+
+          {/* Tombol Tarik Pengajuan */}
+          {isPendingApproval && (
+            <button
+              type="button"
+              onClick={() => {
+                setWithdrawError(null);
+                setShowWithdrawModal(true);
+              }}
+              className="inline-flex items-center justify-center gap-1.5 min-h-[44px] px-4 py-2 border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-800 font-medium rounded-lg text-sm transition-colors shadow-sm"
+            >
+              <RotateCcw className="w-4 h-4" />
+              <span>Tarik Pengajuan</span>
+            </button>
+          )}
+
           {isDraftOrRevision && (
             <Link
               href={`/orders/${order.id}/edit`}
@@ -292,6 +401,36 @@ export default function OrderDetailPage() {
           )}
         </div>
       </div>
+
+      {/* Alert Umpan Balik Submit / Withdraw */}
+      {submitSuccess && (
+        <div className="p-4 bg-emerald-50 border border-emerald-300 rounded-xl flex items-center justify-between text-emerald-900 text-sm">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+            <span>{submitSuccess}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setSubmitSuccess(null)}
+            className="text-emerald-700 hover:text-emerald-900 text-lg font-bold ml-2"
+          >
+            &times;
+          </button>
+        </div>
+      )}
+
+      {/* Banner Khusus PENDING_APPROVAL */}
+      {isPendingApproval && (
+        <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl space-y-1 text-blue-900 text-xs md:text-sm">
+          <div className="flex items-center gap-2 font-semibold text-blue-800">
+            <Clock className="w-4 h-4 text-blue-600 shrink-0" />
+            <span>Pesanan Sedang Menunggu Persetujuan Super Admin</span>
+          </div>
+          <p className="pl-6 text-blue-700">
+            Faktur pembayaran awal telah dibuat dan pesanan berada dalam antrean persetujuan. Anda dapat menarik kembali pengajuan ini ke draf sebelum disetujui bila perlu melakukan perubahan baris item.
+          </p>
+        </div>
+      )}
 
       {/* Peringatan Status / Alasan Bisnis */}
       {order.hasBelowMin && order.belowMinReason && (
@@ -726,6 +865,194 @@ export default function OrderDetailPage() {
         confirmLabel="Hapus Pesanan"
         loading={deleting}
       />
+
+      {/* Modal Ajukan Pesanan (Submit) */}
+      {showSubmitModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-xl shadow-xl border border-slate-200 w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-slate-50">
+              <div className="flex items-center gap-2 text-blue-600">
+                <Send className="w-5 h-5" />
+                <h3 className="font-semibold text-slate-800">Ajukan Pesanan untuk Persetujuan</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowSubmitModal(false);
+                  setSubmitError(null);
+                }}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 min-h-[44px] min-w-[44px] flex items-center justify-center"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmitOrder} className="p-5 space-y-4">
+              <div className="text-sm text-slate-600 space-y-2">
+                <p>
+                  Pesanan akan diajukan ke Super Admin untuk ditinjau dan disetujui. Setelah diajukan, status pesanan berubah menjadi{' '}
+                  <span className="font-semibold text-amber-700">PENDING_APPROVAL</span>.
+                </p>
+                <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-1 text-xs text-slate-700">
+                  <div className="flex justify-between">
+                    <span>Tipe Invoice:</span>
+                    <span className="font-bold text-slate-900">
+                      {order.dpBps > 0 ? `UANG MUKA (DP ${formatPercentFromBps(order.dpBps)})` : 'PELUNASAN (FINAL 100%)'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Jumlah Tagihan:</span>
+                    <span className="font-bold text-blue-700">
+                      {formatRupiah(order.dpBps > 0 ? order.dpAmount : order.grandTotal)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {order.hasBelowMin && (
+                <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-lg space-y-2">
+                  <div className="flex items-center gap-2 text-amber-800 text-xs font-bold">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span>Perhatian: Penjualan di Bawah Harga Minimal (Floor Price)</span>
+                  </div>
+                  <p className="text-xs text-amber-700">
+                    Pesanan ini memiliki produk yang dijual di bawah harga minimal. Anda wajib mengisi alasan persetujuan (minimal 5 karakter) untuk Super Admin.
+                  </p>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Alasan Harga di Bawah Minimal <span className="text-rose-500">*</span>
+                    </label>
+                    <textarea
+                      value={submitBelowMinReason}
+                      onChange={(e) => setSubmitBelowMinReason(e.target.value)}
+                      placeholder="Contoh: Kesepakatan khusus volume besar atau persetujuan diskon pembukaan cabang..."
+                      rows={3}
+                      className="w-full text-xs p-2.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-800"
+                      required
+                    />
+                    <div className="flex justify-between text-[11px] text-slate-500 mt-1">
+                      <span>Minimal 5 karakter</span>
+                      <span className={submitBelowMinReason.trim().length < 5 ? 'text-rose-500 font-medium' : 'text-slate-600'}>
+                        {submitBelowMinReason.trim().length}/1000 karakter
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {submitError && (
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-700 flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>{submitError}</span>
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowSubmitModal(false);
+                    setSubmitError(null);
+                  }}
+                  className="min-h-[44px] px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting || (order.hasBelowMin && submitBelowMinReason.trim().length < 5)}
+                  className="min-h-[44px] px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5 shadow-sm"
+                >
+                  {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
+                  <span>{submitting ? 'Mengajukan...' : 'Ajukan Pesanan'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Tarik Pengajuan (Withdraw) */}
+      {showWithdrawModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-xl shadow-xl border border-slate-200 w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-slate-50">
+              <div className="flex items-center gap-2 text-amber-700">
+                <RotateCcw className="w-5 h-5" />
+                <h3 className="font-semibold text-slate-800">Tarik Pengajuan Pesanan</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowWithdrawModal(false);
+                  setWithdrawError(null);
+                }}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 min-h-[44px] min-w-[44px] flex items-center justify-center"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              <p className="text-sm text-slate-600">
+                Apakah Anda yakin ingin menarik kembali pengajuan pesanan ini?
+              </p>
+              <div className="p-3 bg-amber-50 rounded-lg border border-amber-200 text-xs text-amber-800 space-y-1">
+                <p className="font-semibold">Konsekuensi Penarikan:</p>
+                <ul className="list-disc list-inside space-y-0.5 text-amber-700">
+                  <li>Status pesanan akan dikembalikan ke <span className="font-bold">DRAFT</span>.</li>
+                  <li>Invoice yang sedang menunggu persetujuan akan dibatalkan (<span className="font-bold">WITHDRAWN</span>).</li>
+                  <li>Anda dapat mengedit data pesanan dan mengajukannya kembali sewaktu-waktu.</li>
+                </ul>
+              </div>
+
+              {withdrawError && (
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-700 flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>{withdrawError}</span>
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowWithdrawModal(false);
+                    setWithdrawError(null);
+                  }}
+                  className="min-h-[44px] px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  onClick={handleWithdrawOrder}
+                  disabled={withdrawing}
+                  className="min-h-[44px] px-4 py-2 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5 shadow-sm"
+                >
+                  {withdrawing && <Loader2 className="w-4 h-4 animate-spin" />}
+                  <span>{withdrawing ? 'Menarik...' : 'Ya, Tarik ke Draf'}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Toast Notifikasi Sukses */}
+      {submitSuccess && (
+        <div className="fixed bottom-4 right-4 z-50 bg-emerald-600 text-white px-4 py-3 rounded-lg shadow-lg text-sm flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4" />
+          <span>{submitSuccess}</span>
+          <button
+            type="button"
+            onClick={() => setSubmitSuccess(null)}
+            className="ml-2 hover:opacity-80 p-1"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       {deleteError && (
         <div className="fixed bottom-4 right-4 z-50 bg-red-600 text-white px-4 py-3 rounded-lg shadow-lg text-sm flex items-center gap-2">

@@ -256,7 +256,9 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
 | `GET/POST` | `/api/v1/orders`               | Super Admin, Sales | Buat draf (201) & daftar order (isolasi sales) |
 | `GET/PATCH`| `/api/v1/orders/:id`           | Super Admin, Sales | Detail (DTO per role) & ubah draf (kunci rev)  |
 | `DELETE`   | `/api/v1/orders/:id`           | Super Admin        | Soft delete order ke Tempat Sampah (wajib confirm) |
-| `POST`     | `/api/v1/orders/:id/submit`    | Sales              | Mengajukan order ke Super Admin               |
+| `POST`     | `/api/v1/orders/:id/submit`    | Super Admin, Sales | Mengajukan order ke Super Admin (buat Invoice PENDING_APPROVAL) |
+| `POST`     | `/api/v1/orders/:id/withdraw`  | Super Admin, Sales | Menarik pengajuan order kembali ke DRAFT (Invoice WITHDRAWN) |
+| `GET`      | `/api/v1/approvals`            | Super Admin        | Antrean pesanan & faktur pending approval (FIFO, filter belowMin, profit) |
 | `POST`     | `/api/v1/invoices/:id/approve` | Super Admin        | Persetujuan invoice                           |
 | `POST`     | `/api/v1/payments`             | Super Admin, Sales | Pencatatan pembayaran & bukti transfer        |
 | `POST`     | `/api/v1/payments/:id/verify`  | Super Admin        | Verifikasi dana masuk                         |
@@ -281,6 +283,7 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
 | `/orders/new`          | Super Admin, Sales | Formulir pesanan baru (`OrderForm`) dengan pratinjau kalkulasi live 300 ms, deteksi belowMin, simulasi profit SA |
 | `/orders/:id`          | Super Admin, Sales | Detail pesanan lengkap, rincian produk, ringkasan keuangan, simulasi profit SA, tombol edit & hapus draf |
 | `/orders/:id/edit`     | Super Admin, Sales | Sunting draf pesanan (`DRAFT` / `REVISION_REQUIRED`) dengan penguncian optimistik versi `rev` |
+| `/approvals`           | Super Admin        | Antrean persetujuan pesanan & invoice PENDING_APPROVAL (FIFO, filter belowMin, pencarian, simulasi profit) |
 | `/stock`               | Super Admin        | Manajemen stok produk, kartu metrik (fisik/reservasi/tersedia/minus), modal koreksi, opname, riwayat mutasi |
 | `/purchase-orders`     | Super Admin        | Daftar Purchase Order dengan filter status, vendor, dan paginasi (responsif 360 px) |
 | `/purchase-orders/new` | Super Admin        | Formulir pembuatan PO baru dengan kalkulasi biaya dinamis dan baris produk |
@@ -333,7 +336,7 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
 | **Fase 0** | `v0.1.0`     | Fondasi proyek, env, skema Prisma, rumus domain, infra tes              | **SELESAI** |
 | **Fase 1** | `v0.2.0`     | Login, manajemen usaha, akun sales, master produk & vendor, pembaruan   | **SELESAI**         |
 | **Fase 2** | `v0.3.0`     | Customer CRM, order draft, floor pricing, manajemen stok, PO & vendor ledger | **SELESAI** |
-| **Fase 3** | `v0.4.0`     | Persetujuan invoice, verifikasi pembayaran, mesin cetak PDF, void/retur | Belum dimulai       |
+| **Fase 3** | `v0.4.0`     | Persetujuan invoice, verifikasi pembayaran, mesin cetak PDF, void/retur | Sedang Berjalan (T3.1 Selesai) |
 | **Fase 4** | `v0.5.0`     | Bot Telegram, Mini App, pengingat repeat order, katalog PWA             | Belum dimulai       |
 | **Fase 5** | `v1.0.0`     | Dashboard profit, evaluasi sales, pengerasan keamanan, Go-Live          | Belum dimulai       |
 
