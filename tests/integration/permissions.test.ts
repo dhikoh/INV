@@ -107,6 +107,7 @@ import { GET as getPaymentsQueueHandler } from '@/app/api/v1/payments/route';
 import { POST as verifyPaymentHandler } from '@/app/api/v1/payments/[id]/verify/route';
 import { POST as rejectPaymentHandler } from '@/app/api/v1/payments/[id]/reject/route';
 import { POST as voidPaymentHandler } from '@/app/api/v1/payments/[id]/void/route';
+import { GET as getInvoicePreviewHandler } from '@/app/api/v1/businesses/[id]/invoice-preview/route';
 
 describe('Matriks Hak Akses Berbasis Tabel (Seksi 5.1 & 17.4 b)', () => {
   const APP_URL = 'http://localhost:3000';
@@ -646,6 +647,13 @@ describe('Matriks Hak Akses Berbasis Tabel (Seksi 5.1 & 17.4 b)', () => {
       handler: (req, r) => voidPaymentHandler(req, r),
       params: { id: 'pay_1' },
       body: { reason: 'Dana ditarik kembali oleh bank' },
+    },
+    {
+      name: 'GET /api/v1/businesses/:id/invoice-preview',
+      method: 'GET',
+      path: '/api/v1/businesses/biz_1/invoice-preview',
+      handler: (req, r) => getInvoicePreviewHandler(req, r),
+      params: { id: 'biz_1' },
     },
   ];
 

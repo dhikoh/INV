@@ -272,7 +272,9 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
 | `GET/POST` | `/api/v1/orders/:id/shipment`  | Super Admin, Sales | Detail & konfigurasi logistik pengiriman (PREPARING, actualCost dirahasiakan dari Sales) |
 | `POST`     | `/api/v1/orders/:id/shipment/ship` | Super Admin, Sales | Eksekusi kirim pesanan (alokasi nomor surat jalan, pemotongan stok fisik keluar SALE_SHIPMENT, status SHIPPED) |
 | `POST`     | `/api/v1/orders/:id/shipment/deliver` | Super Admin, Sales | Konfirmasi penerimaan barang di tujuan (status DELIVERED, picu penyelesaian otomatis) |
-| `GET`      | `/api/v1/invoices/:id/pdf`     | Authenticated      | Unduh berkas PDF invoice resmi                |
+| `GET`      | `/api/v1/invoices/:id/pdf`     | Super Admin, Sales | Unduh/cetak berkas PDF invoice resmi (isolasi sales, watermark draf/lunas/batal, counter cetak) |
+| `GET`      | `/api/v1/businesses/:id/invoice-preview` | Super Admin | Pratinjau desain 5 tema faktur PDF dummy dengan watermark CONTOH |
+| `GET`      | `/api/v1/orders/:id/delivery-note/pdf` | Super Admin, Sales | Unduh/cetak berkas PDF Surat Jalan resmi (wajib SHIPPED/DELIVERED, anti-bocor tanpa harga) |
 
 ### Antarmuka Pengguna (UI Routes)
 
@@ -347,7 +349,7 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
 | **Fase 0** | `v0.1.0`     | Fondasi proyek, env, skema Prisma, rumus domain, infra tes              | **SELESAI** |
 | **Fase 1** | `v0.2.0`     | Login, manajemen usaha, akun sales, master produk & vendor, pembaruan   | **SELESAI**         |
 | **Fase 2** | `v0.3.0`     | Customer CRM, order draft, floor pricing, manajemen stok, PO & vendor ledger | **SELESAI** |
-| **Fase 3** | `v0.4.0`     | Persetujuan invoice, verifikasi pembayaran, mesin cetak PDF, void/retur | Sedang Berjalan (T3.4 Selesai) |
+| **Fase 3** | `v0.4.0`     | Persetujuan invoice, verifikasi pembayaran, mesin cetak PDF, void/retur | Sedang Berjalan (T3.5 Selesai) |
 | **Fase 4** | `v0.5.0`     | Bot Telegram, Mini App, pengingat repeat order, katalog PWA             | Belum dimulai       |
 | **Fase 5** | `v1.0.0`     | Dashboard profit, evaluasi sales, pengerasan keamanan, Go-Live          | Belum dimulai       |
 

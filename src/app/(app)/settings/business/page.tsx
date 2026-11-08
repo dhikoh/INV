@@ -37,7 +37,7 @@ interface BusinessDetail {
   email: string | null;
   npwp: string | null;
   logoPath: string | null;
-  invoiceTheme: 'PROFESIONAL' | 'RINGKAS' | 'KREATIF' | 'FORMAL';
+  invoiceTheme: 'PROFESIONAL' | 'FAMILY' | 'MINIMALIS' | 'MODERN' | 'KLASIK';
   invoiceFooterNote: string | null;
   ppnEnabled: boolean;
   ppnRateBps: number;
@@ -793,21 +793,35 @@ export default function BusinessSettingsPage() {
                 <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
                   Tema Invoice PDF
                 </label>
-                <select
-                  value={formData.invoiceTheme || 'PROFESIONAL'}
-                  onChange={(e) =>
-                    handleInputChange(
-                      'invoiceTheme',
-                      e.target.value as BusinessDetail['invoiceTheme']
-                    )
-                  }
-                  className="w-full h-11 px-3.5 bg-slate-50 border border-slate-300 rounded-lg text-sm font-semibold text-slate-900"
-                >
-                  <option value="PROFESIONAL">Profesional (Bersih & Modern)</option>
-                  <option value="RINGKAS">Ringkas (Hemat Kertas/Thermal)</option>
-                  <option value="KREATIF">Kreatif (Aksen Warna & Visual)</option>
-                  <option value="FORMAL">Formal (Klasik Resmi & Rapi)</option>
-                </select>
+                <div className="flex gap-2">
+                  <select
+                    value={formData.invoiceTheme || 'PROFESIONAL'}
+                    onChange={(e) =>
+                      handleInputChange(
+                        'invoiceTheme',
+                        e.target.value as BusinessDetail['invoiceTheme']
+                      )
+                    }
+                    className="flex-1 h-11 px-3.5 bg-slate-50 border border-slate-300 rounded-lg text-sm font-semibold text-slate-900"
+                  >
+                    <option value="PROFESIONAL">Profesional (Standar Korporat Bersih)</option>
+                    <option value="FAMILY">Family (Hangat & Bersahabat)</option>
+                    <option value="MINIMALIS">Minimalis (Monokrom Ringkas)</option>
+                    <option value="MODERN">Modern (Elegan & Tajam)</option>
+                    <option value="KLASIK">Klasik (Serif Tradisional Resmi)</option>
+                  </select>
+                  {business && (
+                    <a
+                      href={`/api/v1/businesses/${business.id}/invoice-preview?theme=${formData.invoiceTheme || 'PROFESIONAL'}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 px-3.5 h-11 bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 rounded-lg text-xs font-semibold transition-colors"
+                      title="Pratinjau PDF Desain Tema Terpilih"
+                    >
+                      <span>Pratinjau PDF</span>
+                    </a>
+                  )}
+                </div>
               </div>
 
               <div className="md:col-span-2">

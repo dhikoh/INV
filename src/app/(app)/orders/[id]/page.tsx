@@ -26,6 +26,8 @@ import {
   Loader2,
   CreditCard,
   ExternalLink,
+  Printer,
+  Eye,
 } from 'lucide-react';
 import { Skeleton, ErrorState } from '@/components/ui/States';
 import { StatusBadge } from '@/components/ui/StatusBadge';
@@ -1549,6 +1551,18 @@ export default function OrderDetailPage() {
                     <span>Tandai Diterima</span>
                   </button>
                 )}
+
+                {(shipment?.status === 'SHIPPED' || shipment?.status === 'DELIVERED') && (
+                  <a
+                    href={`/api/v1/orders/${order.id}/delivery-note/pdf`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 text-xs font-semibold transition-colors shadow-sm"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    <span>Cetak Surat Jalan</span>
+                  </a>
+                )}
               </div>
             </div>
 
@@ -1719,6 +1733,34 @@ export default function OrderDetailPage() {
                     </div>
 
                     <div className="flex items-center gap-2 self-start sm:self-center">
+                      {/* Tombol Cetak Faktur PDF Resmi (APPROVED) */}
+                      {inv.status === 'APPROVED' && (
+                        <a
+                          href={`/api/v1/invoices/${inv.id}/pdf`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 text-xs font-semibold transition-colors"
+                          title="Cetak Faktur PDF Resmi"
+                        >
+                          <Printer className="w-3.5 h-3.5" />
+                          <span>Cetak PDF</span>
+                        </a>
+                      )}
+
+                      {/* Tombol Pratinjau Faktur PDF (Khusus Super Admin pada PENDING_APPROVAL) */}
+                      {isSuperAdmin && inv.status === 'PENDING_APPROVAL' && (
+                        <a
+                          href={`/api/v1/invoices/${inv.id}/pdf?preview=1`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-amber-50 border border-amber-200 text-amber-700 hover:bg-amber-100 text-xs font-semibold transition-colors"
+                          title="Pratinjau Draf PDF Menunggu Persetujuan"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                          <span>Pratinjau PDF</span>
+                        </a>
+                      )}
+
                       {/* Tombol Void Invoice (Khusus Super Admin pada Invoice APPROVED) */}
                       {isSuperAdmin && inv.status === 'APPROVED' && (
                         <button
