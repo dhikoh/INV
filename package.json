@@ -19,7 +19,8 @@
     "test:unit": "vitest run tests/unit",
     "test:int": "vitest run tests/integration",
     "test:coverage": "vitest run --coverage",
-    "db:seed": "tsx prisma/seed.ts"
+    "db:seed": "tsx prisma/seed.ts",
+    "release:draft": "tsx scripts/release-draft.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

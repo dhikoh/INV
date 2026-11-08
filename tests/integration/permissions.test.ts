@@ -59,6 +59,12 @@ import {
   PATCH as updateVendorHandler,
   DELETE as deleteVendorHandler,
 } from '@/app/api/v1/vendors/[id]/route';
+import { POST as createUpdateHandler } from '@/app/api/v1/updates/route';
+import {
+  PATCH as updateUpdateHandler,
+  DELETE as deleteUpdateHandler,
+} from '@/app/api/v1/updates/[id]/route';
+import { POST as publishUpdateHandler } from '@/app/api/v1/updates/[id]/publish/route';
 
 describe('Matriks Hak Akses Berbasis Tabel (Seksi 5.1 & 17.4 b)', () => {
   const APP_URL = 'http://localhost:3000';
@@ -330,6 +336,36 @@ describe('Matriks Hak Akses Berbasis Tabel (Seksi 5.1 & 17.4 b)', () => {
       path: '/api/v1/vendors/vnd_1',
       handler: (req, r) => deleteVendorHandler(req, r),
       params: { id: 'vnd_1' },
+    },
+    {
+      name: 'POST /api/v1/updates',
+      method: 'POST',
+      path: '/api/v1/updates',
+      handler: (req) => createUpdateHandler(req),
+      body: { version: 'v0.2.0', title: 'Test Rilis', bodyMarkdown: 'Konten' },
+    },
+    {
+      name: 'PATCH /api/v1/updates/:id',
+      method: 'PATCH',
+      path: '/api/v1/updates/upd_1',
+      handler: (req, r) => updateUpdateHandler(req, r),
+      params: { id: 'upd_1' },
+      body: { title: 'Update Title' },
+    },
+    {
+      name: 'POST /api/v1/updates/:id/publish',
+      method: 'POST',
+      path: '/api/v1/updates/upd_1/publish',
+      handler: (req, r) => publishUpdateHandler(req, r),
+      params: { id: 'upd_1' },
+      body: { broadcast: false },
+    },
+    {
+      name: 'DELETE /api/v1/updates/:id',
+      method: 'DELETE',
+      path: '/api/v1/updates/upd_1',
+      handler: (req, r) => deleteUpdateHandler(req, r),
+      params: { id: 'upd_1' },
     },
   ];
 

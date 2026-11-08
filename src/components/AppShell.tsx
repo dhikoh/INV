@@ -54,8 +54,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const [switching, setSwitching] = useState(false);
+  const [unreadCount, setUnreadCount] = useState<number>(0);
 
-  // Load user profile & active business
+  // Load user profile & active business & unread updates
   useEffect(() => {
     async function loadContext() {
       try {
@@ -88,6 +89,18 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               }
             }
           }
+
+          // Muat hitungan pembaruan yang belum dilihat
+          const unreadRes = await fetch('/api/v1/updates/unread-count');
+          if (unreadRes.ok) {
+            const unreadData = await unreadRes.json();
+            if (
+              unreadData.ok &&
+              typeof unreadData.data?.unreadCount === 'number'
+            ) {
+              setUnreadCount(unreadData.data.unreadCount);
+            }
+          }
         } else {
           router.push('/login');
         }
@@ -100,6 +113,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
     loadContext();
   }, [router]);
+
+  // Saat membuka halaman /updates, set unreadCount menjadi 0
+  useEffect(() => {
+    if (pathname === '/updates') {
+      setUnreadCount(0);
+    }
+  }, [pathname]);
 
   async function handleSwitchBusiness(businessId: string) {
     try {
@@ -163,7 +183,26 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     { label: 'Laporan', href: '/reports', icon: BarChart3 },
     { label: 'Pengaturan Usaha', href: '/settings/business', icon: Settings },
     { label: 'Pengguna', href: '/settings/users', icon: UserCog },
-    { label: 'Pembaruan', href: '/updates', icon: Sparkles },
+    {
+      label: 'Pembaruan',
+      href: '/updates',
+      icon: Sparkles,
+      badge: unreadCount > 0 ? 'Baru' : undefined,
+    },
+    { label: 'Profil Saya', href: '/profile', icon: User },
+  ];
+
+  const salesDesktopNav = [
+    { label: 'Beranda', href: '/dashboard', icon: LayoutDashboard },
+    { label: 'Order', href: '/orders', icon: ShoppingCart },
+    { label: 'Customer', href: '/customers', icon: Users },
+    { label: 'Pengingat', href: '/reminders', icon: Bell },
+    {
+      label: 'Pembaruan',
+      href: '/updates',
+      icon: Sparkles,
+      badge: unreadCount > 0 ? 'Baru' : undefined,
+    },
     { label: 'Profil Saya', href: '/profile', icon: User },
   ];
 
@@ -172,7 +211,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     { label: 'Order', href: '/orders', icon: ShoppingCart },
     { label: 'Customer', href: '/customers', icon: Users },
     { label: 'Pengingat', href: '/reminders', icon: Bell },
-    { label: 'Lainnya', href: '/profile', icon: User },
+    {
+      label: 'Lainnya',
+      href: '/profile',
+      icon: User,
+      hasUnread: unreadCount > 0,
+    },
   ];
 
   return (
@@ -222,7 +266,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </Link>
         </div>
 
-        {/* Pengalih Usaha (Khusus Super Admin) atau Info Usaha (Sales) */}
+        {/* Pengalih Usaha (Khusus Super Admin) atau Info Usaha (Sales) & Tautan Cepat */}
         <div className="flex items-center gap-2">
           {isSuperAdmin ? (
             <div className="relative">
@@ -289,6 +333,21 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             </div>
           )}
 
+          {/* Tombol Tautan Cepat Pembaruan */}
+          <Link
+            href="/updates"
+            title="Catatan Pembaruan"
+            className="relative min-h-[44px] min-w-[44px] flex items-center justify-center text-slate-500 hover:text-blue-600 transition-colors rounded-lg"
+          >
+            <Sparkles className="w-5 h-5" />
+            {unreadCount > 0 && (
+              <span className="absolute top-2 right-2 flex h-2.5 w-2.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
+              </span>
+            )}
+          </Link>
+
           {/* Tombol Logout */}
           <button
             type="button"
@@ -303,31 +362,42 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* Konten Utama & Sidebar */}
       <div className="flex flex-1">
-        {/* Sidebar Desktop Super Admin */}
-        {isSuperAdmin && (
-          <aside className="hidden md:flex w-64 bg-white border-r border-slate-200 flex-col py-4 px-3 shrink-0">
-            <nav className="space-y-1 flex-1">
-              {superAdminNav.map((item) => {
-                const Icon = item.icon;
-                const active = pathname === item.href;
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium min-h-[44px] transition-colors ${
-                      active
-                        ? 'bg-blue-600 text-white font-semibold shadow-sm'
-                        : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                    }`}
-                  >
+        {/* Sidebar Desktop (Super Admin & Sales) */}
+        <aside className="hidden md:flex w-64 bg-white border-r border-slate-200 flex-col py-4 px-3 shrink-0">
+          <nav className="space-y-1 flex-1">
+            {(isSuperAdmin ? superAdminNav : salesDesktopNav).map((item) => {
+              const Icon = item.icon;
+              const active = pathname === item.href;
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={`flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium min-h-[44px] transition-colors ${
+                    active
+                      ? 'bg-blue-600 text-white font-semibold shadow-sm'
+                      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
                     <Icon className="w-5 h-5 shrink-0" />
                     <span>{item.label}</span>
-                  </Link>
-                );
-              })}
-            </nav>
-          </aside>
-        )}
+                  </div>
+                  {item.badge && (
+                    <span
+                      className={`px-1.5 py-0.5 text-[10px] font-bold rounded-full ${
+                        active
+                          ? 'bg-amber-300 text-slate-950'
+                          : 'bg-amber-500 text-slate-950'
+                      }`}
+                    >
+                      {item.badge}
+                    </span>
+                  )}
+                </Link>
+              );
+            })}
+          </nav>
+        </aside>
 
         {/* Drawer Mobile Super Admin */}
         {isSuperAdmin && sidebarOpen && (
@@ -358,14 +428,27 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                       key={item.href}
                       href={item.href}
                       onClick={() => setSidebarOpen(false)}
-                      className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium min-h-[44px] ${
+                      className={`flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium min-h-[44px] ${
                         active
                           ? 'bg-blue-600 text-white font-semibold'
                           : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
                       }`}
                     >
-                      <Icon className="w-5 h-5 shrink-0" />
-                      <span>{item.label}</span>
+                      <div className="flex items-center gap-3">
+                        <Icon className="w-5 h-5 shrink-0" />
+                        <span>{item.label}</span>
+                      </div>
+                      {item.badge && (
+                        <span
+                          className={`px-1.5 py-0.5 text-[10px] font-bold rounded-full ${
+                            active
+                              ? 'bg-amber-300 text-slate-950'
+                              : 'bg-amber-500 text-slate-950'
+                          }`}
+                        >
+                          {item.badge}
+                        </span>
+                      )}
                     </Link>
                   );
                 })}
@@ -390,11 +473,16 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex flex-col items-center justify-center flex-1 h-full min-h-[44px] ${
+                className={`relative flex flex-col items-center justify-center flex-1 h-full min-h-[44px] ${
                   active ? 'text-blue-600 font-bold' : 'text-slate-500'
                 }`}
               >
-                <Icon className="w-5 h-5" />
+                <div className="relative">
+                  <Icon className="w-5 h-5" />
+                  {item.hasUnread && (
+                    <span className="absolute -top-1 -right-1 w-2 h-2 bg-amber-500 rounded-full ring-2 ring-white" />
+                  )}
+                </div>
                 <span className="text-[11px] mt-0.5">{item.label}</span>
               </Link>
             );

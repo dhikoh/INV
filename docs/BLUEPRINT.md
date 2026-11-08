@@ -213,6 +213,13 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
 | `GET`      | `/api/v1/products/:id/price-history` | Super Admin  | Riwayat perubahan harga produk                |
 | `GET/POST` | `/api/v1/vendors`              | Super Admin        | Master vendor & ekspedisi (SUPPLIER/TRANSPORT) |
 | `GET/PATCH/DELETE` | `/api/v1/vendors/:id`  | Super Admin        | Detail, perbarui, soft delete vendor           |
+| `GET`      | `/api/v1/updates`              | Super Admin, Sales | Daftar catatan rilis (SA draft & terbit, Sales terbit saja) |
+| `GET`      | `/api/v1/updates/unread-count` | Super Admin, Sales | Hitungan rilis baru yang belum dilihat pengguna |
+| `POST`     | `/api/v1/updates/mark-seen`    | Super Admin, Sales | Menandai rilis sudah dilihat pengguna           |
+| `POST`     | `/api/v1/updates`              | Super Admin        | Buat catatan rilis baru (draft/langsung terbit)|
+| `GET`      | `/api/v1/updates/:id`          | Super Admin, Sales | Detail catatan rilis (Sales 404 jika draf)     |
+| `PATCH/DELETE` | `/api/v1/updates/:id`      | Super Admin        | Perbarui atau hapus catatan rilis               |
+| `POST`     | `/api/v1/updates/:id/publish`  | Super Admin        | Terbitkan draf rilis (+ opsi broadcast)        |
 | `GET/POST` | `/api/v1/customers`            | Super Admin, Sales | Data pelanggan & CRM                          |
 | `POST`     | `/api/v1/orders/preview`       | Super Admin, Sales | Pratinjau hitungan total & floor              |
 | `GET/POST` | `/api/v1/orders`               | Super Admin, Sales | Pencatatan & daftar order                     |
@@ -234,6 +241,7 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
 | `/products`            | Super Admin, Sales | Katalog produk (kolom HPP/margin khusus SA; kartu mobile 360 px) |
 | `/products/:id/prices` | Super Admin        | Kronologi riwayat perubahan harga produk & alasan bisnis         |
 | `/vendors`             | Super Admin        | Manajemen vendor & rekanan logistik (kartu mobile 360 px)        |
+| `/updates`             | Super Admin, Sales | Catatan pembaruan sistem dengan render markdown aman anti-XSS    |
 
 ---
 
@@ -278,8 +286,8 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
 
 | Fase       | Target Rilis | Deskripsi                                                               | Status              |
 | ---------- | ------------ | ----------------------------------------------------------------------- | ------------------- |
-| **Fase 0** | `v0.1.0`     | Fondasi proyek, env, skema Prisma, rumus domain, infra tes              | **SELESAI**         |
-| **Fase 1** | `v0.2.0`     | Login, manajemen usaha, akun sales, master produk & vendor              | **SEDANG BERJALAN** |
+| **Fase 0** | `v0.1.0`     | Fondasi proyek, env, skema Prisma, rumus domain, infra tes              | **SELESAI** |
+| **Fase 1** | `v0.2.0`     | Login, manajemen usaha, akun sales, master produk & vendor, pembaruan   | **SELESAI** |
 | **Fase 2** | `v0.3.0`     | Customer CRM, order draft, floor pricing, manajemen stok                | Belum dimulai       |
 | **Fase 3** | `v0.4.0`     | Persetujuan invoice, verifikasi pembayaran, mesin cetak PDF, void/retur | Belum dimulai       |
 | **Fase 4** | `v0.5.0`     | Bot Telegram, Mini App, pengingat repeat order, katalog PWA             | Belum dimulai       |

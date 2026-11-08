@@ -8,6 +8,17 @@ dan proyek ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Route Handler CRUD catatan pembaruan sistem (`ReleaseNote`): `GET /api/v1/updates`, `GET /api/v1/updates/unread-count`, `POST /api/v1/updates/mark-seen`, `POST /api/v1/updates`, `GET /api/v1/updates/:id`, `PATCH /api/v1/updates/:id`, `POST /api/v1/updates/:id/publish`, dan `DELETE /api/v1/updates/:id` (T1.8 & Seksi 4.3).
+- Otorisasi dan proteksi peran rilis: Sales hanya dapat melihat rilis berstatus terbit dan ditolak (403 FORBIDDEN) saat mencoba membuat, mengubah, menerbitkan, atau menghapus catatan rilis (T1.8 & Seksi 5.1).
+- Penghitungan unread releases dinamis berbasis `publishedAt > (user.lastSeenReleaseAt ?? new Date(0))` serta pembaruan otomatis timestamp `lastSeenReleaseAt` saat pengguna membuka halaman rilis (T1.8 & Seksi 4.3).
+- Komponen render markdown aman `SafeMarkdown` (`src/components/ui/SafeMarkdown.tsx`) yang merender heading, list berurutan & tak berurutan, kutipan, format inline (bold, italic, strikethrough, inline code), blok kode fenced, dan tautan bersyarat protokol aman tanpa pernah memanggil `dangerouslySetInnerHTML` serta meng-escape seluruh tag HTML mentah untuk mencegah injeksi XSS (T1.8 & Seksi 4.3).
+- Indikator badge "Baru" pada navigasi sidebar dan header `AppShell.tsx` bila terdapat catatan rilis baru yang belum dibaca oleh pengguna (T1.8 & Seksi 4.3).
+- Antarmuka pengguna manajemen catatan rilis `/updates` lengkap dengan daftar rilis terurut terbaru dulu, tampilan kartu mobile-first, modal tambah/edit rilis dengan pratinjau live markdown, modal terbitkan rilis (dengan opsi broadcast Telegram), dan modal hapus rilis khusus Super Admin (T1.8 & Seksi 11.3).
+- Skrip otomatisasi `pnpm release:draft` (`scripts/release-draft.ts`) untuk mengekstrak entri `[Unreleased]` teratas dari `CHANGELOG.md` dan membuat draf `ReleaseNote` di database untuk dirapikan Super Admin (T1.8 & Seksi 4.3).
+- Suite pengujian unit `tests/unit/safe-markdown.test.ts` (9 skenario pengujian) memverifikasi ketiadaan `dangerouslySetInnerHTML`, parsing format markdown, dan pencegahan eksekusi HTML/XSS (T1.8).
+- Suite pengujian integrasi `tests/integration/updates.test.ts` (7 skenario pengujian) mencakup siklus hidup rilis, audit logging, unread-count, mark-seen, serta isolasi akses Sales (T1.8).
+- Perluasan matriks hak akses `tests/integration/permissions.test.ts` memverifikasi penolakan (403 FORBIDDEN) terhadap akun Sales pada 4 mutasi endpoint rilis (T1.8 & Seksi 17.4 b).
+
 - CRUD Master vendor dan rekanan logistik (`/api/v1/vendors` dan `/api/v1/vendors/:id`) dengan klasifikasi jenis `SUPPLIER` (pemasok barang) dan `TRANSPORT` (jasa pengangkutan/ekspedisi) khusus Super Admin (T1.7).
 - Penegakan keunikan kode vendor per unit usaha dalam status aktif (`deletedAt: null`) dan otomatisasi kode huruf besar (T1.7).
 - Soft delete vendor `DELETE /api/v1/vendors/:id` dengan pencatatan audit log `VENDOR_DELETE` yang mempertahankan integritas data transaksi masa lalu (T1.7).
