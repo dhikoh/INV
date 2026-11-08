@@ -151,6 +151,12 @@ Daftar tabel inti:
 5. **Otomatisasi CRM & Isolasi Tugas Follow-up (T2.2)**:
    - Pencatatan interaksi CRM (`POST /customers/:id/interactions`) dengan kolom tanggal follow-up (`nextFollowUpAt`) secara atomik dalam database transaction langsung menerbitkan entri tugas baru di tabel `CrmTask` untuk sales penanggung jawab.
    - Staf sales hanya mengelola tugas dan linimasa pelanggannya sendiri (`assignedToId = ctx.user.id`). Upaya membuka atau memodifikasi data milik sales lain selalu menghasilkan 404 `NOT_FOUND` guna mencegah penerobosan informasi pelanggan.
+6. **Penomoran Dokumen Atomik & Isolasi Counter (T2.4 & Seksi 7.8)**:
+   - Format penomoran dokumen resmi: `KODE/JENIS/DD/MM/YYYY/NNNN` berbasis tanggal lokal WIB (`Asia/Jakarta`).
+   - Nomor order (`Order.orderNo`) dialokasikan saat invoice pertama disetujui (bukan saat draft). Urutan nomor berjalan per customer dan tidak pernah direset (`DocumentCounter` scope `ORDER_SEQ`).
+   - Nomor invoice: `orderNo-DP` untuk uang muka dan `orderNo-LNS` untuk pelunasan, dengan akhiran versi revisi `-R1`, `-R2` bila versi > 1.
+   - Surat jalan menggunakan jenis `SJ` dengan urutan order yang sama; Credit Note menggunakan jenis `CN` (`CREDIT_NOTE_SEQ`); PO vendor menggunakan jenis `PO` (`PO_SEQ`).
+   - Alokasi dieksekusi melalui PostgreSQL UPSERT atomik (`nextSeq`) di dalam transaksi database yang sama dengan persetujuan dokumen. Transaksi yang rollback tidak menghanguskan nomor urut dan mencegah race condition pada alokasi serentak.
 
 ---
 

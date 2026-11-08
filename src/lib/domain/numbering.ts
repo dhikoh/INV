@@ -30,3 +30,55 @@ export function invoiceNumber(
   const rev = version > 1 ? `-R${version - 1}` : '';
   return `${orderNo}-${type === 'DP' ? 'DP' : 'LNS'}${rev}`;
 }
+
+export function orderNumber(
+  customerCode: string,
+  date: Date,
+  seq: number
+): string {
+  return formatDocNumber({
+    code: customerCode,
+    kind: 'INV',
+    date,
+    seq,
+  });
+}
+
+export function suratJalanNumber(
+  customerCode: string,
+  date: Date,
+  seq: number
+): string {
+  return formatDocNumber({
+    code: customerCode,
+    kind: 'SJ',
+    date,
+    seq,
+  });
+}
+
+export function creditNoteNumber(
+  customerCode: string,
+  date: Date,
+  seq: number
+): string {
+  return formatDocNumber({
+    code: customerCode,
+    kind: 'CN',
+    date,
+    seq,
+  });
+}
+
+export function purchaseOrderNumber(
+  vendorCode: string,
+  date: Date,
+  seq: number
+): string {
+  return formatDocNumber({
+    code: vendorCode,
+    kind: 'PO',
+    date,
+    seq,
+  });
+}
