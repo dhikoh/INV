@@ -241,6 +241,17 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
 | `GET`      | `/api/v1/customers/:id/price-history` | Super Admin | Riwayat penyesuaian harga minimal customer (CUSTOMER_MIN) |
 | `GET/POST` | `/api/v1/crm/tasks`            | Super Admin, Sales | Daftar tugas CRM (filter status & isolasi sales)     |
 | `GET/PATCH/DELETE` | `/api/v1/crm/tasks/:id` | Super Admin, Sales | Detail, centang selesai (doneAt), tenggat, hapus tugas |
+| `GET`      | `/api/v1/stock`                | Super Admin        | Daftar stok produk, reserved, available, dan status minus |
+| `GET`      | `/api/v1/stock/movements`      | Super Admin        | Riwayat mutasi stok fisik dengan filter produk/tipe |
+| `POST`     | `/api/v1/stock/adjust`         | Super Admin        | Koreksi stok manual (alasan min 5 karakter, audit log) |
+| `POST`     | `/api/v1/stock/opname`         | Super Admin        | Stock opname fisik riil (hitung selisih, audit log) |
+| `GET/POST` | `/api/v1/purchase-orders`      | Super Admin        | Daftar PO & buat draf PO baru                      |
+| `GET/PATCH`| `/api/v1/purchase-orders/:id`  | Super Admin        | Detail PO & ubah draf PO                           |
+| `POST`     | `/api/v1/purchase-orders/:id/order` | Super Admin   | Terbitkan PO (alokasi nomor urut atomik poNo)      |
+| `POST`     | `/api/v1/purchase-orders/:id/receive` | Super Admin | Penerimaan barang (+ mutasi PO_RECEIPT, opsi update HPP) |
+| `POST`     | `/api/v1/purchase-orders/:id/cancel` | Super Admin  | Batalkan PO (ditolak jika sudah ada penerimaan)     |
+| `POST`     | `/api/v1/vendors/:id/payments` | Super Admin        | Catat pembayaran vendor (perbarui paidTotal PO)    |
+| `GET`      | `/api/v1/vendors/:id/transactions` | Super Admin    | Buku Transaksi Vendor (Vendor Ledger) & saldo hutang |
 | `POST`     | `/api/v1/orders/preview`       | Super Admin, Sales | Pratinjau hitungan total, floor, diskon, dan PPN |
 | `GET/POST` | `/api/v1/orders`               | Super Admin, Sales | Buat draf (201) & daftar order (isolasi sales) |
 | `GET/PATCH`| `/api/v1/orders/:id`           | Super Admin, Sales | Detail (DTO per role) & ubah draf (kunci rev)  |
@@ -270,6 +281,11 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
 | `/orders/new`          | Super Admin, Sales | Formulir pesanan baru (`OrderForm`) dengan pratinjau kalkulasi live 300 ms, deteksi belowMin, simulasi profit SA |
 | `/orders/:id`          | Super Admin, Sales | Detail pesanan lengkap, rincian produk, ringkasan keuangan, simulasi profit SA, tombol edit & hapus draf |
 | `/orders/:id/edit`     | Super Admin, Sales | Sunting draf pesanan (`DRAFT` / `REVISION_REQUIRED`) dengan penguncian optimistik versi `rev` |
+| `/stock`               | Super Admin        | Manajemen stok produk, kartu metrik (fisik/reservasi/tersedia/minus), modal koreksi, opname, riwayat mutasi |
+| `/purchase-orders`     | Super Admin        | Daftar Purchase Order dengan filter status, vendor, dan paginasi (responsif 360 px) |
+| `/purchase-orders/new` | Super Admin        | Formulir pembuatan PO baru dengan kalkulasi biaya dinamis dan baris produk |
+| `/purchase-orders/:id` | Super Admin        | Detail PO, aksi terbitkan pesan, terima barang (+ update HPP master), bayar vendor, batal PO |
+| `/vendors/:id`         | Super Admin        | Detail profil vendor & tab Buku Transaksi Vendor (Vendor Ledger) dengan linimasa saldo hutang berjalan |
 
 ---
 
@@ -316,7 +332,7 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
 | ---------- | ------------ | ----------------------------------------------------------------------- | ------------------- |
 | **Fase 0** | `v0.1.0`     | Fondasi proyek, env, skema Prisma, rumus domain, infra tes              | **SELESAI** |
 | **Fase 1** | `v0.2.0`     | Login, manajemen usaha, akun sales, master produk & vendor, pembaruan   | **SELESAI**         |
-| **Fase 2** | `v0.3.0`     | Customer CRM, order draft, floor pricing, manajemen stok                | **SEDANG BERJALAN** |
+| **Fase 2** | `v0.3.0`     | Customer CRM, order draft, floor pricing, manajemen stok, PO & vendor ledger | **SELESAI** |
 | **Fase 3** | `v0.4.0`     | Persetujuan invoice, verifikasi pembayaran, mesin cetak PDF, void/retur | Belum dimulai       |
 | **Fase 4** | `v0.5.0`     | Bot Telegram, Mini App, pengingat repeat order, katalog PWA             | Belum dimulai       |
 | **Fase 5** | `v1.0.0`     | Dashboard profit, evaluasi sales, pengerasan keamanan, Go-Live          | Belum dimulai       |

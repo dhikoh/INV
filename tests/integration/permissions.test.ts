@@ -82,6 +82,23 @@ import {
 } from '@/app/api/v1/customer-promos/[id]/route';
 import { GET as getCustomerPriceHistoryHandler } from '@/app/api/v1/customers/[id]/price-history/route';
 import { DELETE as deleteOrderHandler } from '@/app/api/v1/orders/[id]/route';
+import { GET as getStockHandler } from '@/app/api/v1/stock/route';
+import { GET as getStockMovementsHandler } from '@/app/api/v1/stock/movements/route';
+import { POST as adjustStockHandler } from '@/app/api/v1/stock/adjust/route';
+import { POST as opnameStockHandler } from '@/app/api/v1/stock/opname/route';
+import {
+  GET as getPurchaseOrdersHandler,
+  POST as createPurchaseOrderHandler,
+} from '@/app/api/v1/purchase-orders/route';
+import {
+  GET as getPurchaseOrderDetailHandler,
+  PATCH as updatePurchaseOrderHandler,
+} from '@/app/api/v1/purchase-orders/[id]/route';
+import { POST as orderPurchaseOrderHandler } from '@/app/api/v1/purchase-orders/[id]/order/route';
+import { POST as receivePurchaseOrderHandler } from '@/app/api/v1/purchase-orders/[id]/receive/route';
+import { POST as cancelPurchaseOrderHandler } from '@/app/api/v1/purchase-orders/[id]/cancel/route';
+import { POST as createVendorPaymentHandler } from '@/app/api/v1/vendors/[id]/payments/route';
+import { GET as getVendorTransactionsHandler } from '@/app/api/v1/vendors/[id]/transactions/route';
 
 describe('Matriks Hak Akses Berbasis Tabel (Seksi 5.1 & 17.4 b)', () => {
   const APP_URL = 'http://localhost:3000';
@@ -466,6 +483,102 @@ describe('Matriks Hak Akses Berbasis Tabel (Seksi 5.1 & 17.4 b)', () => {
       handler: (req, r) => deleteOrderHandler(req, r),
       params: { id: 'ord_1' },
       body: { confirm: 'ord_1' },
+    },
+    {
+      name: 'GET /api/v1/stock',
+      method: 'GET',
+      path: '/api/v1/stock',
+      handler: (req) => getStockHandler(req),
+    },
+    {
+      name: 'GET /api/v1/stock/movements',
+      method: 'GET',
+      path: '/api/v1/stock/movements',
+      handler: (req) => getStockMovementsHandler(req),
+    },
+    {
+      name: 'POST /api/v1/stock/adjust',
+      method: 'POST',
+      path: '/api/v1/stock/adjust',
+      handler: (req) => adjustStockHandler(req),
+      body: { productId: 'p1', qtyDelta: 5, reason: 'Alasan penyesuaian stok' },
+    },
+    {
+      name: 'POST /api/v1/stock/opname',
+      method: 'POST',
+      path: '/api/v1/stock/opname',
+      handler: (req) => opnameStockHandler(req),
+      body: { productId: 'p1', countedQty: 10, reason: 'Alasan stock opname' },
+    },
+    {
+      name: 'GET /api/v1/purchase-orders',
+      method: 'GET',
+      path: '/api/v1/purchase-orders',
+      handler: (req) => getPurchaseOrdersHandler(req),
+    },
+    {
+      name: 'POST /api/v1/purchase-orders',
+      method: 'POST',
+      path: '/api/v1/purchase-orders',
+      handler: (req) => createPurchaseOrderHandler(req),
+      body: {
+        vendorId: 'v1',
+        orderDate: '2026-11-10',
+        items: [{ productId: 'p1', qty: 10, unitCost: 50000 }],
+      },
+    },
+    {
+      name: 'GET /api/v1/purchase-orders/:id',
+      method: 'GET',
+      path: '/api/v1/purchase-orders/po_1',
+      handler: (req, r) => getPurchaseOrderDetailHandler(req, r),
+      params: { id: 'po_1' },
+    },
+    {
+      name: 'PATCH /api/v1/purchase-orders/:id',
+      method: 'PATCH',
+      path: '/api/v1/purchase-orders/po_1',
+      handler: (req, r) => updatePurchaseOrderHandler(req, r),
+      params: { id: 'po_1' },
+      body: { notes: 'Catatan' },
+    },
+    {
+      name: 'POST /api/v1/purchase-orders/:id/order',
+      method: 'POST',
+      path: '/api/v1/purchase-orders/po_1/order',
+      handler: (req, r) => orderPurchaseOrderHandler(req, r),
+      params: { id: 'po_1' },
+    },
+    {
+      name: 'POST /api/v1/purchase-orders/:id/receive',
+      method: 'POST',
+      path: '/api/v1/purchase-orders/po_1/receive',
+      handler: (req, r) => receivePurchaseOrderHandler(req, r),
+      params: { id: 'po_1' },
+      body: { items: [{ itemId: 'item_1', qty: 5 }] },
+    },
+    {
+      name: 'POST /api/v1/purchase-orders/:id/cancel',
+      method: 'POST',
+      path: '/api/v1/purchase-orders/po_1/cancel',
+      handler: (req, r) => cancelPurchaseOrderHandler(req, r),
+      params: { id: 'po_1' },
+      body: { reason: 'Alasan pembatalan' },
+    },
+    {
+      name: 'POST /api/v1/vendors/:id/payments',
+      method: 'POST',
+      path: '/api/v1/vendors/v1/payments',
+      handler: (req, r) => createVendorPaymentHandler(req, r),
+      params: { id: 'v1' },
+      body: { amount: 100000, paidAt: '2026-11-10', method: 'TRANSFER' },
+    },
+    {
+      name: 'GET /api/v1/vendors/:id/transactions',
+      method: 'GET',
+      path: '/api/v1/vendors/v1/transactions',
+      handler: (req, r) => getVendorTransactionsHandler(req, r),
+      params: { id: 'v1' },
     },
   ];
 

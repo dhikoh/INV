@@ -17,6 +17,7 @@ import {
   Clock,
   ShieldAlert,
   Package,
+  Receipt,
 } from 'lucide-react';
 import { Skeleton, EmptyState, ErrorState } from '@/components/ui/States';
 import { ConfirmTypeDialog } from '@/components/ui/ConfirmTypeDialog';
@@ -503,7 +504,12 @@ export default function VendorsPage() {
 
                         {/* Nama */}
                         <td className="px-4 py-3">
-                          <div className="font-semibold text-slate-900">{v.name}</div>
+                          <Link
+                            href={`/vendors/${v.id}`}
+                            className="font-semibold text-slate-900 hover:text-blue-600 hover:underline"
+                          >
+                            {v.name}
+                          </Link>
                           {v.address && (
                             <div className="text-xs text-slate-400 line-clamp-1">
                               {v.address}
@@ -579,6 +585,14 @@ export default function VendorsPage() {
                         {/* Aksi */}
                         <td className="px-4 py-3 text-center">
                           <div className="flex items-center justify-center gap-1">
+                            <Link
+                              href={`/vendors/${v.id}`}
+                              title="Buku Transaksi Vendor"
+                              className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 transition-colors min-h-[36px] min-w-[36px] flex items-center justify-center"
+                            >
+                              <Receipt className="w-4 h-4" />
+                            </Link>
+
                             <button
                               type="button"
                               title="Ubah Vendor"
@@ -666,7 +680,15 @@ export default function VendorsPage() {
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-end gap-2 pt-1 border-t border-slate-100">
+                  <div className="flex flex-wrap items-center justify-end gap-2 pt-1 border-t border-slate-100">
+                    <Link
+                      href={`/vendors/${v.id}`}
+                      className="min-h-[44px] px-3 py-2 border border-indigo-200 text-indigo-700 bg-indigo-50 rounded-lg text-xs font-medium hover:bg-indigo-100 flex items-center gap-1.5 transition-colors"
+                    >
+                      <Receipt className="w-4 h-4" />
+                      <span>Buku Transaksi</span>
+                    </Link>
+
                     <button
                       type="button"
                       onClick={() => handleOpenEdit(v)}

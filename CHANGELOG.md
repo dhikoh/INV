@@ -8,6 +8,47 @@ dan proyek ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Layanan manajemen stok dan mutasi fisik produk `src/lib/services/stock.ts` sesuai Seksi 7.9, 8.2, 8.3, dan Kriteria Tes 17.3 nomor 7:
+  - `lockProducts(tx, ids)`: Penguncian baris produk pesimistik terurut (`SELECT FOR UPDATE`) untuk mencegah kondisi balapan (*race condition*) dan deadlock.
+  - `moveStock(tx, params)`: Gerbang mutasi tunggal kuantitas fisik produk (`Product.stockQty`), secara atomik menerbitkan entri `StockMovement` (+ masuk, - keluar) dengan `balanceAfter`.
+  - `reserveOrderStock(tx, order, items, allowNegative)`: Reservasi kuantitas produk saat order disetujui; menolak 409 `INSUFFICIENT_STOCK` jika `allowNegativeStock = false` dan stok tersedia tidak mencukupi; mengizinkan saldo minus jika `allowNegativeStock = true`. Idempoten jika order sudah berstatus `stockReserved = true`.
+  - `releaseOrderStock(tx, order, items)`: Melepas reservasi kuantitas (`reservedQty`) secara idempoten saat pembatalan order.
+  - `shipOrderStock(tx, order, items, actorId)`: Mengeluarkan kuantitas fisik melalui `moveStock` bertipe `SALE_SHIPMENT` dan melepas reservasi saat pesanan dikirim.
+  - `adjustStock(tx, params)`: Penyesuaian stok manual bertipe `ADJUSTMENT` dengan validasi alasan wajib minimal 5 karakter dan audit log `STOCK_ADJUST`.
+  - `opnameStock(tx, params)`: Stock opname fisik riil bertipe `OPNAME`, menghitung selisih fisik riil (`countedQty - stockQty`), validasi alasan minimal 5 karakter, dan audit log `STOCK_OPNAME`.
+- Layanan pesanan pembelian (Purchase Order) `src/lib/services/purchase-order.ts` dan buku vendor `src/lib/services/vendor-ledger.ts`:
+  - `createPurchaseOrder`: Pembuatan draf PO baru (`status: DRAFT`).
+  - `updatePurchaseOrder`: Perubahan draf PO hanya pada status `DRAFT`.
+  - `orderPurchaseOrder`: Transisi status `DRAFT` -> `ORDERED`, alokasi nomor urut atomik `allocateVendorPoSeq` dan format resmi dokumen PO (`KODEVENDOR/PO/DD/MM/YYYY/NNNN`).
+  - `receivePurchaseOrder`: Penerimaan barang pesanan (`PARTIAL_RECEIVED` atau `RECEIVED`), menambah stok fisik via `moveStock` (`PO_RECEIPT`), serta opsi perbarui HPP master (`updateHpp: true`) yang menaikkan `Product.rev` dan mencatat entri `PriceHistory` (`field: 'COST'`).
+  - `cancelPurchaseOrder`: Pembatalan PO (`status: CANCELLED`); ditolak 409 `CANNOT_CANCEL` jika sudah ada barang yang diterima di gudang (harus lewat koreksi stok manual).
+  - `recordVendorPayment`: Pencatatan pembayaran vendor (`VendorPayment`), otomatis menghitung ulang `paidTotal` PO terkait.
+  - `getVendorLedger`: Buku Transaksi Vendor menggabungkan seluruh tagihan PO non-batal (Debit) dan pembayaran (Kredit), mengurutkan secara kronologis dan menghitung saldo hutang berjalan (*running balance*).
+- Route Handler API Stok, PO, dan Vendor Ledger:
+  - `GET /api/v1/stock`: Ringkasan metrik stok produk, filter stok minus, dan paginasi.
+  - `GET /api/v1/stock/movements`: Riwayat mutasi stok fisik dengan filter produk dan tipe mutasi.
+  - `POST /api/v1/stock/adjust`: Penyesuaian stok manual khusus Super Admin.
+  - `POST /api/v1/stock/opname`: Stock opname fisik riil khusus Super Admin.
+  - `GET /api/v1/purchase-orders` & `POST /api/v1/purchase-orders`: Daftar dan pembuatan PO.
+  - `GET /api/v1/purchase-orders/:id` & `PATCH /api/v1/purchase-orders/:id`: Detail dan penyuntingan draf PO.
+  - `POST /api/v1/purchase-orders/:id/order`: Penerbitan nomor resmi PO.
+  - `POST /api/v1/purchase-orders/:id/receive`: Penerimaan barang bertahap / penuh dan opsi update HPP master.
+  - `POST /api/v1/purchase-orders/:id/cancel`: Pembatalan PO dengan alasan minimal 5 karakter.
+  - `POST /api/v1/vendors/:id/payments`: Pencatatan pembayaran ke vendor.
+  - `GET /api/v1/vendors/:id/transactions`: Buku Transaksi Vendor beserta saldo hutang berjalan.
+- Rangkaian pengujian integrasi stok dan PO:
+  - `tests/integration/stock.test.ts` (6 tes): Verifikasi pergerakan stok, penolakan alasan < 5 karakter, opname riil, reservasi, dan **Tes 17.3 nomor 7** (dua persetujuan serentak berebut stok terakhir, tepat satu berhasil dan satu gagal 409).
+  - `tests/integration/purchase-orders.test.ts` (4 tes): Siklus hidup PO lengkap, penerimaan + mutasi + update HPP master dengan `PriceHistory`, proteksi pembatalan bila ada barang diterima, dan perhitungan saldo buku transaksi vendor.
+  - `tests/integration/permissions.test.ts`: Diperluas menjadi 61 tes matriks otorisasi (seluruh endpoint stok, PO, dan ledger vendor menolak staf Sales 403 `FORBIDDEN`).
+- Antarmuka Pengguna (UI) responsif hingga lebar 360 px:
+  - `/stock` (`src/app/(app)/stock/page.tsx`): Halaman manajemen stok dengan 4 kartu metrik (total fisik, reservasi, tersedia, item minus), tabel desktop & kartu mobile, modal koreksi stok, modal opname fisik, dan modal riwayat mutasi stok.
+  - `/purchase-orders` (`src/app/(app)/purchase-orders/page.tsx`): Halaman daftar PO dengan filter status, vendor, paginasi, dan tombol pembuatan PO baru.
+  - `/purchase-orders/new` (`src/app/(app)/purchase-orders/new/page.tsx`): Formulir pembuatan PO baru dengan kalkulasi biaya dinamis, input uang via `MoneyInput`, dan penambahan baris produk.
+  - `/purchase-orders/[id]` (`src/app/(app)/purchase-orders/[id]/page.tsx`): Halaman detail PO lengkap dengan status progress bar, tombol "Pesan Sekarang", modal "Terima Barang" dengan opsi update HPP, modal "Catat Bayar Vendor", dan modal "Batalkan PO".
+  - `/vendors/[id]` (`src/app/(app)/vendors/[id]/page.tsx`): Profil vendor dan Buku Transaksi Vendor (Vendor Ledger) dengan 3 kartu metrik hutang (Total Pembelian, Total Pembayaran, Sisa Hutang Berjalan), linimasa mutasi debit-kredit, dan modal pencatatan pembayaran.
+  - Menu navigasi Super Admin di `src/components/AppShell.tsx`: Ditambahkan item "Stok & Opname" (`/stock`) dan "Purchase Order" (`/purchase-orders`), serta perbaruan nama "Produk & Harga" (`/products`).
+  - Akses cepat "Buku Transaksi" pada tabel dan kartu vendor di `src/app/(app)/vendors/page.tsx`.
+
 - Antarmuka formulir pesanan interaktif `src/components/orders/OrderForm.tsx` (digunakan pada `/orders/new` dan `/orders/[id]/edit`) sesuai Seksi 10.4, 11.1, 11.3, dan 11.4:
   - Pencarian dan pemilihan pelanggan dengan pengisian otomatis alamat pengiriman bawaan customer.
   - Tambah, ubah, dan hapus baris produk dengan dukungan jenis diskon fleksibel (persen via `PercentInput`, nominal total baris via `MoneyInput`, atau pilihan promo/subsidi aktif dari `/customers/:id/pricing`).

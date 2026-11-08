@@ -68,6 +68,18 @@ export function StatusBadge({ status, className = '' }: StatusBadgeProps) {
         label = 'Dibatalkan';
         colorClasses = 'bg-red-50 text-red-700 border-red-200';
         break;
+      case 'ORDERED':
+        label = 'Dipesan';
+        colorClasses = 'bg-blue-50 text-blue-700 border-blue-200';
+        break;
+      case 'PARTIAL_RECEIVED':
+        label = 'Diterima Sebagian';
+        colorClasses = 'bg-amber-50 text-amber-700 border-amber-200';
+        break;
+      case 'RECEIVED':
+        label = 'Diterima Penuh';
+        colorClasses = 'bg-emerald-50 text-emerald-700 border-emerald-200';
+        break;
       case 'SUBMITTED':
       case 'MENUNGGU':
         label = 'Diajukan';
