@@ -6,3 +6,4 @@ export const OrderCostCreateSchema = z.object({
 });
 
 export type OrderCostCreateInput = z.infer<typeof OrderCostCreateSchema>;
+

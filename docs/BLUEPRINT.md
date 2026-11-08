@@ -267,6 +267,8 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
 | `POST`     | `/api/v1/payments/:id/verify`  | Super Admin        | Verifikasi pelunasan/pembayaran (kunci pesanan, hitung ulang paidTotal, transisi status) |
 | `POST`     | `/api/v1/payments/:id/reject`  | Super Admin        | Penolakan bukti transfer (alasan min 5 karakter, rollback kredit) |
 | `POST`     | `/api/v1/payments/:id/void`    | Super Admin        | Pembatalan pembayaran diverifikasi (recalculate, rollback order status) |
+| `GET`      | `/api/v1/invoices`             | Super Admin, Sales | Daftar invoice dengan filter status, tipe, pencarian, dan paginasi (isolasi sales) |
+| `GET`      | `/api/v1/invoices/:id`         | Super Admin, Sales | Detail invoice lengkap, bank usaha, pratinjau, dan inspeksi persetujuan (profit, belowMin, stok, piutang customer khusus SA) |
 | `POST`     | `/api/v1/orders/:id/request-final` | Super Admin, Sales | Pengajuan faktur pelunasan (buat FINAL invoice PENDING_APPROVAL, opsi penyesuaian ongkir) |
 | `POST`     | `/api/v1/invoices/:id/void`    | Super Admin        | Pembatalan faktur resmi (alasan min 5 karakter, lepas reservasi stok DP awal, rollback status order) |
 | `GET/POST` | `/api/v1/orders/:id/shipment`  | Super Admin, Sales | Detail & konfigurasi logistik pengiriman (PREPARING, actualCost dirahasiakan dari Sales) |
@@ -308,6 +310,9 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
 | `/orders/:id`          | Super Admin, Sales | Detail pesanan lengkap, rincian produk, ringkasan keuangan, simulasi profit SA, tombol ajukan/tarik/setujui/tolak pesanan |
 | `/orders/:id/edit`     | Super Admin, Sales | Sunting draf pesanan (`DRAFT` / `REVISION_REQUIRED`) dengan penguncian optimistik versi `rev` |
 | `/approvals`           | Super Admin        | Antrean persetujuan pesanan & invoice PENDING_APPROVAL (FIFO, filter belowMin, pencarian, simulasi profit) |
+| `/approvals/:invoiceId`| Super Admin        | Detail inspeksi persetujuan invoice 2-kolom (pratinjau visual bertema, simulasi profit, stok fisik, override note, tolak/revisi) |
+| `/invoices`            | Super Admin, Sales | Daftar faktur penjualan responsif desktop & mobile 360 px, filter status/tipe/search, cetak PDF resmi |
+| `/invoices/:id`        | Super Admin, Sales | Detail faktur komprehensif, linimasa persetujuan & pembayaran, tombol cetak aktif/nonaktif, alur revisi sales & void SA |
 | `/payments`            | Super Admin        | Antrean verifikasi bukti transfer & pembayaran pelanggan (pratinjau bukti, modal verifikasi/tolak) |
 | `/stock`               | Super Admin        | Manajemen stok produk, kartu metrik (fisik/reservasi/tersedia/minus), modal koreksi, opname, riwayat mutasi |
 | `/purchase-orders`     | Super Admin        | Daftar Purchase Order dengan filter status, vendor, dan paginasi (responsif 360 px) |
@@ -361,7 +366,7 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
 | **Fase 0** | `v0.1.0`     | Fondasi proyek, env, skema Prisma, rumus domain, infra tes              | **SELESAI** |
 | **Fase 1** | `v0.2.0`     | Login, manajemen usaha, akun sales, master produk & vendor, pembaruan   | **SELESAI**         |
 | **Fase 2** | `v0.3.0`     | Customer CRM, order draft, floor pricing, manajemen stok, PO & vendor ledger | **SELESAI** |
-| **Fase 3** | `v0.4.0`     | Persetujuan invoice, verifikasi pembayaran, mesin cetak PDF, void/retur, profit & komisi | **SELESAI** (T3.7 Selesai) |
+| **Fase 3** | `v0.4.0`     | Persetujuan invoice, verifikasi pembayaran, mesin cetak PDF, void/retur, profit & komisi, UI persetujuan & invoice | **SELESAI** (T3.8 Selesai) |
 | **Fase 4** | `v0.5.0`     | Bot Telegram, Mini App, pengingat repeat order, katalog PWA             | Belum dimulai       |
 | **Fase 5** | `v1.0.0`     | Dashboard profit, evaluasi sales, pengerasan keamanan, Go-Live          | Belum dimulai       |
 

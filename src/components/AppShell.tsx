@@ -199,6 +199,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const salesDesktopNav = [
     { label: 'Beranda', href: '/dashboard', icon: LayoutDashboard },
     { label: 'Order', href: '/orders', icon: ShoppingCart },
+    { label: 'Invoice', href: '/invoices', icon: FileText },
     { label: 'Customer', href: '/customers', icon: Users },
     { label: 'Pengingat', href: '/reminders', icon: Bell },
     {

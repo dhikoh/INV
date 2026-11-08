@@ -1,5 +1,13 @@
 import { z } from 'zod';
-import { InvoiceTheme } from '@prisma/client';
+import { InvoiceTheme, InvoiceStatus, InvoiceType } from '@prisma/client';
+
+export const InvoiceQuerySchema = z.object({
+  status: z.nativeEnum(InvoiceStatus).optional(),
+  type: z.nativeEnum(InvoiceType).optional(),
+  search: z.string().trim().max(100).optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+});
 
 export const InvoiceApproveSchema = z
   .object({
@@ -35,3 +43,4 @@ export const InvoiceVoidSchema = z
 export type InvoiceApproveInput = z.infer<typeof InvoiceApproveSchema>;
 export type InvoiceRejectInput = z.infer<typeof InvoiceRejectSchema>;
 export type InvoiceVoidInput = z.infer<typeof InvoiceVoidSchema>;
+export type InvoiceQueryInput = z.infer<typeof InvoiceQuerySchema>;

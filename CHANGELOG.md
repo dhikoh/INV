@@ -8,6 +8,34 @@ dan proyek ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Antarmuka Pengguna (UI) Antrean Persetujuan Pesanan, Detail Inspeksi Faktur, Daftar dan Detail Faktur Penjualan, serta Verifikasi Pembayaran Terpadu sesuai Seksi 7.4, 7.11, 10.5, 11.4, 14.1, 14.3, dan 19.5 Dokumen Spesifikasi (T3.8):
+  - Route Handlers API (`src/app/api/v1/invoices/`):
+    - `GET /api/v1/invoices`: Daftar invoice terpaginasi dengan filter status (`PENDING_APPROVAL`, `APPROVED`, `REJECTED`, `VOID`), tipe (`DP` vs `FINAL`), pencarian teks bebas (nomor faktur, nomor order, nama/kode customer), dan isolasi peran ketat (Sales dibatasi hanya pada invoice dari pesanannya sendiri).
+    - `GET /api/v1/invoices/:id`: Detail komprehensif invoice dan pesanan. Menerapkan jaminan Zero-Leakage: HPP, margin, floor price, dan simulasi profit HANYA dikembalikan untuk Super Admin. Menyediakan rekening bank aktif usaha, data simulasi profit, daftar barang belowMin dan gap harga, statistik piutang/order pelanggan, dan ketersediaan stok fisik vs pesanan.
+  - Skema Validasi (`src/lib/validation/invoice.ts`):
+    - `InvoiceQuerySchema`: Validasi parameter pencarian dan paginasi invoice (`status`, `type`, `search`, `page`, `limit`).
+  - Antarmuka Pengguna (UI Pages):
+    - `src/app/(app)/approvals/[invoiceId]/page.tsx` (Khusus Super Admin - Seksi 11.4):
+      - Tata letak 2 kolom desktop:
+        - Kolom Kiri: Pratinjau visual faktur penjualan sesuai tema usaha, watermark status DRAFT bila pending, rincian produk, diskon, PPN, ongkir, total tagihan, dan instruksi rekening transfer bank usaha.
+        - Kolom Kanan: Panel inspeksi persetujuan (Simulasi laba riil & margin, peringatan harga di bawah batas minimal/BelowMin dan alasan sales, ketersediaan stok fisik vs pesanan, serta riwayat order dan piutang berjalan customer).
+      - Dialog Aksi:
+        - "Setujui Faktur": Input catatan override pemilik (wajib min 5 karakter bila pesanan belowMin), pemilihan tema faktur (`PROFESIONAL`, `MODERN`, `KLASIK`, `FAMILY`, `MINIMALIS`), dan tanggal jatuh tempo.
+        - "Tolak / Minta Revisi": Input alasan penolakan (wajib min 5 karakter) yang otomatis mengembalikan status pesanan ke `REVISION_REQUIRED` dan mengirim notifikasi ke staf sales.
+    - `src/app/(app)/approvals/page.tsx`:
+      - Pembaruan tautan antrean persetujuan: jika terdapat invoice tertunda (`pendingInvoice`), tombol mengarahkan langsung ke halaman detail persetujuan `/approvals/[invoiceId]`.
+    - `src/app/(app)/invoices/page.tsx`:
+      - Daftar faktur penjualan responsif desktop & mobile (360px): tab filter status, dropdown tipe, pencarian cepat, paginasi, nomor faktur/draf, nominal tagihan, dan tombol aksi Detail serta Cetak PDF (nonaktif dengan status "Menunggu Persetujuan Pemilik" jika belum disetujui).
+    - `src/app/(app)/invoices/[id]/page.tsx`:
+      - Detail faktur penjualan terpadu untuk Sales & Super Admin:
+        - Linimasa status: Pengajuan -> Persetujuan -> Pembayaran.
+        - Banner status informatif: penolakan dengan alasan jelas dan tombol "Revisi Pesanan" (`/orders/[id]/edit`) untuk sales; tombol "Tinjau Persetujuan" untuk Super Admin jika pending; tombol "Batalkan Faktur (Void)" jika approved.
+        - Tombol cetak PDF resmi aktif hanya jika berstatus APPROVED.
+    - `src/components/AppShell.tsx`:
+      - Penambahan menu navigasi "Invoice" (`/invoices`) pada menu samping desktop staf Sales.
+  - Pengujian Integrasi (`tests/integration/approval-and-invoice-ui.test.ts`):
+    - 12 skenario pengujian komprehensif menguji: isolasi sales vs super admin di `GET /api/v1/invoices`, filter status & tipe, kelengkapan data inspeksi Super Admin di `GET /api/v1/invoices/:id`, Zero-Leakage (Sales tidak menerima profitSimulation/floorPrice dan `assertNoSecretKeys`), penolakan akses invoice sales lain (403), penegakan tombol cetak PDF nonaktif sebelum approved (409), serta alur penolakan dan revisi faktur.
+
 - Perhitungan Profit Riil, Biaya Ekstra Pesanan (OrderCost), dan Sistem Komisi Sales Multi-Skema sesuai Seksi 7.4, 7.6, 17.3 nomor 14, dan 19.5 Dokumen Spesifikasi (T3.7):
   - Layanan Domain Komisi Sales (`src/lib/services/commission.ts`):
     - `evaluateOrderCommission(tx, orderId)`: Mengevaluasi syarat pemicu komisi (`ON_DP_PAID` vs `ON_FULL_PAID`) saat pembayaran diverifikasi. Menghitung komisi murni tanpa kebocoran HPP sesuai skema efektif (konfigurasi tingkat pengguna `User.commission*` mengesampingkan default usaha `Business.commission*`).

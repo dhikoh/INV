@@ -26,3 +26,4 @@ export const CommissionQuerySchema = z.object({
 export type CommissionPayInput = z.infer<typeof CommissionPaySchema>;
 export type CommissionTiersUpdateInput = z.infer<typeof CommissionTiersUpdateSchema>;
 export type CommissionQueryInput = z.infer<typeof CommissionQuerySchema>;
+
