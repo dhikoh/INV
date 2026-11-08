@@ -102,6 +102,10 @@ import { GET as getVendorTransactionsHandler } from '@/app/api/v1/vendors/[id]/t
 import { GET as getApprovalsHandler } from '@/app/api/v1/approvals/route';
 import { POST as approveInvoiceHandler } from '@/app/api/v1/invoices/[id]/approve/route';
 import { POST as rejectInvoiceHandler } from '@/app/api/v1/invoices/[id]/reject/route';
+import { GET as getPaymentsQueueHandler } from '@/app/api/v1/payments/route';
+import { POST as verifyPaymentHandler } from '@/app/api/v1/payments/[id]/verify/route';
+import { POST as rejectPaymentHandler } from '@/app/api/v1/payments/[id]/reject/route';
+import { POST as voidPaymentHandler } from '@/app/api/v1/payments/[id]/void/route';
 
 describe('Matriks Hak Akses Berbasis Tabel (Seksi 5.1 & 17.4 b)', () => {
   const APP_URL = 'http://localhost:3000';
@@ -604,6 +608,35 @@ describe('Matriks Hak Akses Berbasis Tabel (Seksi 5.1 & 17.4 b)', () => {
       handler: (req, r) => rejectInvoiceHandler(req, r),
       params: { id: 'inv_1' },
       body: { reason: 'Data pesanan perlu diperbaiki' },
+    },
+    {
+      name: 'GET /api/v1/payments',
+      method: 'GET',
+      path: '/api/v1/payments',
+      handler: (req) => getPaymentsQueueHandler(req),
+    },
+    {
+      name: 'POST /api/v1/payments/:id/verify',
+      method: 'POST',
+      path: '/api/v1/payments/pay_1/verify',
+      handler: (req, r) => verifyPaymentHandler(req, r),
+      params: { id: 'pay_1' },
+    },
+    {
+      name: 'POST /api/v1/payments/:id/reject',
+      method: 'POST',
+      path: '/api/v1/payments/pay_1/reject',
+      handler: (req, r) => rejectPaymentHandler(req, r),
+      params: { id: 'pay_1' },
+      body: { reason: 'Bukti transfer tidak valid' },
+    },
+    {
+      name: 'POST /api/v1/payments/:id/void',
+      method: 'POST',
+      path: '/api/v1/payments/pay_1/void',
+      handler: (req, r) => voidPaymentHandler(req, r),
+      params: { id: 'pay_1' },
+      body: { reason: 'Dana ditarik kembali oleh bank' },
     },
   ];
 

@@ -24,6 +24,8 @@ import {
   RotateCcw,
   X,
   Loader2,
+  CreditCard,
+  ExternalLink,
 } from 'lucide-react';
 import { Skeleton, ErrorState } from '@/components/ui/States';
 import { StatusBadge } from '@/components/ui/StatusBadge';
@@ -59,6 +61,27 @@ interface ProfitSimulationDto {
   extraCosts: number;
   profit: number;
   marginBps: number;
+}
+
+interface PaymentItemDto {
+  id: string;
+  businessId: string;
+  orderId: string;
+  invoiceId: string | null;
+  type: string;
+  method: string;
+  status: string;
+  amount: number;
+  paidAt: string;
+  reference: string | null;
+  proofPath: string | null;
+  notes: string | null;
+  createdById: string;
+  verifiedById: string | null;
+  verifiedAt: string | null;
+  rejectReason: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface OrderDetailDto {
@@ -150,15 +173,46 @@ export default function OrderDetailPage() {
   const [rejectError, setRejectError] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState('');
 
+  // Riwayat & Modal Pembayaran
+  const [payments, setPayments] = useState<PaymentItemDto[]>([]);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [payAmount, setPayAmount] = useState('');
+  const [payMethod, setPayMethod] = useState<'TRANSFER' | 'CASH' | 'CREDIT' | 'OTHER'>('TRANSFER');
+  const [payDate, setPayDate] = useState(new Date().toISOString().split('T')[0]);
+  const [payRef, setPayRef] = useState('');
+  const [payNotes, setPayNotes] = useState('');
+  const [payFile, setPayFile] = useState<File | null>(null);
+  const [payAutoVerify, setPayAutoVerify] = useState(false);
+  const [paying, setPaying] = useState(false);
+  const [payError, setPayError] = useState<string | null>(null);
+
+  // Modal Verifikasi Pembayaran (Super Admin)
+  const [selectedVerifyPayment, setSelectedVerifyPayment] = useState<PaymentItemDto | null>(null);
+  const [verifyingPayment, setVerifyingPayment] = useState(false);
+  const [verifyPaymentError, setVerifyPaymentError] = useState<string | null>(null);
+
+  // Modal Tolak Pembayaran (Super Admin)
+  const [selectedRejectPayment, setSelectedRejectPayment] = useState<PaymentItemDto | null>(null);
+  const [paymentRejectReason, setPaymentRejectReason] = useState('');
+  const [paymentRejecting, setPaymentRejecting] = useState(false);
+  const [paymentRejectError, setPaymentRejectError] = useState<string | null>(null);
+
+  // Modal Void Pembayaran (Super Admin)
+  const [selectedVoidPayment, setSelectedVoidPayment] = useState<PaymentItemDto | null>(null);
+  const [paymentVoidReason, setPaymentVoidReason] = useState('');
+  const [paymentVoiding, setPaymentVoiding] = useState(false);
+  const [paymentVoidError, setPaymentVoidError] = useState<string | null>(null);
+
   const fetchOrderDetail = useCallback(async () => {
     if (!id) return;
     try {
       setLoading(true);
       setError(null);
 
-      const [orderRes, meRes] = await Promise.all([
+      const [orderRes, meRes, paymentsRes] = await Promise.all([
         fetch(`/api/v1/orders/${id}`),
         fetch('/api/v1/auth/me'),
+        fetch(`/api/v1/orders/${id}/payments`),
       ]);
 
       if (!orderRes.ok) {
@@ -175,6 +229,11 @@ export default function OrderDetailPage() {
       if (meRes.ok) {
         const meJson = await meRes.json();
         setCurrentUser(meJson.data.user);
+      }
+
+      if (paymentsRes.ok) {
+        const payJson = await paymentsRes.json();
+        setPayments(payJson.data || []);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Terjadi kesalahan sistem.');
@@ -354,6 +413,168 @@ export default function OrderDetailPage() {
     }
   };
 
+  // Handle Catat Pembayaran
+  const handleRecordPayment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!order) return;
+    try {
+      setPaying(true);
+      setPayError(null);
+
+      const parsedAmount = Number(payAmount);
+      if (isNaN(parsedAmount) || parsedAmount <= 0) {
+        throw new Error('Jumlah pembayaran harus berupa angka positif');
+      }
+
+      let res: Response;
+      if (payFile) {
+        const formData = new FormData();
+        formData.append('amount', String(parsedAmount));
+        formData.append('method', payMethod);
+        formData.append('paidAt', payDate);
+        if (payRef.trim()) formData.append('reference', payRef.trim());
+        if (payNotes.trim()) formData.append('notes', payNotes.trim());
+        if (payAutoVerify && currentUser?.role === 'SUPERADMIN') {
+          formData.append('autoVerify', 'true');
+        }
+        formData.append('proof', payFile);
+
+        res = await fetch(`/api/v1/orders/${order.id}/payments`, {
+          method: 'POST',
+          body: formData,
+        });
+      } else {
+        res = await fetch(`/api/v1/orders/${order.id}/payments`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            amount: parsedAmount,
+            method: payMethod,
+            paidAt: payDate,
+            reference: payRef.trim() || undefined,
+            notes: payNotes.trim() || undefined,
+            autoVerify: payAutoVerify && currentUser?.role === 'SUPERADMIN',
+          }),
+        });
+      }
+
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(json.error?.message || json.message || 'Gagal mencatat pembayaran');
+      }
+
+      setSubmitSuccess('Pembayaran berhasil dicatat!');
+      setShowPaymentModal(false);
+      setPayAmount('');
+      setPayRef('');
+      setPayNotes('');
+      setPayFile(null);
+      fetchOrderDetail();
+    } catch (err: unknown) {
+      setPayError(err instanceof Error ? err.message : 'Gagal mencatat pembayaran');
+    } finally {
+      setPaying(false);
+    }
+  };
+
+  // Handle Verifikasi Pembayaran (Super Admin)
+  const handleVerifyPayment = async () => {
+    if (!selectedVerifyPayment) return;
+    try {
+      setVerifyingPayment(true);
+      setVerifyPaymentError(null);
+
+      const res = await fetch(`/api/v1/payments/${selectedVerifyPayment.id}/verify`, {
+        method: 'POST',
+      });
+
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(json.error?.message || json.message || 'Gagal memverifikasi pembayaran');
+      }
+
+      setSubmitSuccess('Pembayaran berhasil diverifikasi!');
+      setSelectedVerifyPayment(null);
+      fetchOrderDetail();
+    } catch (err: unknown) {
+      setVerifyPaymentError(err instanceof Error ? err.message : 'Gagal memverifikasi');
+    } finally {
+      setVerifyingPayment(false);
+    }
+  };
+
+  // Handle Tolak Pembayaran (Super Admin)
+  const handleRejectPayment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedRejectPayment) return;
+    try {
+      setPaymentRejecting(true);
+      setPaymentRejectError(null);
+
+      if (paymentRejectReason.trim().length < 5) {
+        setPaymentRejectError('Alasan penolakan wajib minimal 5 karakter');
+        setPaymentRejecting(false);
+        return;
+      }
+
+      const res = await fetch(`/api/v1/payments/${selectedRejectPayment.id}/reject`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: paymentRejectReason.trim() }),
+      });
+
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(json.error?.message || json.message || 'Gagal menolak pembayaran');
+      }
+
+      setSubmitSuccess('Pembayaran berhasil ditolak.');
+      setSelectedRejectPayment(null);
+      setPaymentRejectReason('');
+      fetchOrderDetail();
+    } catch (err: unknown) {
+      setPaymentRejectError(err instanceof Error ? err.message : 'Gagal menolak pembayaran');
+    } finally {
+      setPaymentRejecting(false);
+    }
+  };
+
+  // Handle Void Pembayaran (Super Admin)
+  const handleVoidPayment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedVoidPayment) return;
+    try {
+      setPaymentVoiding(true);
+      setPaymentVoidError(null);
+
+      if (paymentVoidReason.trim().length < 5) {
+        setPaymentVoidError('Alasan pembatalan (void) wajib minimal 5 karakter');
+        setPaymentVoiding(false);
+        return;
+      }
+
+      const res = await fetch(`/api/v1/payments/${selectedVoidPayment.id}/void`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: paymentVoidReason.trim() }),
+      });
+
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(json.error?.message || json.message || 'Gagal membatalkan pembayaran');
+      }
+
+      setSubmitSuccess('Pembayaran berhasil dibatalkan (void).');
+      setSelectedVoidPayment(null);
+      setPaymentVoidReason('');
+      fetchOrderDetail();
+    } catch (err: unknown) {
+      setPaymentVoidError(err instanceof Error ? err.message : 'Gagal membatalkan pembayaran');
+    } finally {
+      setPaymentVoiding(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="w-full max-w-7xl mx-auto px-4 py-8 space-y-6">
@@ -394,6 +615,15 @@ export default function OrderDetailPage() {
   const isDraftOrRevision = order.status === 'DRAFT' || order.status === 'REVISION_REQUIRED';
   const isPendingApproval = order.status === 'PENDING_APPROVAL';
   const sisaPelunasan = Math.max(0, order.grandTotal - order.dpAmount);
+  const balanceDue = Math.max(
+    0,
+    order.grandTotal - (order.paidTotal || 0) - (order.creditTotal || 0)
+  );
+  const canRecordPayment =
+    !isDraftOrRevision &&
+    !isPendingApproval &&
+    order.status !== 'CANCELLED' &&
+    balanceDue > 0;
   const items = order.items || [];
   const confirmTarget = order.orderNo ?? order.id;
 
@@ -812,6 +1042,142 @@ export default function OrderDetailPage() {
               ))}
             </div>
           </div>
+
+          {/* Kartu Riwayat Pembayaran */}
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="p-4 sm:p-5 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <CreditCard className="w-5 h-5 text-indigo-600" />
+                <h2 className="text-base font-bold text-slate-900">
+                  Riwayat Pembayaran
+                </h2>
+                <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-700">
+                  {payments.length}
+                </span>
+              </div>
+
+              {canRecordPayment && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPayAmount(String(balanceDue));
+                    setPayError(null);
+                    setShowPaymentModal(true);
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 hover:bg-indigo-100 text-xs font-semibold transition-colors"
+                >
+                  <CreditCard className="w-3.5 h-3.5" />
+                  <span>+ Catat Pembayaran</span>
+                </button>
+              )}
+            </div>
+
+            {payments.length === 0 ? (
+              <div className="p-6 text-center text-xs text-slate-500">
+                Belum ada pembayaran yang dicatat untuk pesanan ini.
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {payments.map((p) => {
+                  const payDateFormatted = new Date(p.paidAt).toLocaleDateString('id-ID', {
+                    day: 'numeric',
+                    month: 'short',
+                    year: 'numeric',
+                  });
+
+                  return (
+                    <div
+                      key={p.id}
+                      className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-50/50 transition-colors"
+                    >
+                      <div className="space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-bold text-slate-900 text-sm">
+                            {formatRupiah(p.amount)}
+                          </span>
+                          <StatusBadge status={p.status} />
+                          <span className="text-[11px] px-2 py-0.5 rounded font-semibold bg-slate-100 text-slate-700">
+                            {p.method}
+                          </span>
+                        </div>
+
+                        <div className="text-xs text-slate-500 flex flex-wrap items-center gap-x-3 gap-y-0.5">
+                          <span>{payDateFormatted}</span>
+                          {p.reference && <span>Ref: {p.reference}</span>}
+                          {p.proofPath && (
+                            <a
+                              href={`/api/v1/files/${p.proofPath}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-indigo-600 hover:text-indigo-800 underline inline-flex items-center gap-1"
+                            >
+                              <span>Bukti Transfer</span>
+                              <ExternalLink className="w-3 h-3" />
+                            </a>
+                          )}
+                        </div>
+
+                        {p.notes && (
+                          <p className="text-xs text-slate-600 italic">
+                            {p.notes}
+                          </p>
+                        )}
+                        {p.rejectReason && (
+                          <p className="text-xs text-rose-600 font-medium">
+                            Alasan: {p.rejectReason}
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Aksi Super Admin untuk pembayaran */}
+                      {isSuperAdmin && (
+                        <div className="flex items-center gap-2 self-start sm:self-center">
+                          {p.status === 'PENDING_VERIFICATION' && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedRejectPayment(p);
+                                  setPaymentRejectReason('');
+                                  setPaymentRejectError(null);
+                                }}
+                                className="px-2.5 py-1 rounded border border-rose-300 text-rose-700 hover:bg-rose-50 text-xs font-semibold transition-colors"
+                              >
+                                Tolak
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedVerifyPayment(p);
+                                  setVerifyPaymentError(null);
+                                }}
+                                className="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold transition-colors"
+                              >
+                                Verifikasi
+                              </button>
+                            </>
+                          )}
+                          {p.status === 'VERIFIED' && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedVoidPayment(p);
+                                setPaymentVoidReason('');
+                                setPaymentVoidError(null);
+                              }}
+                              className="px-2.5 py-1 rounded border border-slate-300 text-slate-600 hover:bg-slate-100 text-xs font-semibold transition-colors"
+                            >
+                              Void
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Kolom Kanan: Ringkasan Pembayaran & Simulasi Profit */}
@@ -889,6 +1255,41 @@ export default function OrderDetailPage() {
                   </span>
                 </div>
               </div>
+
+              {/* Ringkasan Saldo Pembayaran */}
+              <div className="mt-3 pt-3 border-t border-slate-200 space-y-2 text-xs">
+                <div className="flex justify-between text-slate-700">
+                  <span>Sudah Dibayar</span>
+                  <span className="font-bold text-emerald-600">
+                    {formatRupiah(order.paidTotal || 0)}
+                  </span>
+                </div>
+                <div className="flex justify-between text-slate-700">
+                  <span>Sisa Tagihan</span>
+                  <span
+                    className={`font-bold ${
+                      balanceDue > 0 ? 'text-amber-600' : 'text-emerald-600'
+                    }`}
+                  >
+                    {formatRupiah(balanceDue)}
+                  </span>
+                </div>
+              </div>
+
+              {canRecordPayment && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPayAmount(String(balanceDue));
+                    setPayError(null);
+                    setShowPaymentModal(true);
+                  }}
+                  className="w-full mt-3 py-2 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold flex items-center justify-center gap-1.5 shadow-sm transition-colors"
+                >
+                  <CreditCard className="w-4 h-4" />
+                  <span>Catat Pembayaran Masuk</span>
+                </button>
+              )}
             </div>
           </div>
 
@@ -1373,6 +1774,351 @@ export default function OrderDetailPage() {
                 >
                   {rejecting && <Loader2 className="w-4 h-4 animate-spin" />}
                   <span>{rejecting ? 'Mengirim...' : 'Kirim Penolakan'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Catat Pembayaran */}
+      {showPaymentModal && order && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-xl shadow-xl border border-slate-200 w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-slate-50">
+              <div className="flex items-center gap-2 text-indigo-700">
+                <CreditCard className="w-5 h-5" />
+                <h3 className="font-semibold text-slate-800">
+                  Catat Pembayaran Masuk
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPaymentModal(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleRecordPayment} className="p-5 space-y-4">
+              <div className="p-3 bg-indigo-50/60 rounded-lg border border-indigo-100 text-xs text-indigo-900 flex justify-between items-center">
+                <span>Sisa Tagihan Pesanan:</span>
+                <span className="font-bold text-sm">
+                  {formatRupiah(balanceDue)}
+                </span>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Nominal Pembayaran (Rp) <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max={balanceDue}
+                  value={payAmount}
+                  onChange={(e) => setPayAmount(e.target.value)}
+                  placeholder="Contoh: 500000"
+                  className="w-full text-xs p-2.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-800 font-semibold"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Metode Pembayaran <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    value={payMethod}
+                    onChange={(e) =>
+                      setPayMethod(
+                        e.target.value as 'TRANSFER' | 'CASH' | 'CREDIT' | 'OTHER'
+                      )
+                    }
+                    className="w-full text-xs p-2.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-800"
+                  >
+                    <option value="TRANSFER">Transfer Bank</option>
+                    <option value="CASH">Tunai (Cash)</option>
+                    {isSuperAdmin && (
+                      <option value="CREDIT">Saldo Kredit Pelanggan</option>
+                    )}
+                    <option value="OTHER">Lainnya</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Tanggal Bayar <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={payDate}
+                    onChange={(e) => setPayDate(e.target.value)}
+                    className="w-full text-xs p-2.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-800"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Nomor Referensi / No. Struk (Opsional)
+                </label>
+                <input
+                  type="text"
+                  value={payRef}
+                  onChange={(e) => setPayRef(e.target.value)}
+                  placeholder="Contoh: BCA-987654321"
+                  className="w-full text-xs p-2.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-800"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Unggah Bukti Transfer (Gambar / PDF, maks 5 MB)
+                </label>
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,application/pdf"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    setPayFile(f || null);
+                  }}
+                  className="w-full text-xs text-slate-600 file:mr-2 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Catatan Pembayaran (Opsional)
+                </label>
+                <textarea
+                  value={payNotes}
+                  onChange={(e) => setPayNotes(e.target.value)}
+                  placeholder="Catatan tambahan terkait pembayaran..."
+                  rows={2}
+                  className="w-full text-xs p-2.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-800"
+                />
+              </div>
+
+              {isSuperAdmin && (
+                <div className="flex items-center gap-2 p-3 bg-emerald-50 rounded-lg border border-emerald-200">
+                  <input
+                    type="checkbox"
+                    id="autoVerifyCheck"
+                    checked={payAutoVerify}
+                    onChange={(e) => setPayAutoVerify(e.target.checked)}
+                    className="w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500"
+                  />
+                  <label
+                    htmlFor="autoVerifyCheck"
+                    className="text-xs text-emerald-900 font-semibold cursor-pointer"
+                  >
+                    Langsung Verifikasi Pembayaran (Auto-Verify)
+                  </label>
+                </div>
+              )}
+
+              {payError && (
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-700 flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>{payError}</span>
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowPaymentModal(false)}
+                  className="min-h-[44px] px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={paying}
+                  className="min-h-[44px] px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5 shadow-sm"
+                >
+                  {paying && <Loader2 className="w-4 h-4 animate-spin" />}
+                  <span>{paying ? 'Menyimpan...' : 'Simpan Pembayaran'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Konfirmasi Verifikasi Pembayaran (Super Admin) */}
+      {selectedVerifyPayment && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-xl shadow-xl border border-slate-200 w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200 p-5 space-y-4">
+            <div className="flex items-center gap-2 text-emerald-700">
+              <CheckCircle2 className="w-6 h-6 shrink-0" />
+              <h3 className="font-semibold text-slate-800 text-base">
+                Verifikasi Pembayaran
+              </h3>
+            </div>
+
+            <p className="text-xs sm:text-sm text-slate-600">
+              Apakah Anda yakin ingin memverifikasi penerimaan dana sebesar{' '}
+              <strong className="text-slate-900">
+                {formatRupiah(selectedVerifyPayment.amount)}
+              </strong>{' '}
+              ({selectedVerifyPayment.method})?
+            </p>
+
+            {verifyPaymentError && (
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-700 flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>{verifyPaymentError}</span>
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setSelectedVerifyPayment(null)}
+                disabled={verifyingPayment}
+                className="px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleVerifyPayment}
+                disabled={verifyingPayment}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition-colors shadow-sm"
+              >
+                {verifyingPayment ? 'Memverifikasi...' : 'Ya, Verifikasi'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Tolak Pembayaran (Super Admin) */}
+      {selectedRejectPayment && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-xl shadow-xl border border-slate-200 w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200 p-5 space-y-4">
+            <div className="flex items-center gap-2 text-rose-700">
+              <XCircle className="w-6 h-6 shrink-0" />
+              <h3 className="font-semibold text-slate-800 text-base">
+                Tolak Pembayaran Masuk
+              </h3>
+            </div>
+
+            <p className="text-xs sm:text-sm text-slate-600">
+              Tolak pembayaran sebesar{' '}
+              <strong className="text-slate-900">
+                {formatRupiah(selectedRejectPayment.amount)}
+              </strong>
+              . Staf sales akan menerima notifikasi beserta alasan penolakan.
+            </p>
+
+            <form onSubmit={handleRejectPayment} className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Alasan Penolakan <span className="text-rose-500">*</span>
+                </label>
+                <textarea
+                  value={paymentRejectReason}
+                  onChange={(e) => setPaymentRejectReason(e.target.value)}
+                  placeholder="Contoh: Bukti transfer tidak valid atau dana tidak ditemukan..."
+                  rows={3}
+                  className="w-full text-xs p-2.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-rose-500 text-slate-800"
+                  required
+                />
+                <span className="text-[11px] text-slate-400">Minimal 5 karakter</span>
+              </div>
+
+              {paymentRejectError && (
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-700 flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>{paymentRejectError}</span>
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setSelectedRejectPayment(null)}
+                  disabled={paymentRejecting}
+                  className="px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={paymentRejecting || paymentRejectReason.trim().length < 5}
+                  className="px-4 py-2 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition-colors shadow-sm"
+                >
+                  {paymentRejecting ? 'Menolak...' : 'Tolak Pembayaran'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Void Pembayaran (Super Admin) */}
+      {selectedVoidPayment && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-xl shadow-xl border border-slate-200 w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200 p-5 space-y-4">
+            <div className="flex items-center gap-2 text-slate-700">
+              <RotateCcw className="w-6 h-6 shrink-0 text-amber-600" />
+              <h3 className="font-semibold text-slate-800 text-base">
+                Batalkan (Void) Pembayaran Terverifikasi
+              </h3>
+            </div>
+
+            <p className="text-xs sm:text-sm text-slate-600">
+              Pembatalan pembayaran sebesar{' '}
+              <strong className="text-slate-900">
+                {formatRupiah(selectedVoidPayment.amount)}
+              </strong>{' '}
+              akan mengurangi total bayar pesanan dan mengembalikan status pesanan jika diperlukan.
+            </p>
+
+            <form onSubmit={handleVoidPayment} className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Alasan Pembatalan (Void) <span className="text-rose-500">*</span>
+                </label>
+                <textarea
+                  value={paymentVoidReason}
+                  onChange={(e) => setPaymentVoidReason(e.target.value)}
+                  placeholder="Contoh: Dana ditarik kembali / chargeback oleh bank..."
+                  rows={3}
+                  className="w-full text-xs p-2.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-500 text-slate-800"
+                  required
+                />
+                <span className="text-[11px] text-slate-400">Minimal 5 karakter</span>
+              </div>
+
+              {paymentVoidError && (
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-700 flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>{paymentVoidError}</span>
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setSelectedVoidPayment(null)}
+                  disabled={paymentVoiding}
+                  className="px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={paymentVoiding || paymentVoidReason.trim().length < 5}
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-900 disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition-colors shadow-sm"
+                >
+                  {paymentVoiding ? 'Membatalkan...' : 'Void Pembayaran'}
                 </button>
               </div>
             </form>
