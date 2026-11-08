@@ -87,6 +87,18 @@ export function StatusBadge({ status, className = '' }: StatusBadgeProps) {
         label = 'Lost';
         colorClasses = 'bg-rose-50 text-rose-700 border-rose-200';
         break;
+      case 'PENDING':
+        label = 'Menunggu';
+        colorClasses = 'bg-amber-50 text-amber-700 border-amber-200';
+        break;
+      case 'OVERDUE':
+        label = 'Terlambat';
+        colorClasses = 'bg-rose-50 text-rose-700 border-rose-200';
+        break;
+      case 'DONE':
+        label = 'Selesai';
+        colorClasses = 'bg-emerald-50 text-emerald-700 border-emerald-200';
+        break;
       default:
         label = status;
         colorClasses = 'bg-slate-50 text-slate-700 border-slate-200';

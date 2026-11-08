@@ -8,6 +8,12 @@ dan proyek ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Linimasa Pelanggan `GET /api/v1/customers/:id/timeline` yang menggabungkan interaksi CRM (`CrmInteraction`) dan riwayat order (`Order`) secara kronologis menurun terurut tanggal (T2.2 & Seksi 10.3).
+- Manajemen Interaksi CRM `GET/POST /api/v1/customers/:id/interactions` dengan audit log `CRM_INTERACTION_CREATE` dan otomatisasi pembuatan `CrmTask` secara atomik di dalam database transaction saat `nextFollowUpAt` diisi (T2.2).
+- Manajemen Tugas Follow-up CRM `GET/POST /api/v1/crm/tasks` dan `GET/PATCH/DELETE /api/v1/crm/tasks/:id` dengan filter status `PENDING`, `OVERDUE`, `DONE`, serta fungsionalitas centang selesai instan (`done: true` mengisi `doneAt`, `done: false` mengosongkan kembali) (T2.2).
+- Isolasi Hak Akses Sales pada seluruh operasi CRM: penegakan aturan 17.4 d & 16.2 dengan pengembalian status 404 `NOT_FOUND` saat sales mencoba mengakses timeline, mencatat interaksi, atau memodifikasi tugas customer milik sales lain untuk mencegah enumerasi resource.
+- Halaman UI Detail Pelanggan `/customers/[id]` dengan 5 tab (Ringkasan Kontak & Alamat, Timeline CRM, Tugas Follow-up, Order, Harga & Promo), selektor cepat tahap pipeline pelanggan (`LEAD`, `PROSPECT`, `DEAL`, `REPEAT`, `LOST`), modal catat interaksi dengan bantuan follow-up otomatis, modal tambah tugas, tautan instan telepon & WhatsApp, responsif mobile 360 px, dan 3 keadaan wajib UI (Skeleton, EmptyState, ErrorState) (T2.2).
+- Rangkaian pengujian integrasi CRM `tests/integration/crm.test.ts` (10 tes) mencakup verifikasi linimasa terurut menurun, konversi BigInt nilai pesanan ke integer Rupiah aman, otomatisasi tugas follow-up, filter status tugas, isolasi sales & multi-usaha, dan uji kebocoran kunci rahasia (`assertNoSecretKeys`) (T2.2).
 - Master Customer CRUD (`/api/v1/customers` dan `/api/v1/customers/:id`) dengan kode kapital unik per unit usaha dan pencatatan audit log `CUSTOMER_CREATE`, `CUSTOMER_UPDATE`, `CUSTOMER_DELETE` (T2.1 & Seksi 10.3).
 - Helper isolasi hak akses pelanggan `customerScope` (`src/lib/services/scopes.ts`) menegakkan isolasi multi-usaha dan isolasi sales: staf sales hanya melihat dan mengelola customer miliknya sendiri (`assignedSalesId = ctx.user.id`), sedangkan Super Admin melihat seluruh customer di unit usaha aktif (T2.1 & Seksi 16.2).
 - Penugasan otomatis sales pada pendaftaran pelanggan baru: saat Sales membuat pelanggan, sistem secara otomatis mengunci `assignedSalesId = ctx.user.id` tanpa dapat menugaskan ke staf lain (T2.1 & Seksi 10.3).

@@ -22,3 +22,4 @@ export function customerScope(
     ...(ctx.role === 'SALES' ? { assignedSalesId: ctx.user.id } : {}),
   };
 }
+

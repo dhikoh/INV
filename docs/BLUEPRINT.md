@@ -148,6 +148,9 @@ Daftar tabel inti:
    - Order yang sudah disetujui tidak dapat disunting kembali (wajib alur VOID atau Revisi).
    - Penomoran dokumen sequential per customer tanpa lompatan: `KODE/INV/DD/MM/YYYY/NNNN-[DP|LNS]`.
    - Stok dipotong saat pengiriman (atau di-reserve saat order disetujui, sesuai setting usaha).
+5. **Otomatisasi CRM & Isolasi Tugas Follow-up (T2.2)**:
+   - Pencatatan interaksi CRM (`POST /customers/:id/interactions`) dengan kolom tanggal follow-up (`nextFollowUpAt`) secara atomik dalam database transaction langsung menerbitkan entri tugas baru di tabel `CrmTask` untuk sales penanggung jawab.
+   - Staf sales hanya mengelola tugas dan linimasa pelanggannya sendiri (`assignedToId = ctx.user.id`). Upaya membuka atau memodifikasi data milik sales lain selalu menghasilkan 404 `NOT_FOUND` guna mencegah penerobosan informasi pelanggan.
 
 ---
 
@@ -223,6 +226,10 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
 | `GET/POST` | `/api/v1/customers`            | Super Admin, Sales | CRUD pelanggan (Sales: customerScope & self-assign) |
 | `GET/PATCH/DELETE` | `/api/v1/customers/:id` | Super Admin, Sales | Detail, ubah (kunci kode), soft delete (cek order) |
 | `POST`     | `/api/v1/customers/:id/reassign` | Super Admin      | Alihkan pelanggan ke sales lain (+ opsi open orders) |
+| `GET`      | `/api/v1/customers/:id/timeline` | Super Admin, Sales | Linimasa kronologis gabungan interaksi CRM dan order |
+| `GET/POST` | `/api/v1/customers/:id/interactions` | Super Admin, Sales | Catat interaksi CRM; otomatis buat CrmTask jika follow-up diisi |
+| `GET/POST` | `/api/v1/crm/tasks`            | Super Admin, Sales | Daftar tugas CRM (filter status & isolasi sales)     |
+| `GET/PATCH/DELETE` | `/api/v1/crm/tasks/:id` | Super Admin, Sales | Detail, centang selesai (doneAt), tenggat, hapus tugas |
 | `POST`     | `/api/v1/orders/preview`       | Super Admin, Sales | Pratinjau hitungan total & floor              |
 | `GET/POST` | `/api/v1/orders`               | Super Admin, Sales | Pencatatan & daftar order                     |
 | `POST`     | `/api/v1/orders/:id/submit`    | Sales              | Mengajukan order ke Super Admin               |
@@ -245,6 +252,7 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
 | `/vendors`             | Super Admin        | Manajemen vendor & rekanan logistik (kartu mobile 360 px)        |
 | `/updates`             | Super Admin, Sales | Catatan pembaruan sistem dengan render markdown aman anti-XSS    |
 | `/customers`           | Super Admin, Sales | Daftar pelanggan responsif (kartu mobile 360 px), filter stage/sales |
+| `/customers/:id`       | Super Admin, Sales | Detail pelanggan (5 tab: Ringkasan, Timeline CRM, Tugas Follow-up, Order, Harga/Promo), ubah cepat pipeline |
 
 ---
 

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import Link from 'next/link';
 import {
   Users,
   Plus,
@@ -15,6 +16,7 @@ import {
   ShoppingCart,
   Send,
   Lock,
+  Clock,
 } from 'lucide-react';
 import { Skeleton, EmptyState, ErrorState } from '@/components/ui/States';
 import { StatusBadge } from '@/components/ui/StatusBadge';
@@ -509,9 +511,12 @@ export default function CustomersPage() {
                           {c.code}
                         </span>
                         <div>
-                          <div className="font-bold text-slate-900">
+                          <Link
+                            href={`/customers/${c.id}`}
+                            className="font-bold text-slate-900 hover:text-indigo-600 transition-colors inline-block"
+                          >
                             {c.name}
-                          </div>
+                          </Link>
                           {c.tags && c.tags.length > 0 && (
                             <div className="flex flex-wrap gap-1 mt-0.5">
                               {c.tags.map((t, idx) => (
@@ -586,6 +591,14 @@ export default function CustomersPage() {
                           </button>
                         )}
 
+                        <Link
+                          href={`/customers/${c.id}`}
+                          title="Detail & Linimasa CRM"
+                          className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-slate-100 min-h-[36px] min-w-[36px] flex items-center justify-center transition-colors"
+                        >
+                          <Clock className="w-4 h-4" />
+                        </Link>
+
                         <button
                           type="button"
                           onClick={() => handleOpenEditModal(c)}
@@ -627,7 +640,12 @@ export default function CustomersPage() {
                       <StatusBadge status={c.pipelineStage} />
                     </div>
                     <h3 className="font-bold text-slate-900 text-base leading-snug">
-                      {c.name}
+                      <Link
+                        href={`/customers/${c.id}`}
+                        className="hover:text-indigo-600 transition-colors"
+                      >
+                        {c.name}
+                      </Link>
                     </h3>
                   </div>
 
@@ -693,6 +711,14 @@ export default function CustomersPage() {
                         <Send className="w-4 h-4" />
                       </button>
                     )}
+
+                    <Link
+                      href={`/customers/${c.id}`}
+                      className="p-2 bg-indigo-50 text-indigo-700 rounded-lg text-xs font-semibold min-h-[44px] min-w-[44px] flex items-center justify-center hover:bg-indigo-100"
+                      title="Linimasa & CRM"
+                    >
+                      <Clock className="w-4 h-4" />
+                    </Link>
 
                     <button
                       type="button"
@@ -1102,3 +1128,4 @@ export default function CustomersPage() {
     </div>
   );
 }
+
