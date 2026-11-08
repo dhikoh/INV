@@ -5,7 +5,7 @@ import { calcLine, calcOrderTotals } from '@/lib/domain/order';
 import { baseFloor, lineFloor, isBelowFloor, isPromoActive, PromoRule } from '@/lib/domain/pricing';
 import { calcProfit } from '@/lib/domain/profit';
 import { formatRupiah } from '@/lib/domain/money';
-import { OrderCreateSchema } from '@/lib/validation/order';
+import { OrderCreateSchema, OrderRequestFinalInput } from '@/lib/validation/order';
 import { prisma } from '@/lib/db';
 import { lockOrder, assertStatus } from './orderGuard';
 import { z } from 'zod';
@@ -791,8 +791,17 @@ export async function withdrawOrder(
     }
   }
 
-  // Hanya boleh withdraw saat status PENDING_APPROVAL
-  assertStatus(order.status, [OrderStatus.PENDING_APPROVAL], 'withdraw');
+  // Boleh withdraw saat status PENDING_APPROVAL atau FINAL_PENDING_APPROVAL
+  assertStatus(
+    order.status,
+    [OrderStatus.PENDING_APPROVAL, OrderStatus.FINAL_PENDING_APPROVAL],
+    'withdraw'
+  );
+
+  const nextStatus =
+    order.status === OrderStatus.FINAL_PENDING_APPROVAL
+      ? OrderStatus.IN_PROCESS
+      : OrderStatus.DRAFT;
 
   // Cari invoice yang masih PENDING_APPROVAL
   const pendingInvoice = await tx.invoice.findFirst({
@@ -818,11 +827,11 @@ export async function withdrawOrder(
     data: { status: InvoiceStatus.WITHDRAWN },
   });
 
-  // Order kembali ke DRAFT
+  // Order kembali ke DRAFT atau IN_PROCESS
   await tx.order.updateMany({
     where: { id: order.id, businessId },
     data: {
-      status: OrderStatus.DRAFT,
+      status: nextStatus,
       rev: { increment: 1 },
     },
   });
@@ -836,7 +845,7 @@ export async function withdrawOrder(
       action: 'ORDER_WITHDRAW',
       entityType: 'Order',
       entityId: order.id,
-      summary: `Pengajuan order #${order.orderNo || order.id.slice(-6)} ditarik kembali ke DRAFT`,
+      summary: `Pengajuan order #${order.orderNo || order.id.slice(-6)} ditarik kembali ke ${nextStatus}`,
     },
   });
 
@@ -851,5 +860,235 @@ export async function withdrawOrder(
   return {
     order: formatOrderDto(updatedOrder, ctx.user.role),
     withdrawnInvoiceId: pendingInvoice.id,
+  };
+}
+
+/**
+ * Mengajukan faktur pelunasan pesanan (Request Final Invoice) (Seksi 8.2 & Seksi 19.5 T3.4).
+ *
+ * Efek samping:
+ * 1. Otorisasi Sales pemilik order atau Super Admin.
+ * 2. Status order harus IN_PROCESS dan uang muka (DP) telah lunas.
+ * 3. Bila menyertakan shippingCharge baru:
+ *    - Jika ongkir berubah, shippingReason wajib minimal 5 karakter (422 SHIPPING_REASON_REQUIRED).
+ *    - Hitung ulang total pesanan dengan calcOrderTotals (ppnAmount & grandTotal baru).
+ *    - Nilai dpAmount yang telah dibayar tidak berubah.
+ * 4. Buat invoice baru bertipe FINAL berstatus PENDING_APPROVAL sebesar (grandTotal - dpAmount).
+ * 5. Versi faktur: version = 1 + jumlah invoice FINAL yang REJECTED, VOID, atau WITHDRAWN.
+ * 6. Transisi status order menjadi FINAL_PENDING_APPROVAL.
+ * 7. Catat AuditLog (ORDER_REQUEST_FINAL).
+ * 8. Notifikasi ke seluruh Super Admin aktif.
+ */
+export async function requestFinalOrder(
+  tx: TxClient,
+  ctx: Ctx,
+  orderId: string,
+  options?: OrderRequestFinalInput
+) {
+  const businessId = ctx.businessId ?? ctx.user.businessId;
+  if (!businessId) {
+    throw new DomainError('BUSINESS_REQUIRED', 'Unit usaha aktif diperlukan', 400);
+  }
+
+  await lockOrder(tx, orderId, businessId);
+
+  const order = await tx.order.findFirst({
+    where: { id: orderId, businessId, deletedAt: null },
+    include: {
+      items: true,
+      customer: true,
+    },
+  });
+
+  if (!order) {
+    throw new DomainError('ORDER_NOT_FOUND', 'Pesanan tidak ditemukan', 404);
+  }
+
+  if (ctx.user.role === Role.SALES && order.salesId !== ctx.user.id) {
+    throw new DomainError('FORBIDDEN', 'Anda tidak memiliki hak akses atas pesanan ini', 403);
+  }
+
+  if (order.status !== OrderStatus.IN_PROCESS) {
+    throw new DomainError(
+      'INVALID_STATE',
+      `Pengajuan pelunasan hanya dapat dilakukan saat pesanan berstatus IN_PROCESS (status saat ini: ${order.status})`,
+      409
+    );
+  }
+
+  // Cek apakah invoice DP lunas
+  const dpInvoice = await tx.invoice.findFirst({
+    where: {
+      orderId: order.id,
+      businessId,
+      type: InvoiceType.DP,
+      status: InvoiceStatus.APPROVED,
+      deletedAt: null,
+    },
+  });
+
+  if (dpInvoice && dpInvoice.paidAmount < dpInvoice.amount) {
+    throw new DomainError('INVALID_STATE', 'Uang muka (DP) belum lunas', 409);
+  }
+
+  // Cek apakah sudah ada invoice PENDING_APPROVAL
+  const pendingInvoice = await tx.invoice.findFirst({
+    where: {
+      orderId: order.id,
+      businessId,
+      status: InvoiceStatus.PENDING_APPROVAL,
+      deletedAt: null,
+    },
+  });
+
+  if (pendingInvoice) {
+    throw new DomainError(
+      'INVOICE_ALREADY_PENDING',
+      'Masih ada faktur yang sedang menunggu persetujuan',
+      409
+    );
+  }
+
+  let finalGrandTotal = order.grandTotal;
+  let finalShippingCharge = order.shippingCharge;
+  let finalShippingReason: string | null = null;
+  let finalPpnAmount = order.ppnAmount;
+
+  // Tangani perubahan ongkir bila disediakan
+  if (
+    options?.shippingCharge !== undefined &&
+    BigInt(options.shippingCharge) !== order.shippingCharge
+  ) {
+    const shippingReason = options.shippingReason?.trim();
+    if (!shippingReason || shippingReason.length < 5) {
+      throw new DomainError(
+        'SHIPPING_REASON_REQUIRED',
+        'Alasan perubahan ongkir wajib diisi minimal 5 karakter',
+        422
+      );
+    }
+
+    finalShippingCharge = BigInt(options.shippingCharge);
+    finalShippingReason = shippingReason;
+
+    // Hitung ulang total order dengan shippingCharge baru
+    const linesForCalc = order.items.map((i) => ({
+      lineSubtotal: Number(i.lineSubtotal),
+      lineDiscount: Number(i.lineDiscount),
+      lineNet: Number(i.lineNet),
+    }));
+
+    const newTotals = calcOrderTotals({
+      lines: linesForCalc,
+      shippingCharge: Number(finalShippingCharge),
+      ppnEnabled: order.ppnEnabled,
+      ppnRateBps: order.ppnRateBps,
+      dpBps: order.dpBps,
+    });
+
+    finalPpnAmount = BigInt(newTotals.ppnAmount);
+    finalGrandTotal = BigInt(newTotals.grandTotal);
+
+    await tx.order.updateMany({
+      where: { id: order.id, businessId },
+      data: {
+        shippingCharge: finalShippingCharge,
+        ppnAmount: finalPpnAmount,
+        grandTotal: finalGrandTotal,
+        rev: { increment: 1 },
+      },
+    });
+  }
+
+  // Nilai invoice pelunasan: grandTotal - dpAmount
+  const invoiceAmount = finalGrandTotal - order.dpAmount;
+  if (invoiceAmount <= BigInt(0)) {
+    throw new DomainError('INVALID_STATE', 'Jumlah pelunasan tidak valid (sudah lunas oleh DP)', 409);
+  }
+
+  // Tentukan versi invoice FINAL
+  const prevFinalCount = await tx.invoice.count({
+    where: {
+      orderId: order.id,
+      businessId,
+      type: InvoiceType.FINAL,
+      status: {
+        in: [InvoiceStatus.REJECTED, InvoiceStatus.VOID, InvoiceStatus.WITHDRAWN],
+      },
+    },
+  });
+  const version = prevFinalCount + 1;
+
+  // Buat Invoice FINAL PENDING_APPROVAL
+  const createdInvoice = await tx.invoice.create({
+    data: {
+      businessId,
+      orderId: order.id,
+      customerId: order.customerId,
+      type: InvoiceType.FINAL,
+      status: InvoiceStatus.PENDING_APPROVAL,
+      version,
+      amount: invoiceAmount,
+      requestedById: ctx.user.id,
+      requestedAt: new Date(),
+    },
+  });
+
+  // Update status order menjadi FINAL_PENDING_APPROVAL
+  await tx.order.updateMany({
+    where: { id: order.id, businessId },
+    data: {
+      status: OrderStatus.FINAL_PENDING_APPROVAL,
+      rev: { increment: 1 },
+    },
+  });
+
+  // Audit log
+  await tx.auditLog.create({
+    data: {
+      businessId,
+      actorId: ctx.user.id,
+      actorRole: ctx.user.role,
+      action: 'ORDER_REQUEST_FINAL',
+      entityType: 'Order',
+      entityId: order.id,
+      summary: `Pengajuan faktur pelunasan untuk pesanan ${order.orderNo || order.id} sebesar ${formatRupiah(Number(invoiceAmount))}`,
+      reason: finalShippingReason ?? undefined,
+    },
+  });
+
+  // Notifikasi ke seluruh Super Admin aktif
+  const superAdmins = await tx.user.findMany({
+    where: { role: Role.SUPERADMIN, isActive: true },
+    select: { id: true },
+  });
+
+  for (const sa of superAdmins) {
+    await tx.notification.create({
+      data: {
+        userId: sa.id,
+        businessId,
+        type: 'APPROVAL_REQUEST',
+        title: 'Pengajuan Pelunasan Menunggu Persetujuan',
+        body: `Pesanan ${order.orderNo || order.id} mengajukan faktur pelunasan sebesar ${formatRupiah(Number(invoiceAmount))}`,
+        linkPath: `/approvals`,
+        dedupeKey: `req_final_${createdInvoice.id}_${sa.id}`,
+      },
+    });
+  }
+
+  const [refreshedOrder, refreshedInvoice] = await Promise.all([
+    tx.order.findFirstOrThrow({
+      where: { id: order.id, businessId },
+      include: { customer: true, items: true },
+    }),
+    tx.invoice.findFirstOrThrow({
+      where: { id: createdInvoice.id, businessId },
+    }),
+  ]);
+
+  return {
+    order: formatOrderDto(refreshedOrder, ctx.user.role),
+    invoice: formatInvoiceDto(refreshedInvoice),
   };
 }

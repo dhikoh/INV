@@ -118,6 +118,7 @@ interface OrderDetailDto {
   updatedAt: string;
   items?: OrderItemDto[];
   profitSimulation?: ProfitSimulationDto;
+  invoices?: InvoiceItemDto[];
   pendingInvoice?: {
     id: string;
     type: 'DP' | 'FINAL';
@@ -126,6 +127,38 @@ interface OrderDetailDto {
     amount: number;
     number?: string | null;
   } | null;
+}
+
+interface InvoiceItemDto {
+  id: string;
+  type: 'DP' | 'FINAL';
+  status: string;
+  version: number;
+  number?: string | null;
+  amount: number;
+  paidAmount: number;
+  dueDate?: string | null;
+  notes?: string | null;
+  rejectReason?: string | null;
+}
+
+interface ShipmentDto {
+  id: string;
+  orderId: string;
+  method: 'OWN_FLEET' | 'BUYER_PICKUP' | 'EXPEDITION';
+  transporterId: string | null;
+  trackingNo: string | null;
+  driverName: string | null;
+  vehiclePlate: string | null;
+  receiverName: string | null;
+  status: 'PREPARING' | 'SHIPPED' | 'DELIVERED';
+  deliveryNo: string | null;
+  actualCost?: number;
+  shippedAt: string | null;
+  deliveredAt: string | null;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export default function OrderDetailPage() {
@@ -203,16 +236,54 @@ export default function OrderDetailPage() {
   const [paymentVoiding, setPaymentVoiding] = useState(false);
   const [paymentVoidError, setPaymentVoidError] = useState<string | null>(null);
 
+  // Pengajuan Faktur Pelunasan (Request Final)
+  const [showRequestFinalModal, setShowRequestFinalModal] = useState(false);
+  const [finalShippingCharge, setFinalShippingCharge] = useState('');
+  const [finalShippingReason, setFinalShippingReason] = useState('');
+  const [requestingFinal, setRequestingFinal] = useState(false);
+  const [requestFinalError, setRequestFinalError] = useState<string | null>(null);
+
+  // Pembatalan Faktur Resmi (Void Invoice - Super Admin)
+  const [selectedVoidInvoice, setSelectedVoidInvoice] = useState<InvoiceItemDto | null>(null);
+  const [voidInvoiceReason, setVoidInvoiceReason] = useState('');
+  const [voidingInvoice, setVoidingInvoice] = useState(false);
+  const [voidInvoiceError, setVoidInvoiceError] = useState<string | null>(null);
+
+  // Data Pengiriman & Surat Jalan (Shipment)
+  const [shipment, setShipment] = useState<ShipmentDto | null>(null);
+  const [showShipmentModal, setShowShipmentModal] = useState(false);
+  const [shipMethod, setShipMethod] = useState<'OWN_FLEET' | 'BUYER_PICKUP' | 'EXPEDITION'>('OWN_FLEET');
+  const [shipTrackingNo, setShipTrackingNo] = useState('');
+  const [shipDriverName, setShipDriverName] = useState('');
+  const [shipVehiclePlate, setShipVehiclePlate] = useState('');
+  const [shipReceiverName, setShipReceiverName] = useState('');
+  const [shipNotes, setShipNotes] = useState('');
+  const [shipActualCost, setShipActualCost] = useState('');
+  const [savingShipment, setSavingShipment] = useState(false);
+  const [shipmentError, setShipmentError] = useState<string | null>(null);
+
+  // Modal Kirim Pesanan (Ship)
+  const [showShipModal, setShowShipModal] = useState(false);
+  const [shippingOrder, setShippingOrder] = useState(false);
+  const [shipOrderError, setShipOrderError] = useState<string | null>(null);
+
+  // Modal Penerimaan Pesanan (Deliver)
+  const [showDeliverModal, setShowDeliverModal] = useState(false);
+  const [deliverReceiverName, setDeliverReceiverName] = useState('');
+  const [deliveringOrder, setDeliveringOrder] = useState(false);
+  const [deliverOrderError, setDeliverOrderError] = useState<string | null>(null);
+
   const fetchOrderDetail = useCallback(async () => {
     if (!id) return;
     try {
       setLoading(true);
       setError(null);
 
-      const [orderRes, meRes, paymentsRes] = await Promise.all([
+      const [orderRes, meRes, paymentsRes, shipmentRes] = await Promise.all([
         fetch(`/api/v1/orders/${id}`),
         fetch('/api/v1/auth/me'),
         fetch(`/api/v1/orders/${id}/payments`),
+        fetch(`/api/v1/orders/${id}/shipment`),
       ]);
 
       if (!orderRes.ok) {
@@ -234,6 +305,11 @@ export default function OrderDetailPage() {
       if (paymentsRes.ok) {
         const payJson = await paymentsRes.json();
         setPayments(payJson.data || []);
+      }
+
+      if (shipmentRes.ok) {
+        const shipJson = await shipmentRes.json();
+        setShipment(shipJson.data || null);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Terjadi kesalahan sistem.');
@@ -575,6 +651,183 @@ export default function OrderDetailPage() {
     }
   };
 
+  // Handle Pengajuan Faktur Pelunasan (Request Final)
+  const handleRequestFinal = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!order) return;
+    try {
+      setRequestingFinal(true);
+      setRequestFinalError(null);
+
+      const parsedCharge = finalShippingCharge !== '' ? Number(finalShippingCharge) : order.shippingCharge;
+      if (parsedCharge !== order.shippingCharge && finalShippingReason.trim().length < 5) {
+        setRequestFinalError('Alasan perubahan ongkos kirim wajib minimal 5 karakter');
+        setRequestingFinal(false);
+        return;
+      }
+
+      const body: Record<string, unknown> = {};
+      if (parsedCharge !== order.shippingCharge) {
+        body.shippingCharge = parsedCharge;
+        body.shippingReason = finalShippingReason.trim();
+      }
+
+      const res = await fetch(`/api/v1/orders/${order.id}/request-final`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(json.error?.message || json.message || 'Gagal mengajukan faktur pelunasan');
+      }
+
+      setSubmitSuccess('Pengajuan faktur pelunasan berhasil dikirim untuk persetujuan.');
+      setShowRequestFinalModal(false);
+      fetchOrderDetail();
+    } catch (err: unknown) {
+      setRequestFinalError(err instanceof Error ? err.message : 'Gagal mengajukan faktur pelunasan');
+    } finally {
+      setRequestingFinal(false);
+    }
+  };
+
+  // Handle Pembatalan Faktur Resmi (Void Invoice - Super Admin)
+  const handleVoidInvoice = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedVoidInvoice) return;
+    try {
+      setVoidingInvoice(true);
+      setVoidInvoiceError(null);
+
+      if (voidInvoiceReason.trim().length < 5) {
+        setVoidInvoiceError('Alasan pembatalan (void) wajib minimal 5 karakter');
+        setVoidingInvoice(false);
+        return;
+      }
+
+      const res = await fetch(`/api/v1/invoices/${selectedVoidInvoice.id}/void`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: voidInvoiceReason.trim() }),
+      });
+
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(json.error?.message || json.message || 'Gagal membatalkan faktur');
+      }
+
+      setSubmitSuccess('Faktur berhasil dibatalkan (VOID). Status pesanan telah diperbarui.');
+      setSelectedVoidInvoice(null);
+      setVoidInvoiceReason('');
+      fetchOrderDetail();
+    } catch (err: unknown) {
+      setVoidInvoiceError(err instanceof Error ? err.message : 'Gagal membatalkan faktur');
+    } finally {
+      setVoidingInvoice(false);
+    }
+  };
+
+  // Handle Simpan Konfigurasi Logistik Pengiriman (Upsert Shipment)
+  const handleSaveShipment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!order) return;
+    try {
+      setSavingShipment(true);
+      setShipmentError(null);
+
+      const body: Record<string, unknown> = {
+        method: shipMethod,
+        trackingNo: shipTrackingNo.trim() || null,
+        driverName: shipDriverName.trim() || null,
+        vehiclePlate: shipVehiclePlate.trim() || null,
+        receiverName: shipReceiverName.trim() || null,
+        notes: shipNotes.trim() || null,
+      };
+
+      if (isSuperAdmin && shipActualCost !== '') {
+        body.actualCost = Number(shipActualCost);
+      }
+
+      const res = await fetch(`/api/v1/orders/${order.id}/shipment`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(json.error?.message || json.message || 'Gagal menyimpan data pengiriman');
+      }
+
+      setSubmitSuccess('Data logistik pengiriman berhasil disimpan.');
+      setShowShipmentModal(false);
+      fetchOrderDetail();
+    } catch (err: unknown) {
+      setShipmentError(err instanceof Error ? err.message : 'Gagal menyimpan pengiriman');
+    } finally {
+      setSavingShipment(false);
+    }
+  };
+
+  // Handle Eksekusi Kirim Barang (Ship Order)
+  const handleShipOrder = async () => {
+    if (!order) return;
+    try {
+      setShippingOrder(true);
+      setShipOrderError(null);
+
+      const res = await fetch(`/api/v1/orders/${order.id}/shipment/ship`, {
+        method: 'POST',
+      });
+
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(json.error?.message || json.message || 'Gagal mengirim pesanan');
+      }
+
+      setSubmitSuccess('Pesanan berhasil ditandai telah dikirim. Surat jalan resmi diterbitkan.');
+      setShowShipModal(false);
+      fetchOrderDetail();
+    } catch (err: unknown) {
+      setShipOrderError(err instanceof Error ? err.message : 'Gagal mengirim pesanan');
+    } finally {
+      setShippingOrder(false);
+    }
+  };
+
+  // Handle Konfirmasi Barang Sampai (Deliver Order)
+  const handleDeliverOrder = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!order) return;
+    try {
+      setDeliveringOrder(true);
+      setDeliverOrderError(null);
+
+      const res = await fetch(`/api/v1/orders/${order.id}/shipment/deliver`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          receiverName: deliverReceiverName.trim() || undefined,
+        }),
+      });
+
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(json.error?.message || json.message || 'Gagal menandai penerimaan');
+      }
+
+      setSubmitSuccess('Pesanan berhasil ditandai telah sampai di tujuan.');
+      setShowDeliverModal(false);
+      fetchOrderDetail();
+    } catch (err: unknown) {
+      setDeliverOrderError(err instanceof Error ? err.message : 'Gagal menandai penerimaan');
+    } finally {
+      setDeliveringOrder(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="w-full max-w-7xl mx-auto px-4 py-8 space-y-6">
@@ -613,7 +866,7 @@ export default function OrderDetailPage() {
 
   const isSuperAdmin = currentUser?.role === 'SUPERADMIN';
   const isDraftOrRevision = order.status === 'DRAFT' || order.status === 'REVISION_REQUIRED';
-  const isPendingApproval = order.status === 'PENDING_APPROVAL';
+  const isPendingApproval = order.status === 'PENDING_APPROVAL' || order.status === 'FINAL_PENDING_APPROVAL';
   const sisaPelunasan = Math.max(0, order.grandTotal - order.dpAmount);
   const balanceDue = Math.max(
     0,
@@ -624,6 +877,13 @@ export default function OrderDetailPage() {
     !isPendingApproval &&
     order.status !== 'CANCELLED' &&
     balanceDue > 0;
+  const canRequestFinal =
+    order.status === 'IN_PROCESS' &&
+    (order.paidTotal || 0) >= order.dpAmount &&
+    !order.pendingInvoice;
+  const canManageShipment = ['IN_PROCESS', 'FINAL_PENDING_APPROVAL', 'AWAITING_FINAL_PAYMENT'].includes(order.status);
+  const canShip = order.status === 'AWAITING_FINAL_PAYMENT' && (!shipment || shipment.status === 'PREPARING');
+  const canDeliver = shipment?.status === 'SHIPPED';
   const items = order.items || [];
   const confirmTarget = order.orderNo ?? order.id;
 
@@ -736,6 +996,53 @@ export default function OrderDetailPage() {
             >
               <XCircle className="w-4 h-4" />
               <span>Tolak / Revisi</span>
+            </button>
+          )}
+
+          {/* Tombol Ajukan Pelunasan (Request Final) */}
+          {canRequestFinal && (
+            <button
+              type="button"
+              onClick={() => {
+                setFinalShippingCharge(String(order.shippingCharge));
+                setFinalShippingReason('');
+                setRequestFinalError(null);
+                setShowRequestFinalModal(true);
+              }}
+              className="inline-flex items-center justify-center gap-1.5 min-h-[44px] px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg text-sm transition-colors shadow-sm"
+            >
+              <FileText className="w-4 h-4" />
+              <span>Ajukan Pelunasan</span>
+            </button>
+          )}
+
+          {/* Tombol Pengiriman di Header */}
+          {canShip && (
+            <button
+              type="button"
+              onClick={() => {
+                setShipOrderError(null);
+                setShowShipModal(true);
+              }}
+              className="inline-flex items-center justify-center gap-1.5 min-h-[44px] px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg text-sm transition-colors shadow-sm"
+            >
+              <Truck className="w-4 h-4" />
+              <span>Kirim Barang</span>
+            </button>
+          )}
+
+          {canDeliver && (
+            <button
+              type="button"
+              onClick={() => {
+                setDeliverOrderError(null);
+                setDeliverReceiverName(shipment?.receiverName || '');
+                setShowDeliverModal(true);
+              }}
+              className="inline-flex items-center justify-center gap-1.5 min-h-[44px] px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg text-sm transition-colors shadow-sm"
+            >
+              <CheckCircle2 className="w-4 h-4" />
+              <span>Tandai Diterima</span>
             </button>
           )}
 
@@ -1177,6 +1484,260 @@ export default function OrderDetailPage() {
                 })}
               </div>
             )}
+          </div>
+
+          {/* Kartu Informasi Pengiriman & Surat Jalan */}
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="p-4 sm:p-5 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <Truck className="w-5 h-5 text-indigo-600" />
+                <h2 className="text-base font-bold text-slate-900">
+                  Informasi Pengiriman & Surat Jalan
+                </h2>
+                {shipment && <StatusBadge status={shipment.status} />}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                {canManageShipment && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShipMethod(shipment?.method || 'OWN_FLEET');
+                      setShipTrackingNo(shipment?.trackingNo || '');
+                      setShipDriverName(shipment?.driverName || '');
+                      setShipVehiclePlate(shipment?.vehiclePlate || '');
+                      setShipReceiverName(shipment?.receiverName || '');
+                      setShipNotes(shipment?.notes || '');
+                      setShipActualCost(
+                        shipment?.actualCost !== undefined ? String(shipment.actualCost) : ''
+                      );
+                      setShipmentError(null);
+                      setShowShipmentModal(true);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 text-xs font-semibold transition-colors"
+                  >
+                    <Edit className="w-3.5 h-3.5" />
+                    <span>{shipment ? 'Ubah Pengiriman' : 'Atur Pengiriman'}</span>
+                  </button>
+                )}
+
+                {canShip && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShipOrderError(null);
+                      setShowShipModal(true);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold transition-colors shadow-sm"
+                  >
+                    <Truck className="w-3.5 h-3.5" />
+                    <span>Kirim Barang</span>
+                  </button>
+                )}
+
+                {canDeliver && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDeliverOrderError(null);
+                      setDeliverReceiverName(shipment?.receiverName || '');
+                      setShowDeliverModal(true);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold transition-colors shadow-sm"
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>Tandai Diterima</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="p-4 sm:p-5">
+              {!shipment ? (
+                <div className="text-xs text-slate-500 italic py-2">
+                  Belum ada pengaturan logistik pengiriman untuk pesanan ini. Klik &quot;Atur Pengiriman&quot; untuk menyiapkan armada atau ekspedisi.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs sm:text-sm">
+                  <div>
+                    <span className="text-xs text-slate-400">Nomor Surat Jalan</span>
+                    <p className="font-bold text-slate-900 mt-0.5">
+                      {shipment.deliveryNo || 'Belum terbit (dibuat saat barang dikirim)'}
+                    </p>
+                  </div>
+
+                  <div>
+                    <span className="text-xs text-slate-400">Metode Pengiriman</span>
+                    <p className="font-semibold text-slate-800 mt-0.5">
+                      {shipment.method === 'OWN_FLEET'
+                        ? 'Armada Sendiri'
+                        : shipment.method === 'BUYER_PICKUP'
+                        ? 'Ambil Sendiri di Toko'
+                        : 'Ekspedisi / Kurir Luar'}
+                    </p>
+                  </div>
+
+                  {shipment.trackingNo && (
+                    <div>
+                      <span className="text-xs text-slate-400">Nomor Resi / AWB</span>
+                      <p className="font-mono font-semibold text-slate-800 mt-0.5">
+                        {shipment.trackingNo}
+                      </p>
+                    </div>
+                  )}
+
+                  {(shipment.driverName || shipment.vehiclePlate) && (
+                    <div>
+                      <span className="text-xs text-slate-400">Kurir / Kendaraan</span>
+                      <p className="font-medium text-slate-800 mt-0.5">
+                        {[shipment.driverName, shipment.vehiclePlate].filter(Boolean).join(' • ')}
+                      </p>
+                    </div>
+                  )}
+
+                  {shipment.receiverName && (
+                    <div>
+                      <span className="text-xs text-slate-400">Penerima Barang</span>
+                      <p className="font-semibold text-emerald-800 mt-0.5">
+                        {shipment.receiverName}
+                      </p>
+                    </div>
+                  )}
+
+                  {isSuperAdmin && shipment.actualCost !== undefined && (
+                    <div>
+                      <span className="text-xs text-emerald-700 font-semibold">
+                        Biaya Kirim Riil (Super Admin)
+                      </span>
+                      <p className="font-bold text-emerald-700 mt-0.5">
+                        {formatRupiah(shipment.actualCost)}
+                      </p>
+                    </div>
+                  )}
+
+                  {shipment.shippedAt && (
+                    <div>
+                      <span className="text-xs text-slate-400">Waktu Dikirim</span>
+                      <p className="text-slate-700 mt-0.5">
+                        {new Date(shipment.shippedAt).toLocaleString('id-ID')}
+                      </p>
+                    </div>
+                  )}
+
+                  {shipment.deliveredAt && (
+                    <div>
+                      <span className="text-xs text-slate-400">Waktu Diterima</span>
+                      <p className="text-slate-700 mt-0.5">
+                        {new Date(shipment.deliveredAt).toLocaleString('id-ID')}
+                      </p>
+                    </div>
+                  )}
+
+                  {shipment.notes && (
+                    <div className="sm:col-span-2 pt-2 border-t border-slate-100">
+                      <span className="text-xs text-slate-400">Catatan Pengiriman</span>
+                      <p className="text-xs text-slate-600 italic mt-0.5">
+                        &quot;{shipment.notes}&quot;
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Kartu Daftar Faktur (Invoices) */}
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <FileText className="w-5 h-5 text-indigo-600" />
+                <h2 className="text-base font-bold text-slate-900">
+                  Daftar Faktur Pesanan
+                </h2>
+                <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-700">
+                  {(order.invoices || []).length}
+                </span>
+              </div>
+            </div>
+
+            <div className="divide-y divide-slate-100">
+              {(order.invoices || []).length === 0 ? (
+                <div className="p-6 text-center text-xs text-slate-500">
+                  Belum ada faktur yang diterbitkan untuk pesanan ini.
+                </div>
+              ) : (
+                (order.invoices || []).map((inv) => (
+                  <div
+                    key={inv.id}
+                    className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-50/50 transition-colors"
+                  >
+                    <div className="space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-bold text-slate-900 text-sm">
+                          {inv.number || `Faktur Draf (#${inv.id.slice(-6)})`}
+                        </span>
+                        <span
+                          className={`text-[11px] px-2 py-0.5 rounded font-semibold ${
+                            inv.type === 'DP'
+                              ? 'bg-amber-100 text-amber-800'
+                              : 'bg-blue-100 text-blue-800'
+                          }`}
+                        >
+                          {inv.type === 'DP' ? 'Uang Muka (DP)' : 'Pelunasan (FINAL)'} v{inv.version}
+                        </span>
+                        <StatusBadge status={inv.status} />
+                      </div>
+
+                      <div className="text-xs text-slate-500 flex flex-wrap items-center gap-x-3 gap-y-0.5">
+                        <span>
+                          Nominal: <strong>{formatRupiah(inv.amount)}</strong>
+                        </span>
+                        <span>
+                          Terbayar:{' '}
+                          <strong className="text-emerald-600">
+                            {formatRupiah(inv.paidAmount)}
+                          </strong>
+                        </span>
+                        {inv.dueDate && (
+                          <span>
+                            Jatuh Tempo: {new Date(inv.dueDate).toLocaleDateString('id-ID')}
+                          </span>
+                        )}
+                      </div>
+
+                      {inv.notes && (
+                        <p className="text-xs text-slate-600 italic">
+                          &quot;{inv.notes}&quot;
+                        </p>
+                      )}
+
+                      {inv.rejectReason && (
+                        <p className="text-xs text-rose-600 font-medium">
+                          Alasan: {inv.rejectReason}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2 self-start sm:self-center">
+                      {/* Tombol Void Invoice (Khusus Super Admin pada Invoice APPROVED) */}
+                      {isSuperAdmin && inv.status === 'APPROVED' && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedVoidInvoice(inv);
+                            setVoidInvoiceReason('');
+                            setVoidInvoiceError(null);
+                          }}
+                          className="px-2.5 py-1 rounded border border-rose-300 text-rose-700 hover:bg-rose-50 text-xs font-semibold transition-colors"
+                        >
+                          Batalkan (Void)
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
         </div>
 
@@ -2119,6 +2680,451 @@ export default function OrderDetailPage() {
                   className="px-4 py-2 bg-slate-800 hover:bg-slate-900 disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition-colors shadow-sm"
                 >
                   {paymentVoiding ? 'Membatalkan...' : 'Void Pembayaran'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Ajukan Faktur Pelunasan (Request Final) */}
+      {showRequestFinalModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-xl shadow-xl border border-slate-200 w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200 p-5 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2 text-indigo-700">
+                <FileText className="w-5 h-5" />
+                <h3 className="font-semibold text-slate-800 text-base">
+                  Ajukan Faktur Pelunasan (Final Invoice)
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowRequestFinalModal(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs sm:text-sm text-slate-600">
+              Pesanan ini telah lunas uang muka (DP). Mengajukan faktur pelunasan akan menerbitkan tagihan sisa pesanan dan mengalihkan status ke{' '}
+              <strong>FINAL_PENDING_APPROVAL</strong> untuk persetujuan Super Admin.
+            </p>
+
+            <form onSubmit={handleRequestFinal} className="space-y-4">
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-2 text-xs">
+                <div className="flex justify-between text-slate-600">
+                  <span>Grand Total Saat Ini:</span>
+                  <span className="font-bold text-slate-900">{formatRupiah(order.grandTotal)}</span>
+                </div>
+                <div className="flex justify-between text-slate-600">
+                  <span>Uang Muka Terbayar:</span>
+                  <span className="font-bold text-emerald-600">{formatRupiah(order.dpAmount)}</span>
+                </div>
+                <div className="flex justify-between pt-1 border-t border-slate-200 text-slate-800 font-bold">
+                  <span>Estimasi Tagihan Pelunasan:</span>
+                  <span className="text-indigo-600 text-sm">
+                    {formatRupiah(Math.max(0, order.grandTotal - order.dpAmount))}
+                  </span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Penyesuaian Ongkos Kirim (Rp)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  value={finalShippingCharge}
+                  onChange={(e) => setFinalShippingCharge(e.target.value)}
+                  placeholder="0"
+                  className="w-full text-xs p-2.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-800"
+                />
+                <span className="text-[11px] text-slate-400">
+                  Ubah nominal jika terdapat biaya kirim tambahan saat pengiriman riil.
+                </span>
+              </div>
+
+              {Number(finalShippingCharge || order.shippingCharge) !== order.shippingCharge && (
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Alasan Perubahan Ongkos Kirim <span className="text-rose-500">*</span>
+                  </label>
+                  <textarea
+                    value={finalShippingReason}
+                    onChange={(e) => setFinalShippingReason(e.target.value)}
+                    placeholder="Contoh: Perubahan ekspedisi kargo roda 4 karena volume bertambah..."
+                    rows={2}
+                    className="w-full text-xs p-2.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-800"
+                    required
+                  />
+                  <span className="text-[11px] text-slate-400">Minimal 5 karakter</span>
+                </div>
+              )}
+
+              {requestFinalError && (
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-700 flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>{requestFinalError}</span>
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowRequestFinalModal(false)}
+                  disabled={requestingFinal}
+                  className="px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={
+                    requestingFinal ||
+                    (Number(finalShippingCharge || order.shippingCharge) !== order.shippingCharge &&
+                      finalShippingReason.trim().length < 5)
+                  }
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition-colors shadow-sm"
+                >
+                  {requestingFinal ? 'Mengajukan...' : 'Ajukan Pelunasan'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Batalkan Faktur Resmi (Void Invoice - Super Admin) */}
+      {selectedVoidInvoice && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-xl shadow-xl border border-slate-200 w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200 p-5 space-y-4">
+            <div className="flex items-center gap-2 text-rose-700">
+              <AlertTriangle className="w-6 h-6 shrink-0" />
+              <h3 className="font-semibold text-slate-800 text-base">
+                Batalkan Faktur Resmi (VOID)
+              </h3>
+            </div>
+
+            <p className="text-xs sm:text-sm text-slate-600">
+              Anda akan membatalkan faktur{' '}
+              <strong className="text-slate-900">
+                {selectedVoidInvoice.number || selectedVoidInvoice.id}
+              </strong>{' '}
+              ({selectedVoidInvoice.type === 'DP' ? 'Uang Muka' : 'Pelunasan'}) senilai{' '}
+              <strong>{formatRupiah(selectedVoidInvoice.amount)}</strong>.
+            </p>
+
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900 space-y-1">
+              <p className="font-semibold">Perhatian:</p>
+              <p>
+                {selectedVoidInvoice.type === 'DP'
+                  ? 'Pembatalan faktur uang muka akan melepas reservasi stok barang dan mengembalikan status pesanan ke REVISION_REQUIRED.'
+                  : 'Pembatalan faktur pelunasan akan mengembalikan pesanan ke status IN_PROCESS.'}
+              </p>
+            </div>
+
+            <form onSubmit={handleVoidInvoice} className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Alasan Pembatalan (VOID) <span className="text-rose-500">*</span>
+                </label>
+                <textarea
+                  value={voidInvoiceReason}
+                  onChange={(e) => setVoidInvoiceReason(e.target.value)}
+                  placeholder="Contoh: Salah perhitungan PPN atau perubahan kesepakatan pemesanan..."
+                  rows={3}
+                  className="w-full text-xs p-2.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-rose-500 text-slate-800"
+                  required
+                />
+                <span className="text-[11px] text-slate-400">Minimal 5 karakter</span>
+              </div>
+
+              {voidInvoiceError && (
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-700 flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>{voidInvoiceError}</span>
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setSelectedVoidInvoice(null)}
+                  disabled={voidingInvoice}
+                  className="px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={voidingInvoice || voidInvoiceReason.trim().length < 5}
+                  className="px-4 py-2 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition-colors shadow-sm"
+                >
+                  {voidingInvoice ? 'Membatalkan...' : 'Batalkan Faktur'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Atur Pengiriman (Upsert Shipment) */}
+      {showShipmentModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-xl shadow-xl border border-slate-200 w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200 p-5 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2 text-indigo-700">
+                <Truck className="w-5 h-5" />
+                <h3 className="font-semibold text-slate-800 text-base">
+                  {shipment ? 'Perbarui Logistik Pengiriman' : 'Atur Logistik Pengiriman'}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowShipmentModal(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveShipment} className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Metode Pengiriman <span className="text-rose-500">*</span>
+                </label>
+                <select
+                  value={shipMethod}
+                  onChange={(e) =>
+                    setShipMethod(
+                      e.target.value as 'OWN_FLEET' | 'BUYER_PICKUP' | 'EXPEDITION'
+                    )
+                  }
+                  className="w-full text-xs p-2.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-800"
+                >
+                  <option value="OWN_FLEET">Armada Sendiri (Kurir Internal)</option>
+                  <option value="BUYER_PICKUP">Ambil Sendiri di Tempat (Pickup)</option>
+                  <option value="EXPEDITION">Ekspedisi / Logistik Pihak Ketiga</option>
+                </select>
+              </div>
+
+              {shipMethod === 'EXPEDITION' && (
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Nomor Resi / AWB
+                  </label>
+                  <input
+                    type="text"
+                    value={shipTrackingNo}
+                    onChange={(e) => setShipTrackingNo(e.target.value)}
+                    placeholder="Contoh: JNE-0123456789"
+                    className="w-full text-xs p-2.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-800 font-mono"
+                  />
+                </div>
+              )}
+
+              {shipMethod === 'OWN_FLEET' && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Nama Sopir / Driver
+                    </label>
+                    <input
+                      type="text"
+                      value={shipDriverName}
+                      onChange={(e) => setShipDriverName(e.target.value)}
+                      placeholder="Contoh: Pak Joko"
+                      className="w-full text-xs p-2.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-800"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Plat Nomor Kendaraan
+                    </label>
+                    <input
+                      type="text"
+                      value={shipVehiclePlate}
+                      onChange={(e) => setShipVehiclePlate(e.target.value)}
+                      placeholder="Contoh: B 1234 CD"
+                      className="w-full text-xs p-2.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-800"
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Penerima di Lokasi (Opsional)
+                </label>
+                <input
+                  type="text"
+                  value={shipReceiverName}
+                  onChange={(e) => setShipReceiverName(e.target.value)}
+                  placeholder="Nama staf/penerima di gudang pelanggan"
+                  className="w-full text-xs p-2.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-800"
+                />
+              </div>
+
+              {isSuperAdmin && (
+                <div>
+                  <label className="block text-xs font-semibold text-emerald-800 mb-1">
+                    Biaya Kirim Riil (HPP / Biaya Aktual - Khusus Admin)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={shipActualCost}
+                    onChange={(e) => setShipActualCost(e.target.value)}
+                    placeholder="Contoh: 15000"
+                    className="w-full text-xs p-2.5 rounded-lg border border-emerald-300 bg-emerald-50/40 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-800 font-semibold"
+                  />
+                  <span className="text-[11px] text-slate-400">
+                    Nilai ini tidak akan diperlihatkan kepada Sales.
+                  </span>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Catatan Pengiriman
+                </label>
+                <textarea
+                  value={shipNotes}
+                  onChange={(e) => setShipNotes(e.target.value)}
+                  placeholder="Contoh: Titip ke satpam pintu timur..."
+                  rows={2}
+                  className="w-full text-xs p-2.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-800"
+                />
+              </div>
+
+              {shipmentError && (
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-700 flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>{shipmentError}</span>
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowShipmentModal(false)}
+                  disabled={savingShipment}
+                  className="px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingShipment}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition-colors shadow-sm"
+                >
+                  {savingShipment ? 'Menyimpan...' : 'Simpan Pengiriman'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Konfirmasi Kirim Barang (Ship Order) */}
+      {showShipModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-xl shadow-xl border border-slate-200 w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200 p-5 space-y-4">
+            <div className="flex items-center gap-2 text-indigo-700">
+              <Truck className="w-6 h-6 shrink-0" />
+              <h3 className="font-semibold text-slate-800 text-base">
+                Kirim Pesanan & Terbitkan Surat Jalan
+              </h3>
+            </div>
+
+            <p className="text-xs sm:text-sm text-slate-600">
+              Apakah Anda yakin ingin memberangkatkan pesanan ini? Sistem akan mengalokasikan{' '}
+              <strong>Nomor Surat Jalan resmi</strong> dan <strong>memotong stok fisik gudang</strong> secara otomatis.
+            </p>
+
+            {shipOrderError && (
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-700 flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>{shipOrderError}</span>
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setShowShipModal(false)}
+                disabled={shippingOrder}
+                className="px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleShipOrder}
+                disabled={shippingOrder}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition-colors shadow-sm"
+              >
+                {shippingOrder ? 'Memproses Pengiriman...' : 'Konfirmasi Kirim'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Konfirmasi Barang Diterima (Deliver Order) */}
+      {showDeliverModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-xl shadow-xl border border-slate-200 w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200 p-5 space-y-4">
+            <div className="flex items-center gap-2 text-emerald-700">
+              <CheckCircle2 className="w-6 h-6 shrink-0" />
+              <h3 className="font-semibold text-slate-800 text-base">
+                Konfirmasi Penerimaan Barang di Tujuan
+              </h3>
+            </div>
+
+            <p className="text-xs sm:text-sm text-slate-600">
+              Tandai bahwa barang telah sukses sampai dan diterima oleh pelanggan.
+            </p>
+
+            <form onSubmit={handleDeliverOrder} className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Nama Penerima Barang (Opsional)
+                </label>
+                <input
+                  type="text"
+                  value={deliverReceiverName}
+                  onChange={(e) => setDeliverReceiverName(e.target.value)}
+                  placeholder="Contoh: Ibu Ratna (Staf Penerima)"
+                  className="w-full text-xs p-2.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-800"
+                />
+              </div>
+
+              {deliverOrderError && (
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-700 flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>{deliverOrderError}</span>
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowDeliverModal(false)}
+                  disabled={deliveringOrder}
+                  className="px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={deliveringOrder}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition-colors shadow-sm"
+                >
+                  {deliveringOrder ? 'Memproses...' : 'Tandai Diterima'}
                 </button>
               </div>
             </form>

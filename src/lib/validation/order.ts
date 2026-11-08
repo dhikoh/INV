@@ -55,9 +55,18 @@ export const OrderSubmitSchema = z
   .strict()
   .optional();
 
+export const OrderRequestFinalSchema = z
+  .object({
+    shippingCharge: z.number().int().min(0).optional(),
+    shippingReason: z.string().trim().max(1000).optional(),
+  })
+  .strict()
+  .optional();
+
 export type OrderLineInput = z.infer<typeof OrderLineSchema>;
 export type OrderCreateInput = z.infer<typeof OrderCreateSchema>;
 export type OrderUpdateInput = z.infer<typeof OrderUpdateSchema>;
 export type OrderDeleteInput = z.infer<typeof OrderDeleteSchema>;
 export type OrderSubmitInput = z.infer<typeof OrderSubmitSchema>;
+export type OrderRequestFinalInput = z.infer<typeof OrderRequestFinalSchema>;
 

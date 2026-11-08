@@ -4,18 +4,23 @@ import {
   InvoiceStatus,
   InvoiceType,
   InvoiceTheme,
+  PaymentStatus,
   Role,
 } from '@prisma/client';
 import { DomainError, formatRupiah } from '../domain/money';
 import { orderNumber, invoiceNumber } from '../domain/numbering';
 import { nextSeq, CounterScope } from './counter';
 import { lockOrder, assertStatus, assertRev } from './orderGuard';
-import { reserveOrderStock } from './stock';
+import { reserveOrderStock, releaseOrderStock } from './stock';
 import { buildInvoiceSnapshot } from '../pdf/snapshot';
 import { formatOrderDto, formatInvoiceDto } from './order';
 import { prisma } from '@/lib/db';
 import type { Ctx } from '../auth/context';
-import type { InvoiceApproveInput, InvoiceRejectInput } from '../validation/invoice';
+import type {
+  InvoiceApproveInput,
+  InvoiceRejectInput,
+  InvoiceVoidInput,
+} from '../validation/invoice';
 
 export type TxClient = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
 
@@ -342,6 +347,176 @@ export async function rejectInvoice(
       body: `Pengajuan invoice ${invoice.type} v${invoice.version} pesanan #${order.orderNo || order.id.slice(-6)} ditolak oleh ${ctx.user.name}: ${reason}`,
       linkPath: `/orders/${order.id}`,
       dedupeKey: `reject_${invoice.id}_${order.salesId}`,
+    },
+  });
+
+  const [updatedOrder, updatedInvoice] = await Promise.all([
+    tx.order.findFirstOrThrow({
+      where: { id: order.id, businessId },
+      include: { customer: true, items: true },
+    }),
+    tx.invoice.findFirstOrThrow({
+      where: { id: invoice.id, businessId },
+    }),
+  ]);
+
+  return {
+    order: formatOrderDto(updatedOrder, ctx.user.role),
+    invoice: formatInvoiceDto(updatedInvoice),
+  };
+}
+
+/**
+ * Membatalkan (void) faktur resmi yang telah disetujui (Seksi 18.2).
+ *
+ * Efek samping:
+ * 1. Otorisasi Super Admin ONLY (Sales ditolak 403 FORBIDDEN).
+ * 2. Alasan penolakan / void wajib minimal 5 karakter (422 VOID_REASON_REQUIRED).
+ * 3. Status invoice harus APPROVED (409 INVALID_STATE bila belum disetujui atau sudah void/reject).
+ * 4. Invoice tidak boleh memiliki pembayaran terverifikasi (409 HAS_VERIFIED_PAYMENTS).
+ * 5. Kunci pesanan secara pesimistik lockOrder.
+ * 6. Update status invoice menjadi VOID.
+ * 7. Bila invoice pertama (DP atau tunggal FINAL):
+ *    - Lepas reservasi stok (releaseOrderStock).
+ *    - Kembalikan status pesanan ke REVISION_REQUIRED.
+ *    - Naikkan versi pesanan (order.version + 1) dan rev + 1.
+ *    - Catat rejectReason pada order.
+ * 8. Bila invoice pelunasan (FINAL saat order memiliki DP):
+ *    - Kembalikan status pesanan ke IN_PROCESS.
+ *    - Naikkan rev + 1.
+ * 9. Catat AuditLog (INVOICE_VOID).
+ * 10. Kirim Notifikasi ke staf Sales pembuat pesanan.
+ */
+export async function voidInvoice(
+  tx: TxClient,
+  ctx: Ctx,
+  invoiceId: string,
+  options: InvoiceVoidInput
+) {
+  if (ctx.user.role !== Role.SUPERADMIN) {
+    throw new DomainError('FORBIDDEN', 'Hanya Super Admin yang berhak membatalkan (void) faktur', 403);
+  }
+
+  const reason = options.reason.trim();
+  if (reason.length < 5) {
+    throw new DomainError(
+      'VOID_REASON_REQUIRED',
+      'Alasan pembatalan (void) faktur wajib diisi minimal 5 karakter',
+      422
+    );
+  }
+
+  const businessId = ctx.businessId ?? ctx.user.businessId;
+  if (!businessId) {
+    throw new DomainError('BUSINESS_REQUIRED', 'Unit usaha aktif diperlukan', 400);
+  }
+
+  const invoice = await tx.invoice.findFirst({
+    where: { id: invoiceId, businessId, deletedAt: null },
+  });
+
+  if (!invoice) {
+    throw new DomainError('INVOICE_NOT_FOUND', 'Invoice tidak ditemukan', 404);
+  }
+
+  if (invoice.status !== InvoiceStatus.APPROVED) {
+    throw new DomainError(
+      'INVALID_STATE',
+      `Hanya faktur berstatus APPROVED yang dapat dibatalkan (status saat ini: ${invoice.status})`,
+      409
+    );
+  }
+
+  // Cek apakah invoice memiliki pembayaran terverifikasi (Seksi 18.2)
+  const verifiedPayment = await tx.payment.findFirst({
+    where: {
+      invoiceId: invoice.id,
+      businessId,
+      status: PaymentStatus.VERIFIED,
+    },
+  });
+
+  if (verifiedPayment) {
+    throw new DomainError(
+      'HAS_VERIFIED_PAYMENTS',
+      'Invoice memiliki pembayaran terverifikasi. Void pembayarannya terlebih dahulu sebelum membatalkan faktur',
+      409
+    );
+  }
+
+  await lockOrder(tx, invoice.orderId, businessId);
+
+  const order = await tx.order.findFirst({
+    where: { id: invoice.orderId, businessId, deletedAt: null },
+    include: {
+      items: true,
+      customer: true,
+    },
+  });
+
+  if (!order) {
+    throw new DomainError('ORDER_NOT_FOUND', 'Pesanan tidak ditemukan', 404);
+  }
+
+  await tx.invoice.updateMany({
+    where: { id: invoice.id, businessId },
+    data: {
+      status: InvoiceStatus.VOID,
+      voidReason: reason,
+      voidedAt: new Date(),
+    },
+  });
+
+  const isFirstInvoice =
+    invoice.type === InvoiceType.DP ||
+    (invoice.type === InvoiceType.FINAL && order.dpAmount === BigInt(0));
+
+  if (isFirstInvoice) {
+    if (order.stockReserved) {
+      await releaseOrderStock(tx, order, order.items);
+    }
+
+    await tx.order.updateMany({
+      where: { id: order.id, businessId },
+      data: {
+        status: OrderStatus.REVISION_REQUIRED,
+        rejectReason: reason,
+        version: { increment: 1 },
+        rev: { increment: 1 },
+      },
+    });
+  } else {
+    await tx.order.updateMany({
+      where: { id: order.id, businessId },
+      data: {
+        status: OrderStatus.IN_PROCESS,
+        rev: { increment: 1 },
+      },
+    });
+  }
+
+  await tx.auditLog.create({
+    data: {
+      businessId,
+      actorId: ctx.user.id,
+      actorRole: ctx.user.role,
+      action: 'INVOICE_VOID',
+      entityType: 'Invoice',
+      entityId: invoice.id,
+      summary: `Pembatalan (void) faktur ${invoice.number || invoice.id} untuk pesanan ${order.orderNo || order.id}: ${reason}`,
+      reason,
+    },
+  });
+
+  await tx.notification.create({
+    data: {
+      userId: order.salesId,
+      businessId,
+      type: 'APPROVAL_RESULT',
+      title: 'Faktur Dibatalkan (Void)',
+      body: `Faktur ${invoice.number || invoice.id} untuk pesanan ${order.orderNo || order.id} telah dibatalkan (void): ${reason}`,
+      linkPath: `/orders/${order.id}`,
+      dedupeKey: `inv_voided_${invoice.id}_${order.salesId}`,
     },
   });
 

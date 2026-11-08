@@ -267,6 +267,11 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
 | `POST`     | `/api/v1/payments/:id/verify`  | Super Admin        | Verifikasi pelunasan/pembayaran (kunci pesanan, hitung ulang paidTotal, transisi status) |
 | `POST`     | `/api/v1/payments/:id/reject`  | Super Admin        | Penolakan bukti transfer (alasan min 5 karakter, rollback kredit) |
 | `POST`     | `/api/v1/payments/:id/void`    | Super Admin        | Pembatalan pembayaran diverifikasi (recalculate, rollback order status) |
+| `POST`     | `/api/v1/orders/:id/request-final` | Super Admin, Sales | Pengajuan faktur pelunasan (buat FINAL invoice PENDING_APPROVAL, opsi penyesuaian ongkir) |
+| `POST`     | `/api/v1/invoices/:id/void`    | Super Admin        | Pembatalan faktur resmi (alasan min 5 karakter, lepas reservasi stok DP awal, rollback status order) |
+| `GET/POST` | `/api/v1/orders/:id/shipment`  | Super Admin, Sales | Detail & konfigurasi logistik pengiriman (PREPARING, actualCost dirahasiakan dari Sales) |
+| `POST`     | `/api/v1/orders/:id/shipment/ship` | Super Admin, Sales | Eksekusi kirim pesanan (alokasi nomor surat jalan, pemotongan stok fisik keluar SALE_SHIPMENT, status SHIPPED) |
+| `POST`     | `/api/v1/orders/:id/shipment/deliver` | Super Admin, Sales | Konfirmasi penerimaan barang di tujuan (status DELIVERED, picu penyelesaian otomatis) |
 | `GET`      | `/api/v1/invoices/:id/pdf`     | Authenticated      | Unduh berkas PDF invoice resmi                |
 
 ### Antarmuka Pengguna (UI Routes)
@@ -342,7 +347,7 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
 | **Fase 0** | `v0.1.0`     | Fondasi proyek, env, skema Prisma, rumus domain, infra tes              | **SELESAI** |
 | **Fase 1** | `v0.2.0`     | Login, manajemen usaha, akun sales, master produk & vendor, pembaruan   | **SELESAI**         |
 | **Fase 2** | `v0.3.0`     | Customer CRM, order draft, floor pricing, manajemen stok, PO & vendor ledger | **SELESAI** |
-| **Fase 3** | `v0.4.0`     | Persetujuan invoice, verifikasi pembayaran, mesin cetak PDF, void/retur | Sedang Berjalan (T3.3 Selesai) |
+| **Fase 3** | `v0.4.0`     | Persetujuan invoice, verifikasi pembayaran, mesin cetak PDF, void/retur | Sedang Berjalan (T3.4 Selesai) |
 | **Fase 4** | `v0.5.0`     | Bot Telegram, Mini App, pengingat repeat order, katalog PWA             | Belum dimulai       |
 | **Fase 5** | `v1.0.0`     | Dashboard profit, evaluasi sales, pengerasan keamanan, Go-Live          | Belum dimulai       |
 

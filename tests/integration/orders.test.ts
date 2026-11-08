@@ -394,6 +394,7 @@ vi.mock('@/lib/db', () => {
     },
     invoice: {
       findFirst: vi.fn(async () => null),
+      findMany: vi.fn(async () => []),
     },
     auditLog: {
       create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => {

@@ -22,5 +22,16 @@ export const InvoiceRejectSchema = z
   })
   .strict();
 
+export const InvoiceVoidSchema = z
+  .object({
+    reason: z
+      .string()
+      .trim()
+      .min(5, 'Alasan pembatalan (void) faktur wajib minimal 5 karakter')
+      .max(1000),
+  })
+  .strict();
+
 export type InvoiceApproveInput = z.infer<typeof InvoiceApproveSchema>;
 export type InvoiceRejectInput = z.infer<typeof InvoiceRejectSchema>;
+export type InvoiceVoidInput = z.infer<typeof InvoiceVoidSchema>;

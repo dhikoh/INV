@@ -48,8 +48,21 @@ export const GET = withApi(
     throw new DomainError('ORDER_NOT_FOUND', 'Order tidak ditemukan', 404);
   }
 
-  // Ambil pending invoice jika ada
-  const pendingInvoice = prisma.invoice
+  // Ambil semua invoice untuk order ini
+  const allInvoices = typeof prisma.invoice?.findMany === 'function'
+    ? await prisma.invoice.findMany({
+        where: {
+          orderId: order.id,
+          businessId,
+          deletedAt: null,
+        },
+        orderBy: [{ createdAt: 'asc' }],
+      })
+    : [];
+
+  const pendingInvoice = allInvoices.find(
+    (inv) => inv.status === InvoiceStatus.PENDING_APPROVAL
+  ) ?? (typeof prisma.invoice?.findFirst === 'function'
     ? await prisma.invoice.findFirst({
         where: {
           orderId: order.id,
@@ -59,13 +72,14 @@ export const GET = withApi(
         },
         orderBy: { requestedAt: 'desc' },
       })
-    : null;
+    : null);
 
   return {
     status: 200,
     data: {
       ...formatOrderDto(order, ctx.user.role),
       pendingInvoice: pendingInvoice ? formatInvoiceDto(pendingInvoice) : null,
+      invoices: allInvoices.map(formatInvoiceDto),
     },
   };
 });
