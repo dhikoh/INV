@@ -320,6 +320,7 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
 | `/purchase-orders/new` | Super Admin        | Formulir pembuatan PO baru dengan kalkulasi biaya dinamis dan baris produk |
 | `/purchase-orders/:id` | Super Admin        | Detail PO, aksi terbitkan pesan, terima barang (+ update HPP master), bayar vendor, batal PO |
 | `/vendors/:id`         | Super Admin        | Detail profil vendor & tab Buku Transaksi Vendor (Vendor Ledger) dengan linimasa saldo hutang berjalan |
+| `/tg`                  | Super Admin, Sales | Pintu masuk Telegram Mini App (TMA), autologin initData aman, & panduan tautan akun |
 
 ---
 
@@ -334,7 +335,8 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
      - Tombol `Buka` ke rute Mini App atau aplikasi web terkait.
    - Penegakan idempotensi callback ganda (menjawab "Sudah diproses" dan menghapus tombol pesan).
    - Otorisasi ketat peran Super Admin pada eksekusi callback data Telegram.
-   - Pintu masuk Telegram Mini App (TMA) dengan validasi aman HMAC-SHA256 atas `initData`.
+   - Pintu masuk Telegram Mini App (TMA) pada rute `/tg` dengan validasi aman HMAC-SHA256 atas `initData` (`POST /api/v1/auth/telegram`).
+   - Tautan unduh PDF bertanda tangan sekali buka (`POST /api/v1/downloads` dan `GET /api/v1/dl/:token`) berdurasi 5 menit untuk pembukaan dokumen via browser eksternal Telegram tanpa kebocoran sesi.
 2. **Job Terjadwal (`pg-boss`)**:
    - `telegram.send`: Antrean pengiriman pesan notifikasi ke bot Telegram dengan retry backoff eksponensial (5x) dan jeda aman 50 ms antar pesan.
    - `reminder-check`: Evaluasi repeat order pelanggan berdasarkan siklus interval pembelian.
@@ -376,7 +378,7 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
 | **Fase 1** | `v0.2.0`     | Login, manajemen usaha, akun sales, master produk & vendor, pembaruan   | **SELESAI**         |
 | **Fase 2** | `v0.3.0`     | Customer CRM, order draft, floor pricing, manajemen stok, PO & vendor ledger | **SELESAI** |
 | **Fase 3** | `v0.4.0`     | Persetujuan invoice, verifikasi pembayaran, mesin cetak PDF, void/retur, profit & komisi, UI persetujuan & invoice | **SELESAI** |
-| **Fase 4** | `v0.5.0`     | Bot Telegram, Mini App, pengingat repeat order, katalog PWA             | **DALAM PROGRES** (T4.1 & T4.2 Selesai) |
+| **Fase 4** | `v0.5.0`     | Bot Telegram, Mini App, pengingat repeat order, katalog PWA             | **DALAM PROGRES** (T4.1, T4.2, T4.3 Selesai) |
 | **Fase 5** | `v1.0.0`     | Dashboard profit, evaluasi sales, pengerasan keamanan, Go-Live          | Belum dimulai       |
 
 ---

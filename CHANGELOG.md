@@ -8,6 +8,29 @@ dan proyek ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Telegram Mini App (TMA), Autologin initData Aman, dan Tautan Unduh Bertanda Tangan Sekali Buka sesuai Seksi 11.5, 12.3, 16.3, dan 19.5 Dokumen Spesifikasi (T4.3):
+  - Algoritma Validasi `initData` Telegram (`src/lib/telegram/initData.ts`):
+    - Implementasi verifikasi tanda tangan resmi Telegram WebApp menggunakan HMAC-SHA256 (`WebAppData` sebagai secret key derivasi dari bot token).
+    - Pemeriksaan integritas data check string yang diurutkan secara alfabetis (`sort`), verifikasi anti-timing attack dengan `crypto.timingSafeEqual`, dan pembatasan usia sesi maksimal 3.600 detik (1 jam) dari `auth_date`.
+    - Helper pengujian `generateTestInitData` untuk memproduksi payload pengujian bertanda tangan resmi.
+  - Endpoint Otentikasi Mini App (`POST /api/v1/auth/telegram`):
+    - Pengecualian resmi dari pembungkus `withApi` (Seksi 10 & 17.4 c) dengan penegakan rate limiting percobaan login berbasis IP (`checkLoginRateLimit`).
+    - Validasi `initData`, pencocokan `telegramChatId` ke user aktif di database, dan penerbitan cookie sesi aman (`httpOnly`, `secure`, `SameSite=Lax`, path `/`).
+    - Penanganan akun belum terhubung dengan kode respon domain 401 `TELEGRAM_NOT_LINKED` beserta panduan langkah penautan akun.
+    - Handler pemutusan tautan akun (`DELETE /api/v1/auth/telegram`) dengan pencatatan audit log `USER_TELEGRAM_UNLINK`.
+  - Tautan Unduh PDF Bertanda Tangan Sekali Buka (Seksi 16.3):
+    - Generator & verifikator token unduh bertanda tangan HMAC-SHA256 berdurasi 5 menit (`src/lib/pdf/downloadToken.ts`).
+    - Endpoint pembuatan token bertanda tangan (`POST /api/v1/downloads`): Memvalidasi hak akses dokumen pengguna saat ini (`INVOICE_PDF`, `DELIVERY_NOTE_PDF`, `CREDIT_NOTE_PDF`, `CATALOG_PDF`). Staf Sales dibatasi keras hanya boleh mengunduh faktur berstatus `APPROVED` milik pesanannya sendiri.
+    - Endpoint penyajian PDF publik (`GET /api/v1/dl/[token]`): Dikecualikan dari `withApi` agar dapat diakses oleh browser eksternal Telegram tanpa cookie sesi. Memverifikasi integritas & masa berlaku token, mengevaluasi ulang hak akses dan keaktifan user di database pada saat tautan dibuka, merender PDF dokumen, menaikkan counter cetak faktur (`printedCount`), mencatat audit log `INVOICE_PRINT`, dan menyajikan respon dengan header `Cache-Control: private, no-store`.
+    - Penambahan alias rewrites `/downloads` dan `/dl/:token*` serta header keamanan CSP `frame-ancestors 'self' https://web.telegram.org https://webk.telegram.org https://webz.telegram.org` di `next.config.ts`.
+  - Antarmuka Mini App Responsif (`src/app/tg`):
+    - Tipe TypeScript `window.Telegram.WebApp` lengkap (`src/types/telegram.d.ts`).
+    - Hook React `useTelegramWebApp` (`src/lib/telegram/useTelegramWebApp.ts`): Inisialisasi otomatis `ready()` & `expand()`, sinkronisasi tema Telegram (`themeParams`) ke CSS custom variables, dan helper `openSignedPdf` untuk membuka tautan unduh via `Telegram.WebApp.openLink`.
+    - Layout rute Mini App (`src/app/tg/layout.tsx`): Pemuatan script resmi Telegram WebApp `https://telegram.org/js/telegram-web-app.js` dengan strategi `beforeInteractive`.
+    - Halaman entri Mini App (`src/app/tg/page.tsx`): Deteksi lingkungan Telegram WebApp, autologin otomatis ke `/api/v1/auth/telegram`, pengalihan aman ke rute tujuan (default `/dashboard`), tampilan instruksi jelas saat akun belum ditautkan (`TELEGRAM_NOT_LINKED`), dan fallback informatif saat dibuka di luar Telegram.
+  - Pengujian Integrasi Komprehensif (`tests/integration/telegram-miniapp.test.ts`):
+    - 24 skenario pengujian unit & integrasi untuk T4.3 yang mencakup validasi `initData`, penolakan data tampered/kedaluwarsa, autologin sukses dan penolakan akun unlinked, rate limiting IP, pembuatan tautan unduh bertanda tangan, penolakan akses Sales untuk faktur belum disetujui, pembukaan PDF tanpa cookie via token bertanda tangan, kenaikan printedCount & audit log, serta re-evaluasi hak akses saat dokumen diunduh.
+
 - Notifikasi Peristiwa Lengkap dan Tombol Interaktif Persetujuan Cepat Telegram sesuai Seksi 12.4, 12.5, 17.3 nomor 16, dan 19.5 Dokumen Spesifikasi (T4.2):
   - Tombol Inline Keyboard Telegram Interaktif (`src/lib/services/notification.ts`):
     - Pengiriman pesan notifikasi Telegram otomatis menyertakan inline keyboard tombol interaktif sesuai peristiwa (Tabel 12.4):

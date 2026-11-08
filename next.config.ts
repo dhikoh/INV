@@ -29,6 +29,30 @@ const nextConfig: NextConfig = {
         source: '/users/:path*',
         destination: '/api/v1/users/:path*',
       },
+      {
+        source: '/downloads',
+        destination: '/api/v1/downloads',
+      },
+      {
+        source: '/dl/:token*',
+        destination: '/api/v1/dl/:token*',
+      },
+    ];
+  },
+  async headers() {
+    return [
+      {
+        source: '/:path*',
+        headers: [
+          { key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains' },
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+          {
+            key: 'Content-Security-Policy',
+            value: "frame-ancestors 'self' https://web.telegram.org https://webk.telegram.org https://webz.telegram.org;",
+          },
+        ],
+      },
     ];
   },
 };
