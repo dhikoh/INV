@@ -259,7 +259,8 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
 | `POST`     | `/api/v1/orders/:id/submit`    | Super Admin, Sales | Mengajukan order ke Super Admin (buat Invoice PENDING_APPROVAL) |
 | `POST`     | `/api/v1/orders/:id/withdraw`  | Super Admin, Sales | Menarik pengajuan order kembali ke DRAFT (Invoice WITHDRAWN) |
 | `GET`      | `/api/v1/approvals`            | Super Admin        | Antrean pesanan & faktur pending approval (FIFO, filter belowMin, profit) |
-| `POST`     | `/api/v1/invoices/:id/approve` | Super Admin        | Persetujuan invoice                           |
+| `POST`     | `/api/v1/invoices/:id/approve` | Super Admin        | Persetujuan faktur (kunci pesimistik, alokasi nomor resmi, reservasi stok, snapshot anti-bocor) |
+| `POST`     | `/api/v1/invoices/:id/reject`  | Super Admin        | Penolakan faktur & pengembalian status order ke revisi (alasan min 5 karakter) |
 | `POST`     | `/api/v1/payments`             | Super Admin, Sales | Pencatatan pembayaran & bukti transfer        |
 | `POST`     | `/api/v1/payments/:id/verify`  | Super Admin        | Verifikasi dana masuk                         |
 | `GET`      | `/api/v1/invoices/:id/pdf`     | Authenticated      | Unduh berkas PDF invoice resmi                |
@@ -281,7 +282,7 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
 | `/customers/:id`       | Super Admin, Sales | Detail pelanggan (5 tab: Ringkasan, Timeline CRM, Tugas Follow-up, Order, Harga/Promo), ubah cepat pipeline |
 | `/orders`              | Super Admin, Sales | Daftar pesanan responsif (tabel desktop & kartu mobile 360 px), filter status/pelanggan/tanggal, paginasi |
 | `/orders/new`          | Super Admin, Sales | Formulir pesanan baru (`OrderForm`) dengan pratinjau kalkulasi live 300 ms, deteksi belowMin, simulasi profit SA |
-| `/orders/:id`          | Super Admin, Sales | Detail pesanan lengkap, rincian produk, ringkasan keuangan, simulasi profit SA, tombol edit & hapus draf |
+| `/orders/:id`          | Super Admin, Sales | Detail pesanan lengkap, rincian produk, ringkasan keuangan, simulasi profit SA, tombol ajukan/tarik/setujui/tolak pesanan |
 | `/orders/:id/edit`     | Super Admin, Sales | Sunting draf pesanan (`DRAFT` / `REVISION_REQUIRED`) dengan penguncian optimistik versi `rev` |
 | `/approvals`           | Super Admin        | Antrean persetujuan pesanan & invoice PENDING_APPROVAL (FIFO, filter belowMin, pencarian, simulasi profit) |
 | `/stock`               | Super Admin        | Manajemen stok produk, kartu metrik (fisik/reservasi/tersedia/minus), modal koreksi, opname, riwayat mutasi |

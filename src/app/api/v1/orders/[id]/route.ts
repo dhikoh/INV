@@ -2,9 +2,9 @@ import { withApi } from '@/lib/api/withApi';
 import { requireBusiness } from '@/lib/auth/context';
 import { prisma } from '@/lib/db';
 import { OrderUpdateSchema, OrderDeleteSchema } from '@/lib/validation/order';
-import { buildOrderSnapshot, formatOrderDto } from '@/lib/services/order';
+import { buildOrderSnapshot, formatOrderDto, formatInvoiceDto } from '@/lib/services/order';
 import { formatRupiah, DomainError } from '@/lib/domain/money';
-import { OrderStatus, Role } from '@prisma/client';
+import { OrderStatus, InvoiceStatus, Role } from '@prisma/client';
 
 /**
  * GET /api/v1/orders/:id
@@ -48,9 +48,25 @@ export const GET = withApi(
     throw new DomainError('ORDER_NOT_FOUND', 'Order tidak ditemukan', 404);
   }
 
+  // Ambil pending invoice jika ada
+  const pendingInvoice = prisma.invoice
+    ? await prisma.invoice.findFirst({
+        where: {
+          orderId: order.id,
+          businessId,
+          status: InvoiceStatus.PENDING_APPROVAL,
+          deletedAt: null,
+        },
+        orderBy: { requestedAt: 'desc' },
+      })
+    : null;
+
   return {
     status: 200,
-    data: formatOrderDto(order, ctx.user.role),
+    data: {
+      ...formatOrderDto(order, ctx.user.role),
+      pendingInvoice: pendingInvoice ? formatInvoiceDto(pendingInvoice) : null,
+    },
   };
 });
 

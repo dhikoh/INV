@@ -1,4 +1,3 @@
-import { OrderStatus } from '@prisma/client';
 import { DomainError } from '../domain/money';
 import { TxClient } from './order';
 
@@ -24,14 +23,14 @@ export async function lockOrder(
 }
 
 /**
- * Memastikan status order berada dalam daftar status yang diperbolehkan
+ * Memastikan status berada dalam daftar status yang diperbolehkan
  * untuk aksi tertentu, menolak 409 INVALID_STATE bila tidak sesuai.
  *
  * Rujukan: Seksi 8.2 & 8.4 Dokumen Spesifikasi.
  */
-export function assertStatus(
-  current: OrderStatus,
-  allowed: OrderStatus[],
+export function assertStatus<T extends string = string>(
+  current: T,
+  allowed: T[],
   action: string
 ): void {
   if (!allowed.includes(current)) {
@@ -57,3 +56,4 @@ export function assertRev(clientRev: number, dbRev: number): void {
     );
   }
 }
+

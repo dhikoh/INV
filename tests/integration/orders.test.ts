@@ -392,6 +392,9 @@ vi.mock('@/lib/db', () => {
         return { count: 1 };
       }),
     },
+    invoice: {
+      findFirst: vi.fn(async () => null),
+    },
     auditLog: {
       create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
         const log = {

@@ -95,6 +95,14 @@ interface OrderDetailDto {
   updatedAt: string;
   items?: OrderItemDto[];
   profitSimulation?: ProfitSimulationDto;
+  pendingInvoice?: {
+    id: string;
+    type: 'DP' | 'FINAL';
+    status: string;
+    version: number;
+    amount: number;
+    number?: string | null;
+  } | null;
 }
 
 export default function OrderDetailPage() {
@@ -127,6 +135,20 @@ export default function OrderDetailPage() {
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
   const [withdrawing, setWithdrawing] = useState(false);
   const [withdrawError, setWithdrawError] = useState<string | null>(null);
+
+  // Modal Setujui (Approve) - Khusus Super Admin
+  const [showApproveModal, setShowApproveModal] = useState(false);
+  const [approving, setApproving] = useState(false);
+  const [approveError, setApproveError] = useState<string | null>(null);
+  const [overrideNote, setOverrideNote] = useState('');
+  const [dueDate, setDueDate] = useState('');
+  const [theme, setTheme] = useState<'PROFESIONAL' | 'FAMILY' | 'MINIMALIS' | 'MODERN' | 'KLASIK'>('PROFESIONAL');
+
+  // Modal Tolak / Minta Revisi (Reject) - Khusus Super Admin
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [rejecting, setRejecting] = useState(false);
+  const [rejectError, setRejectError] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
 
   const fetchOrderDetail = useCallback(async () => {
     if (!id) return;
@@ -256,6 +278,82 @@ export default function OrderDetailPage() {
     }
   };
 
+  const handleApproveOrder = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!order || !order.pendingInvoice) return;
+    try {
+      setApproving(true);
+      setApproveError(null);
+
+      if (order.hasBelowMin && overrideNote.trim().length < 5) {
+        setApproveError('Catatan persetujuan khusus (override) wajib diisi minimal 5 karakter');
+        setApproving(false);
+        return;
+      }
+
+      const res = await fetch(`/api/v1/invoices/${order.pendingInvoice.id}/approve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          rev: order.rev,
+          overrideNote: order.hasBelowMin ? overrideNote.trim() : undefined,
+          dueDate: dueDate || undefined,
+          theme,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.message || data.error?.message || 'Gagal menyetujui pesanan');
+      }
+
+      setSubmitSuccess(`Pesanan & Faktur ${order.pendingInvoice.type} berhasil disetujui!`);
+      setShowApproveModal(false);
+      fetchOrderDetail();
+    } catch (err: unknown) {
+      setApproveError(err instanceof Error ? err.message : 'Gagal menyetujui pesanan');
+    } finally {
+      setApproving(false);
+    }
+  };
+
+  const handleRejectOrder = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!order || !order.pendingInvoice) return;
+    try {
+      setRejecting(true);
+      setRejectError(null);
+
+      if (rejectReason.trim().length < 5) {
+        setRejectError('Alasan penolakan / permintaan revisi wajib diisi minimal 5 karakter');
+        setRejecting(false);
+        return;
+      }
+
+      const res = await fetch(`/api/v1/invoices/${order.pendingInvoice.id}/reject`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          rev: order.rev,
+          reason: rejectReason.trim(),
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.message || data.error?.message || 'Gagal menolak pesanan');
+      }
+
+      setSubmitSuccess('Pengajuan pesanan berhasil ditolak dan dikembalikan ke staf Sales untuk direvisi.');
+      setShowRejectModal(false);
+      fetchOrderDetail();
+    } catch (err: unknown) {
+      setRejectError(err instanceof Error ? err.message : 'Gagal menolak pesanan');
+    } finally {
+      setRejecting(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="w-full max-w-7xl mx-auto px-4 py-8 space-y-6">
@@ -376,6 +474,38 @@ export default function OrderDetailPage() {
             >
               <RotateCcw className="w-4 h-4" />
               <span>Tarik Pengajuan</span>
+            </button>
+          )}
+
+          {/* Tombol Setujui Pesanan (Super Admin) */}
+          {isSuperAdmin && (order.status === 'PENDING_APPROVAL' || order.status === 'FINAL_PENDING_APPROVAL') && order.pendingInvoice && (
+            <button
+              type="button"
+              onClick={() => {
+                setOverrideNote(order.overrideNote || '');
+                setApproveError(null);
+                setShowApproveModal(true);
+              }}
+              className="inline-flex items-center justify-center gap-1.5 min-h-[44px] px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg text-sm transition-colors shadow-sm"
+            >
+              <CheckCircle2 className="w-4 h-4" />
+              <span>Setujui Pesanan</span>
+            </button>
+          )}
+
+          {/* Tombol Tolak / Revisi (Super Admin) */}
+          {isSuperAdmin && (order.status === 'PENDING_APPROVAL' || order.status === 'FINAL_PENDING_APPROVAL') && order.pendingInvoice && (
+            <button
+              type="button"
+              onClick={() => {
+                setRejectReason('');
+                setRejectError(null);
+                setShowRejectModal(true);
+              }}
+              className="inline-flex items-center justify-center gap-1.5 min-h-[44px] px-4 py-2 border border-rose-300 bg-rose-50 hover:bg-rose-100 text-rose-800 font-medium rounded-lg text-sm transition-colors shadow-sm"
+            >
+              <XCircle className="w-4 h-4" />
+              <span>Tolak / Revisi</span>
             </button>
           )}
 
@@ -1035,6 +1165,217 @@ export default function OrderDetailPage() {
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Setujui Pesanan (Super Admin) */}
+      {showApproveModal && order?.pendingInvoice && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-xl shadow-xl border border-slate-200 w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-slate-50">
+              <div className="flex items-center gap-2 text-emerald-700">
+                <CheckCircle2 className="w-5 h-5" />
+                <h3 className="font-semibold text-slate-800">Setujui Pesanan & Terbitkan Faktur</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowApproveModal(false);
+                  setApproveError(null);
+                }}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 min-h-[44px] min-w-[44px] flex items-center justify-center"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleApproveOrder} className="p-5 space-y-4">
+              <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-1 text-xs text-slate-700">
+                <div className="flex justify-between">
+                  <span>Tipe Faktur:</span>
+                  <span className="font-bold text-slate-900">
+                    {order.pendingInvoice.type === 'DP' ? `Uang Muka (DP ${formatPercentFromBps(order.dpBps)})` : 'Pelunasan (FINAL)'}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Nominal Tagihan:</span>
+                  <span className="font-bold text-emerald-700">
+                    {formatRupiah(order.pendingInvoice.amount)}
+                  </span>
+                </div>
+              </div>
+
+              {order.hasBelowMin && (
+                <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-lg space-y-2">
+                  <div className="flex items-center gap-2 text-amber-800 text-xs font-bold">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span>Catatan Persetujuan Khusus (Override Harga Minimal)</span>
+                  </div>
+                  <p className="text-xs text-amber-700">
+                    Pesanan ini memiliki produk di bawah harga minimal. Anda wajib mengisi catatan persetujuan khusus (override) minimal 5 karakter.
+                  </p>
+                  <div>
+                    <textarea
+                      value={overrideNote}
+                      onChange={(e) => setOverrideNote(e.target.value)}
+                      placeholder="Contoh: Disetujui khusus untuk proyek strategis atau pemesanan volume besar..."
+                      rows={3}
+                      className="w-full text-xs p-2.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-800"
+                      required
+                    />
+                    <div className="flex justify-between text-[11px] text-slate-500 mt-1">
+                      <span>Wajib diisi (minimal 5 karakter)</span>
+                      <span className={overrideNote.trim().length < 5 ? 'text-rose-500 font-medium' : 'text-slate-600'}>
+                        {overrideNote.trim().length}/1000 karakter
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                <div>
+                  <label className="block font-medium text-slate-700 mb-1">
+                    Jatuh Tempo Faktur (Opsional)
+                  </label>
+                  <input
+                    type="date"
+                    value={dueDate}
+                    onChange={(e) => setDueDate(e.target.value)}
+                    className="w-full p-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-800"
+                  />
+                  <span className="text-[11px] text-slate-500">Bawaan: sesuai tempo usaha</span>
+                </div>
+                <div>
+                  <label className="block font-medium text-slate-700 mb-1">
+                    Tema Dokumen PDF
+                  </label>
+                  <select
+                    value={theme}
+                    onChange={(e) => setTheme(e.target.value as typeof theme)}
+                    className="w-full p-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-800 bg-white"
+                  >
+                    <option value="PROFESIONAL">Profesional</option>
+                    <option value="FAMILY">Family</option>
+                    <option value="MINIMALIS">Minimalis</option>
+                    <option value="MODERN">Modern</option>
+                    <option value="KLASIK">Klasik</option>
+                  </select>
+                </div>
+              </div>
+
+              {approveError && (
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-700 flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>{approveError}</span>
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowApproveModal(false);
+                    setApproveError(null);
+                  }}
+                  className="min-h-[44px] px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={approving || (order.hasBelowMin && overrideNote.trim().length < 5)}
+                  className="min-h-[44px] px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5 shadow-sm"
+                >
+                  {approving && <Loader2 className="w-4 h-4 animate-spin" />}
+                  <span>{approving ? 'Memproses...' : 'Setujui & Terbitkan Invoice'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Tolak / Minta Revisi (Super Admin) */}
+      {showRejectModal && order?.pendingInvoice && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-xl shadow-xl border border-slate-200 w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-slate-50">
+              <div className="flex items-center gap-2 text-rose-700">
+                <XCircle className="w-5 h-5" />
+                <h3 className="font-semibold text-slate-800">Tolak Pengajuan & Minta Revisi</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowRejectModal(false);
+                  setRejectError(null);
+                }}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 min-h-[44px] min-w-[44px] flex items-center justify-center"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleRejectOrder} className="p-5 space-y-4">
+              <div className="p-3 bg-rose-50 rounded-lg border border-rose-200 text-xs text-rose-800 space-y-1">
+                <p className="font-semibold">Konsekuensi Penolakan:</p>
+                <ul className="list-disc list-inside space-y-0.5 text-rose-700">
+                  <li>Invoice pengajuan saat ini akan ditandai <span className="font-bold">REJECTED</span>.</li>
+                  <li>Status pesanan berubah menjadi <span className="font-bold">REVISION_REQUIRED</span>.</li>
+                  <li>Staf Sales dapat menyunting ulang pesanan dan mengajukannya kembali.</li>
+                </ul>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Alasan Penolakan / Permintaan Revisi <span className="text-rose-500">*</span>
+                </label>
+                <textarea
+                  value={rejectReason}
+                  onChange={(e) => setRejectReason(e.target.value)}
+                  placeholder="Contoh: Diskon terlalu besar, mohon sesuaikan harga atau konfirmasi ulang tanggal acara..."
+                  rows={3}
+                  className="w-full text-xs p-2.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-rose-500 text-slate-800"
+                  required
+                />
+                <div className="flex justify-between text-[11px] text-slate-500 mt-1">
+                  <span>Wajib minimal 5 karakter</span>
+                  <span className={rejectReason.trim().length < 5 ? 'text-rose-500 font-medium' : 'text-slate-600'}>
+                    {rejectReason.trim().length}/1000 karakter
+                  </span>
+                </div>
+              </div>
+
+              {rejectError && (
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-700 flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>{rejectError}</span>
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowRejectModal(false);
+                    setRejectError(null);
+                  }}
+                  className="min-h-[44px] px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={rejecting || rejectReason.trim().length < 5}
+                  className="min-h-[44px] px-4 py-2 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5 shadow-sm"
+                >
+                  {rejecting && <Loader2 className="w-4 h-4 animate-spin" />}
+                  <span>{rejecting ? 'Mengirim...' : 'Kirim Penolakan'}</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

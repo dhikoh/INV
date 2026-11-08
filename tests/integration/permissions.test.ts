@@ -100,6 +100,8 @@ import { POST as cancelPurchaseOrderHandler } from '@/app/api/v1/purchase-orders
 import { POST as createVendorPaymentHandler } from '@/app/api/v1/vendors/[id]/payments/route';
 import { GET as getVendorTransactionsHandler } from '@/app/api/v1/vendors/[id]/transactions/route';
 import { GET as getApprovalsHandler } from '@/app/api/v1/approvals/route';
+import { POST as approveInvoiceHandler } from '@/app/api/v1/invoices/[id]/approve/route';
+import { POST as rejectInvoiceHandler } from '@/app/api/v1/invoices/[id]/reject/route';
 
 describe('Matriks Hak Akses Berbasis Tabel (Seksi 5.1 & 17.4 b)', () => {
   const APP_URL = 'http://localhost:3000';
@@ -586,6 +588,22 @@ describe('Matriks Hak Akses Berbasis Tabel (Seksi 5.1 & 17.4 b)', () => {
       method: 'GET',
       path: '/api/v1/approvals',
       handler: (req) => getApprovalsHandler(req),
+    },
+    {
+      name: 'POST /api/v1/invoices/:id/approve',
+      method: 'POST',
+      path: '/api/v1/invoices/inv_1/approve',
+      handler: (req, r) => approveInvoiceHandler(req, r),
+      params: { id: 'inv_1' },
+      body: {},
+    },
+    {
+      name: 'POST /api/v1/invoices/:id/reject',
+      method: 'POST',
+      path: '/api/v1/invoices/inv_1/reject',
+      handler: (req, r) => rejectInvoiceHandler(req, r),
+      params: { id: 'inv_1' },
+      body: { reason: 'Data pesanan perlu diperbaiki' },
     },
   ];
 
