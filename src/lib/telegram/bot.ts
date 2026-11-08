@@ -3,7 +3,16 @@ import { prisma } from '@/lib/db';
 import { env } from '@/lib/env';
 import { hashLinkCode } from './linkCode';
 import { escapeHtml, prefix } from './format';
-import { Role, PaymentStatus, InvoiceStatus, OrderStatus } from '@prisma/client';
+import {
+  Role,
+  PaymentStatus,
+  InvoiceStatus,
+  OrderStatus,
+  InvoiceTheme,
+} from '@prisma/client';
+import { approveInvoice } from '@/lib/services/invoice';
+import { verifyPayment } from '@/lib/services/payment';
+import type { Ctx } from '@/lib/auth/context';
 
 // Gunakan token dari environment, atau token pengujian aman jika belum diatur
 const botToken =
@@ -307,4 +316,223 @@ bot.on('message:text', async (ctx) => {
       'Akun Telegram Anda belum terhubung. Buka menu Profil di aplikasi web untuk menghubungkan, lalu kirim /start <kode>.'
     );
   }
+});
+
+/**
+ * Handler Callback Query untuk tombol inline Telegram (Seksi 12.4 & Tabel 19.5 T4.2):
+ * - ap:<invoiceId>:y -> Menyetujui faktur penjualan
+ * - pv:<paymentId>:y -> Memverifikasi bukti pembayaran
+ *
+ * Aturan Kunci:
+ * 1. Hanya Super Admin aktif yang dapat mengeksekusi aksi callback.
+ * 2. Setujui lewat Telegram dilarang keras bila pesanan memiliki harga di bawah minimal (hasBelowMin).
+ * 3. Eksekusi callback ganda bersifat idempoten (answerCallbackQuery "Sudah diproses" dan hapus tombol).
+ * 4. Memanggil domain service yang sama persis dengan web handler (approveInvoice / verifyPayment).
+ */
+bot.on('callback_query:data', async (ctx) => {
+  const data = ctx.callbackQuery.data;
+  const fromId = ctx.from?.id;
+  if (!fromId) return;
+
+  const user = await prisma.user.findFirst({
+    where: {
+      telegramChatId: BigInt(fromId),
+      isActive: true,
+    },
+    include: { business: true },
+  });
+
+  // Tabel 19.5: Akun non Super Admin ditolak
+  if (!user || user.role !== Role.SUPERADMIN) {
+    return ctx.answerCallbackQuery({
+      text: 'Akses ditolak: Hanya Super Admin yang dapat melakukan aksi ini',
+      show_alert: true,
+    });
+  }
+
+  // 1. Aksi Persetujuan Faktur: ap:<invoiceId>:y
+  const apMatch = data.match(/^ap:([^:]+):y$/);
+  if (apMatch) {
+    const invoiceId = apMatch[1];
+    const invoice = await prisma.invoice.findUnique({
+      where: { id: invoiceId },
+      include: {
+        business: true,
+      },
+    });
+
+    if (!invoice) {
+      return ctx.answerCallbackQuery({
+        text: 'Faktur tidak ditemukan',
+        show_alert: true,
+      });
+    }
+
+    // Callback ganda idempoten & status invoice sudah diproses
+    if (invoice.status !== InvoiceStatus.PENDING_APPROVAL) {
+      await ctx
+        .editMessageReplyMarkup({ reply_markup: { inline_keyboard: [] } })
+        .catch(() => {});
+      return ctx.answerCallbackQuery({
+        text: 'Faktur sudah diproses sebelumnya',
+        show_alert: true,
+      });
+    }
+
+    const order = await prisma.order.findUnique({
+      where: { id: invoice.orderId },
+      include: {
+        items: true,
+      },
+    });
+
+    if (!order) {
+      return ctx.answerCallbackQuery({
+        text: 'Pesanan tidak ditemukan',
+        show_alert: true,
+      });
+    }
+
+    // Setujui lewat Telegram dilarang bila invoice hasBelowMin (Seksi 12.4 & Tabel 19.5)
+    const hasBelowMin =
+      order.hasBelowMin ||
+      order.items.some(
+        (item: { belowMin: boolean }) => item.belowMin
+      );
+
+    if (hasBelowMin) {
+      return ctx.answerCallbackQuery({
+        text: 'Ada harga di bawah minimal. Buka aplikasi untuk menyetujui dengan catatan.',
+        show_alert: true,
+      });
+    }
+
+    // Panggil service yang sama persis dengan web handler
+    const appContext: Ctx = {
+      user: {
+        id: user.id,
+        role: user.role,
+        name: user.name,
+        businessId: invoice.businessId,
+      },
+      role: user.role,
+      businessId: invoice.businessId,
+      sessionId: `tg_callback_${user.id}`,
+      ip: null,
+    };
+
+    try {
+      await prisma.$transaction(async (tx) => {
+        await approveInvoice(tx, appContext, invoiceId, {
+          theme: invoice.business.invoiceTheme || InvoiceTheme.PROFESIONAL,
+        });
+      });
+
+      await ctx.answerCallbackQuery({ text: 'Faktur berhasil disetujui' });
+
+      // Ubah pesan menjadi "Disetujui oleh {nama}" tanpa tombol
+      const originalText = ctx.callbackQuery.message?.text || '';
+      const approvedText = originalText
+        ? `${escapeHtml(originalText)}\n\n✅ <b>Disetujui oleh ${escapeHtml(user.name)}</b>`
+        : `✅ <b>Disetujui oleh ${escapeHtml(user.name)}</b>`;
+
+      await ctx
+        .editMessageText(approvedText, {
+          parse_mode: 'HTML',
+          reply_markup: { inline_keyboard: [] },
+        })
+        .catch(async () => {
+          await ctx
+            .editMessageReplyMarkup({ reply_markup: { inline_keyboard: [] } })
+            .catch(() => {});
+        });
+      return;
+    } catch (err: unknown) {
+      const errMsg =
+        err instanceof Error ? err.message : 'Gagal menyetujui faktur';
+      return ctx.answerCallbackQuery({
+        text: `Gagal: ${errMsg}`,
+        show_alert: true,
+      });
+    }
+  }
+
+  // 2. Aksi Verifikasi Pembayaran: pv:<paymentId>:y
+  const pvMatch = data.match(/^pv:([^:]+):y$/);
+  if (pvMatch) {
+    const paymentId = pvMatch[1];
+    const payment = await prisma.payment.findUnique({
+      where: { id: paymentId },
+      include: {
+        business: true,
+      },
+    });
+
+    if (!payment) {
+      return ctx.answerCallbackQuery({
+        text: 'Pembayaran tidak ditemukan',
+        show_alert: true,
+      });
+    }
+
+    // Callback ganda idempoten
+    if (payment.status !== PaymentStatus.PENDING_VERIFICATION) {
+      await ctx
+        .editMessageReplyMarkup({ reply_markup: { inline_keyboard: [] } })
+        .catch(() => {});
+      return ctx.answerCallbackQuery({
+        text: 'Pembayaran sudah diproses sebelumnya',
+        show_alert: true,
+      });
+    }
+
+    const appContext: Ctx = {
+      user: {
+        id: user.id,
+        role: user.role,
+        name: user.name,
+        businessId: payment.businessId,
+      },
+      role: user.role,
+      businessId: payment.businessId,
+      sessionId: `tg_callback_${user.id}`,
+      ip: null,
+    };
+
+    try {
+      await prisma.$transaction(async (tx) => {
+        await verifyPayment(tx, appContext, paymentId);
+      });
+
+      await ctx.answerCallbackQuery({
+        text: 'Pembayaran berhasil diverifikasi',
+      });
+
+      const originalText = ctx.callbackQuery.message?.text || '';
+      const verifiedText = originalText
+        ? `${escapeHtml(originalText)}\n\n✅ <b>Diverifikasi oleh ${escapeHtml(user.name)}</b>`
+        : `✅ <b>Diverifikasi oleh ${escapeHtml(user.name)}</b>`;
+
+      await ctx
+        .editMessageText(verifiedText, {
+          parse_mode: 'HTML',
+          reply_markup: { inline_keyboard: [] },
+        })
+        .catch(async () => {
+          await ctx
+            .editMessageReplyMarkup({ reply_markup: { inline_keyboard: [] } })
+            .catch(() => {});
+        });
+      return;
+    } catch (err: unknown) {
+      const errMsg =
+        err instanceof Error ? err.message : 'Gagal memverifikasi pembayaran';
+      return ctx.answerCallbackQuery({
+        text: `Gagal: ${errMsg}`,
+        show_alert: true,
+      });
+    }
+  }
+
+  return ctx.answerCallbackQuery({ text: 'Aksi tidak dikenali' });
 });

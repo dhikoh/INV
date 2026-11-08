@@ -8,6 +8,30 @@ dan proyek ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Notifikasi Peristiwa Lengkap dan Tombol Interaktif Persetujuan Cepat Telegram sesuai Seksi 12.4, 12.5, 17.3 nomor 16, dan 19.5 Dokumen Spesifikasi (T4.2):
+  - Tombol Inline Keyboard Telegram Interaktif (`src/lib/services/notification.ts`):
+    - Pengiriman pesan notifikasi Telegram otomatis menyertakan inline keyboard tombol interaktif sesuai peristiwa (Tabel 12.4):
+      - `APPROVAL_REQUEST` (Pengajuan Invoice): Tombol "Setujui" (`ap:<invoiceId>:y`), "Tolak" (tautan web/Mini App `/tg/approvals/:id?reject=1` untuk alasan wajib), dan "Buka" (`/tg/approvals/:id`).
+      - `PAYMENT_PENDING` / `PAYMENT_SUBMITTED` (Bukti Bayar Diunggah): Tombol "Verifikasi" (`pv:<paymentId>:y`) dan "Buka" (`/tg/payments`).
+      - Notifikasi dengan `linkPath` (Hasil Persetujuan, Verifikasi Pembayaran, Tugas CRM, Repeat Order): Tombol "Buka" yang langsung mengarah ke tautan terkait di aplikasi.
+    - Penerapan jeda aman 50 ms antar pesan berurutan untuk menghormati batasan rate-limit Telegram Bot API (Seksi 12.5).
+  - Handler Callback Query Terpadu (`src/lib/telegram/bot.ts`):
+    - Otorisasi Peran: Memvalidasi `from.id` pengirim callback, memastikan aktif dan memiliki peran `SUPERADMIN`. Akun non-Super Admin ditolak seketika dengan `answerCallbackQuery` peringatan akses ditolak.
+    - Persetujuan Faktur Cepat (`ap:<invoiceId>:y`):
+      - Memanggil domain service persetujuan yang sama persis dengan web handler (`approveInvoice`) dengan isolasi konteks `Ctx` usaha dari invoice.
+      - Perlindungan Harga di Bawah Minimal (hasBelowMin): Menolak keras persetujuan via tombol Telegram jika pesanan memiliki item di bawah harga dasar (`hasBelowMin = true`) dengan alert "Ada harga di bawah minimal. Buka aplikasi untuk menyetujui dengan catatan." (mewajibkan override note pemilik di aplikasi web).
+      - Idempotensi Callback Ganda: Jika faktur sudah diputuskan (`status !== PENDING_APPROVAL`), membalas "Faktur sudah diproses sebelumnya" dan otomatis menghapus tombol inline dari pesan.
+      - Pembaruan Visual: Setelah berhasil disetujui, tombol inline dihapus dan pesan diperbarui dengan catatan "Disetujui oleh {nama}".
+    - Verifikasi Pembayaran Cepat (`pv:<paymentId>:y`):
+      - Memanggil domain service verifikasi yang sama persis (`verifyPayment`) dalam transaksi database.
+      - Idempotensi Callback Ganda: Jika pembayaran sudah diverifikasi/diproses, membalas "Pembayaran sudah diproses sebelumnya" dan menghapus tombol.
+      - Pembaruan Visual: Tombol inline dihapus dan pesan diperbarui dengan catatan "Diverifikasi oleh {nama}".
+  - Format Notifikasi Lengkap Sesuai Tabel 12.4 (`src/lib/services/order.ts`):
+    - `submitOrder`: Notifikasi pengajuan pesanan ke Super Admin menyertakan rincian lengkap: Sales, Pelanggan, Tipe Invoice & Versi, Total tagihan, Simulasi Laba & Margin Bps, serta tanda peringatan khusus "⚠️ Ada harga di bawah minimal" beserta alasan sales bila ada.
+    - `requestFinalOrder`: Notifikasi pengajuan faktur pelunasan ke Super Admin menyertakan rincian sales, pelanggan, tipe invoice FINAL, dan total tagihan pelunasan.
+  - Pengujian Integrasi Komprehensif (`tests/integration/telegram-bot.test.ts`):
+    - Penambahan 8 skenario pengujian unit & integrasi untuk T4.2: tombol inline approval request, tombol inline payment pending, penolakan callback non-Super Admin, pencegahan approval belowMin via tombol, eksekusi sukses approval faktur, idempotensi callback ganda invoice, eksekusi sukses verifikasi payment, dan idempotensi callback ganda payment (total 19 tes pada file pengujian telegram bot lulus).
+
 - Bot Telegram Resmi, Webhook Terproteksi, Handler Perintah Dasar, Layanan Notifikasi Idempoten, dan Antrean Job Background pg-boss sesuai Seksi 10.4, 15.1, 15.2, 17.3 nomor 16, dan 19.5 Dokumen Spesifikasi (T4.1):
   - Integrasi Dependensi:
     - Instalasi `grammy` (v1.46.0) untuk framework Telegram Bot API dan `pg-boss` (v12.38.1) untuk antrean job terisolasi PostgreSQL.

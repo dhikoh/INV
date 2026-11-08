@@ -21,6 +21,28 @@ import { hashLinkCode } from '@/lib/telegram/linkCode';
 import { env } from '@/lib/env';
 import { prisma } from '@/lib/db';
 
+const approveInvoiceMock = vi.fn(async (tx: any, ctx: any, invoiceId: string, options: any) => {
+  const inv = mockInvoices.find((i) => i.id === invoiceId);
+  if (inv) inv.status = InvoiceStatus.APPROVED;
+  return { id: invoiceId };
+});
+
+const verifyPaymentMock = vi.fn(async (tx: any, ctx: any, paymentId: string) => {
+  const pay = mockPayments.find((p) => p.id === paymentId);
+  if (pay) pay.status = PaymentStatus.VERIFIED;
+  return { id: paymentId };
+});
+
+vi.mock('@/lib/services/invoice', () => ({
+  approveInvoice: (tx: any, ctx: any, invoiceId: string, options: any) =>
+    approveInvoiceMock(tx, ctx, invoiceId, options),
+}));
+
+vi.mock('@/lib/services/payment', () => ({
+  verifyPayment: (tx: any, ctx: any, paymentId: string) =>
+    verifyPaymentMock(tx, ctx, paymentId),
+}));
+
 // In-memory mock database
 let mockBusinesses: any[] = [];
 let mockUsers: any[] = [];
@@ -162,6 +184,15 @@ vi.mock('@/lib/db', () => {
           return true;
         }).length;
       }),
+      findUnique: vi.fn(async ({ where, include }: { where: { id: string }; include?: any }) => {
+        const inv = mockInvoices.find((i) => i.id === where.id);
+        if (!inv) return null;
+        const res = { ...inv };
+        if (include?.business) {
+          res.business = mockBusinesses.find((b) => b.id === inv.businessId) || null;
+        }
+        return res;
+      }),
     },
     payment: {
       count: vi.fn(async ({ where }: { where: any }) => {
@@ -170,6 +201,15 @@ vi.mock('@/lib/db', () => {
           if (where.status && p.status !== where.status) return false;
           return true;
         }).length;
+      }),
+      findUnique: vi.fn(async ({ where, include }: { where: { id: string }; include?: any }) => {
+        const p = mockPayments.find((pay) => pay.id === where.id);
+        if (!p) return null;
+        const res = { ...p };
+        if (include?.business) {
+          res.business = mockBusinesses.find((b) => b.id === p.businessId) || null;
+        }
+        return res;
       }),
     },
     product: {
@@ -201,6 +241,15 @@ vi.mock('@/lib/db', () => {
           if (where.deletedAt === null && o.deletedAt !== null) return false;
           return true;
         }).length;
+      }),
+      findUnique: vi.fn(async ({ where, include }: { where: { id: string }; include?: any }) => {
+        const ord = mockOrders.find((o) => o.id === where.id);
+        if (!ord) return null;
+        const res = { ...ord };
+        if (include?.items) {
+          res.items = ord.items || [];
+        }
+        return res;
       }),
     },
     $transaction: vi.fn(async (callback: any) => {
@@ -283,10 +332,28 @@ describe('T4.1: Bot Telegram dan Antrean Job Background (Tes 17.3 No. 16)', () =
     ];
 
     mockNotifications = [];
+    approveInvoiceMock.mockClear();
+    verifyPaymentMock.mockClear();
+
     mockInvoices = [
       {
         id: 'inv_1',
         businessId,
+        orderId: 'ord_1',
+        status: InvoiceStatus.PENDING_APPROVAL,
+        deletedAt: null,
+      },
+      {
+        id: 'inv_001',
+        businessId,
+        orderId: 'ord_001',
+        status: InvoiceStatus.PENDING_APPROVAL,
+        deletedAt: null,
+      },
+      {
+        id: 'inv_below_min',
+        businessId,
+        orderId: 'ord_below_min',
         status: InvoiceStatus.PENDING_APPROVAL,
         deletedAt: null,
       },
@@ -295,6 +362,13 @@ describe('T4.1: Bot Telegram dan Antrean Job Background (Tes 17.3 No. 16)', () =
       {
         id: 'pay_1',
         businessId,
+        orderId: 'ord_1',
+        status: PaymentStatus.PENDING_VERIFICATION,
+      },
+      {
+        id: 'pay_001',
+        businessId,
+        orderId: 'ord_001',
         status: PaymentStatus.PENDING_VERIFICATION,
       },
     ];
@@ -320,6 +394,26 @@ describe('T4.1: Bot Telegram dan Antrean Job Background (Tes 17.3 No. 16)', () =
         businessId,
         salesId: salesUserId,
         status: OrderStatus.AWAITING_DP,
+        hasBelowMin: false,
+        items: [{ id: 'item_0', price: 50000n, minPriceSnapshot: 40000n, belowMin: false }],
+        deletedAt: null,
+      },
+      {
+        id: 'ord_001',
+        businessId,
+        salesId: salesUserId,
+        status: OrderStatus.PENDING_APPROVAL,
+        hasBelowMin: false,
+        items: [{ id: 'item_1', price: 100000n, minPriceSnapshot: 90000n, belowMin: false }],
+        deletedAt: null,
+      },
+      {
+        id: 'ord_below_min',
+        businessId,
+        salesId: salesUserId,
+        status: OrderStatus.PENDING_APPROVAL,
+        hasBelowMin: true,
+        items: [{ id: 'item_2', price: 70000n, minPriceSnapshot: 90000n, belowMin: true }],
         deletedAt: null,
       },
     ];
@@ -543,6 +637,244 @@ describe('T4.1: Bot Telegram dan Antrean Job Background (Tes 17.3 No. 16)', () =
 
       const updated = mockNotifications.find((n) => n.id === notif.id);
       expect(updated.telegramError).toContain('403');
+    });
+  });
+
+  describe('5. Tombol Inline & Callback Persetujuan Telegram (T4.2 - Seksi 12.4 & Tabel 19.5)', () => {
+    it('sendTelegramNotification menyertakan inline keyboard tombol interaktif (Setujui, Tolak, Buka) untuk APPROVAL_REQUEST', async () => {
+      const notif = await createNotification(prisma as any, {
+        businessId,
+        userId: superAdminId,
+        type: 'APPROVAL_REQUEST',
+        title: 'Pengajuan Pesanan Baru',
+        body: 'Sales mengajukan invoice senilai Rp 1.500.000',
+        linkPath: '/approvals/inv_001',
+        dedupeKey: 'APPROVE_REQ:inv_001:test',
+      });
+
+      sentMessages = [];
+      const result = await sendTelegramNotification(notif.id);
+      expect(result.sent).toBe(true);
+      expect(sentMessages.length).toBeGreaterThan(0);
+
+      const sendCall = sentMessages.find((m) => m.method === 'sendMessage');
+      expect(sendCall).toBeDefined();
+      const keyboard = sendCall?.payload?.reply_markup?.inline_keyboard;
+      expect(keyboard).toBeDefined();
+      expect(keyboard).toHaveLength(2); // Row 1: Setujui, Tolak. Row 2: Buka
+      expect(keyboard[0][0].text).toBe('Setujui');
+      expect(keyboard[0][0].callback_data).toBe('ap:inv_001:y');
+      expect(keyboard[0][1].text).toBe('Tolak');
+      expect(keyboard[0][1].url).toContain('/tg/approvals/inv_001?reject=1');
+      expect(keyboard[1][0].text).toBe('Buka');
+      expect(keyboard[1][0].url).toContain('/tg/approvals/inv_001');
+    });
+
+    it('sendTelegramNotification menyertakan inline keyboard tombol interaktif (Verifikasi, Buka) untuk PAYMENT_PENDING', async () => {
+      const notif = await createNotification(prisma as any, {
+        businessId,
+        userId: superAdminId,
+        type: 'PAYMENT_PENDING',
+        title: 'Pembayaran Menunggu Verifikasi',
+        body: 'Pelanggan mentransfer Rp 500.000',
+        linkPath: '/payments/pay_001',
+        dedupeKey: 'PAY_PENDING:pay_001:test',
+      });
+
+      sentMessages = [];
+      const result = await sendTelegramNotification(notif.id);
+      expect(result.sent).toBe(true);
+
+      const sendCall = sentMessages.find((m) => m.method === 'sendMessage');
+      const keyboard = sendCall?.payload?.reply_markup?.inline_keyboard;
+      expect(keyboard).toBeDefined();
+      expect(keyboard[0][0].text).toBe('Verifikasi');
+      expect(keyboard[0][0].callback_data).toBe('pv:pay_001:y');
+      expect(keyboard[0][1].text).toBe('Buka');
+      expect(keyboard[0][1].url).toContain('/tg/payments');
+    });
+
+    it('Non-Super Admin yang menekan tombol callback ditolak dengan pesan akses ditolak', async () => {
+      // User sales (role: SALES, chatId: 555666777)
+      const salesUser = mockUsers.find((u) => u.id === salesUserId);
+      salesUser.telegramChatId = 555666777n;
+
+      sentMessages = [];
+      await bot.handleUpdate({
+        update_id: 10,
+        callback_query: {
+          id: 'cb_sales_1',
+          from: { id: 555666777, is_bot: false, first_name: 'Sari' },
+          message: {
+            message_id: 101,
+            date: Math.floor(Date.now() / 1000),
+            chat: { id: 555666777, type: 'private' },
+            text: 'Pengajuan Pesanan Baru',
+          },
+          data: 'ap:inv_001:y',
+        },
+      } as any);
+
+      expect(approveInvoiceMock).not.toHaveBeenCalled();
+      const answerCall = sentMessages.find((m) => m.method === 'answerCallbackQuery');
+      expect(answerCall).toBeDefined();
+      expect(answerCall?.payload?.text).toContain('Akses ditolak');
+      expect(answerCall?.payload?.show_alert).toBe(true);
+    });
+
+    it('Persetujuan faktur dengan harga di bawah minimal (hasBelowMin = true) ditolak lewat tombol Telegram', async () => {
+      sentMessages = [];
+      await bot.handleUpdate({
+        update_id: 11,
+        callback_query: {
+          id: 'cb_below_min',
+          from: { id: 987654321, is_bot: false, first_name: 'Pak Bos' },
+          message: {
+            message_id: 102,
+            date: Math.floor(Date.now() / 1000),
+            chat: { id: 987654321, type: 'private' },
+            text: 'Pengajuan Pesanan dengan Harga Di Bawah Minimal',
+          },
+          data: 'ap:inv_below_min:y',
+        },
+      } as any);
+
+      expect(approveInvoiceMock).not.toHaveBeenCalled();
+      const answerCall = sentMessages.find((m) => m.method === 'answerCallbackQuery');
+      expect(answerCall).toBeDefined();
+      expect(answerCall?.payload?.text).toContain('Ada harga di bawah minimal');
+      expect(answerCall?.payload?.show_alert).toBe(true);
+
+      const inv = mockInvoices.find((i) => i.id === 'inv_below_min');
+      expect(inv.status).toBe(InvoiceStatus.PENDING_APPROVAL);
+    });
+
+    it('Super Admin menyetujui faktur normal (hasBelowMin = false) berhasil memanggil domain service dan mengubah status', async () => {
+      sentMessages = [];
+      await bot.handleUpdate({
+        update_id: 12,
+        callback_query: {
+          id: 'cb_approve_ok',
+          from: { id: 987654321, is_bot: false, first_name: 'Pak Bos' },
+          message: {
+            message_id: 103,
+            date: Math.floor(Date.now() / 1000),
+            chat: { id: 987654321, type: 'private' },
+            text: 'Pengajuan Pesanan Normal',
+          },
+          data: 'ap:inv_001:y',
+        },
+      } as any);
+
+      expect(approveInvoiceMock).toHaveBeenCalledTimes(1);
+      expect(approveInvoiceMock).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          role: Role.SUPERADMIN,
+          businessId,
+        }),
+        'inv_001',
+        expect.anything()
+      );
+
+      const answerCall = sentMessages.find((m) => m.method === 'answerCallbackQuery');
+      expect(answerCall?.payload?.text).toContain('berhasil disetujui');
+
+      const inv = mockInvoices.find((i) => i.id === 'inv_001');
+      expect(inv.status).toBe(InvoiceStatus.APPROVED);
+    });
+
+    it('Callback ganda persetujuan faktur bersifat idempoten (menjawab "Sudah diproses" dan menghapus tombol)', async () => {
+      // Tandai inv_001 sudah berstatus APPROVED
+      const inv = mockInvoices.find((i) => i.id === 'inv_001');
+      inv.status = InvoiceStatus.APPROVED;
+
+      sentMessages = [];
+      await bot.handleUpdate({
+        update_id: 13,
+        callback_query: {
+          id: 'cb_duplicate_ap',
+          from: { id: 987654321, is_bot: false, first_name: 'Pak Bos' },
+          message: {
+            message_id: 103,
+            date: Math.floor(Date.now() / 1000),
+            chat: { id: 987654321, type: 'private' },
+            text: 'Pengajuan Pesanan Normal',
+          },
+          data: 'ap:inv_001:y',
+        },
+      } as any);
+
+      expect(approveInvoiceMock).not.toHaveBeenCalled();
+      const answerCall = sentMessages.find((m) => m.method === 'answerCallbackQuery');
+      expect(answerCall?.payload?.text).toContain('sudah diproses');
+
+      const replyMarkupCall = sentMessages.find((m) => m.method === 'editMessageReplyMarkup');
+      expect(replyMarkupCall).toBeDefined();
+      expect(replyMarkupCall?.payload?.reply_markup?.inline_keyboard).toEqual([]);
+    });
+
+    it('Super Admin memverifikasi pembayaran berhasil memanggil domain service verifyPayment', async () => {
+      sentMessages = [];
+      await bot.handleUpdate({
+        update_id: 14,
+        callback_query: {
+          id: 'cb_pay_ok',
+          from: { id: 987654321, is_bot: false, first_name: 'Pak Bos' },
+          message: {
+            message_id: 104,
+            date: Math.floor(Date.now() / 1000),
+            chat: { id: 987654321, type: 'private' },
+            text: 'Pembayaran Menunggu Verifikasi',
+          },
+          data: 'pv:pay_001:y',
+        },
+      } as any);
+
+      expect(verifyPaymentMock).toHaveBeenCalledTimes(1);
+      expect(verifyPaymentMock).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          role: Role.SUPERADMIN,
+          businessId,
+        }),
+        'pay_001'
+      );
+
+      const answerCall = sentMessages.find((m) => m.method === 'answerCallbackQuery');
+      expect(answerCall?.payload?.text).toContain('berhasil diverifikasi');
+
+      const pay = mockPayments.find((p) => p.id === 'pay_001');
+      expect(pay.status).toBe(PaymentStatus.VERIFIED);
+    });
+
+    it('Callback ganda verifikasi pembayaran bersifat idempoten', async () => {
+      // Tandai pay_001 sudah berstatus VERIFIED
+      const pay = mockPayments.find((p) => p.id === 'pay_001');
+      pay.status = PaymentStatus.VERIFIED;
+
+      sentMessages = [];
+      await bot.handleUpdate({
+        update_id: 15,
+        callback_query: {
+          id: 'cb_duplicate_pv',
+          from: { id: 987654321, is_bot: false, first_name: 'Pak Bos' },
+          message: {
+            message_id: 104,
+            date: Math.floor(Date.now() / 1000),
+            chat: { id: 987654321, type: 'private' },
+            text: 'Pembayaran Menunggu Verifikasi',
+          },
+          data: 'pv:pay_001:y',
+        },
+      } as any);
+
+      expect(verifyPaymentMock).not.toHaveBeenCalled();
+      const answerCall = sentMessages.find((m) => m.method === 'answerCallbackQuery');
+      expect(answerCall?.payload?.text).toContain('sudah diproses');
+
+      const replyMarkupCall = sentMessages.find((m) => m.method === 'editMessageReplyMarkup');
+      expect(replyMarkupCall).toBeDefined();
     });
   });
 });

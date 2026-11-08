@@ -2,6 +2,8 @@ import { prisma } from '@/lib/db';
 import { bot } from '@/lib/telegram/bot';
 import { escapeHtml, prefix } from '@/lib/telegram/format';
 import { logger } from '@/lib/logger';
+import { env } from '@/lib/env';
+import { InlineKeyboard } from 'grammy';
 import type { TxClient } from './invoice';
 
 export interface CreateNotificationInput {
@@ -86,13 +88,100 @@ export async function sendTelegramNotification(notificationId: string): Promise<
   }
 
   const businessName = user.business?.name || 'OmniCat';
-  const text = `<b>${escapeHtml(notif.title)}</b>\n\n${escapeHtml(notif.body)}`;
+  const text = `<b>${escapeHtml(notif.title)}</b>\n\n${notif.body}`;
   const message = prefix(businessName, text);
 
+  // Buat tombol interaktif sesuai Seksi 12.4 Dokumen Spesifikasi
+  const keyboard = new InlineKeyboard();
+
+  if (notif.type === 'APPROVAL_REQUEST') {
+    let invoiceId: string | null = null;
+    if (notif.linkPath && notif.linkPath.includes('/approvals/')) {
+      invoiceId = notif.linkPath.replace('/approvals/', '').split('?')[0];
+    } else if (notif.dedupeKey) {
+      if (notif.dedupeKey.startsWith('approval_req_')) {
+        const withoutPrefix = notif.dedupeKey.slice('approval_req_'.length);
+        if (withoutPrefix.endsWith(`_${notif.userId}`)) {
+          invoiceId = withoutPrefix.slice(0, -(notif.userId.length + 1));
+        } else {
+          invoiceId = withoutPrefix;
+        }
+      } else if (notif.dedupeKey.startsWith('req_final_')) {
+        const withoutPrefix = notif.dedupeKey.slice('req_final_'.length);
+        if (withoutPrefix.endsWith(`_${notif.userId}`)) {
+          invoiceId = withoutPrefix.slice(0, -(notif.userId.length + 1));
+        } else {
+          invoiceId = withoutPrefix;
+        }
+      } else {
+        const match = notif.dedupeKey.match(/^(?:approval_req|APPROVE_REQ|INVOICE_SUBMITTED):([^:]+)/);
+        if (match) invoiceId = match[1];
+      }
+    }
+
+    if (invoiceId) {
+      keyboard
+        .text('Setujui', `ap:${invoiceId}:y`)
+        .url('Tolak', `${env.APP_URL}/tg/approvals/${invoiceId}?reject=1`)
+        .row()
+        .url('Buka', `${env.APP_URL}/tg/approvals/${invoiceId}`);
+    } else if (notif.linkPath) {
+      keyboard.url('Buka', `${env.APP_URL}${notif.linkPath}`);
+    }
+  } else if (
+    notif.type === 'PAYMENT_PENDING' ||
+    notif.type === 'PAYMENT_SUBMITTED'
+  ) {
+    let paymentId: string | null = null;
+    if (notif.linkPath && notif.linkPath.includes('/payments/')) {
+      paymentId = notif.linkPath.replace('/payments/', '').split('?')[0];
+    } else if (notif.linkPath && notif.linkPath.includes('id=')) {
+      paymentId = notif.linkPath.split('id=')[1].split('&')[0];
+    } else if (notif.dedupeKey) {
+      const match = notif.dedupeKey.match(/^(?:pay_pending|PAYMENT_SUBMITTED):([^:]+)/);
+      if (match) paymentId = match[1];
+      else {
+        const parts = notif.dedupeKey.split('_');
+        if (parts.length >= 3) {
+          paymentId = parts[2];
+        }
+      }
+    }
+
+    if (paymentId) {
+      keyboard
+        .text('Verifikasi', `pv:${paymentId}:y`)
+        .url('Buka', `${env.APP_URL}/tg/payments`);
+    } else {
+      keyboard.url('Buka', `${env.APP_URL}/tg/payments`);
+    }
+  } else if (notif.linkPath) {
+    const path = notif.linkPath.startsWith('/')
+      ? notif.linkPath
+      : `/${notif.linkPath}`;
+    keyboard.url('Buka', `${env.APP_URL}${path}`);
+  }
+
+  // Jeda aman 50ms antar pesan berurutan (Seksi 12.5)
+  await new Promise((resolve) => setTimeout(resolve, 50));
+
   try {
-    await bot.api.sendMessage(Number(user.telegramChatId), message, {
+    const sendOptions: {
+      parse_mode: 'HTML';
+      reply_markup?: InlineKeyboard;
+    } = {
       parse_mode: 'HTML',
-    });
+    };
+
+    if (keyboard.inline_keyboard.length > 0) {
+      sendOptions.reply_markup = keyboard;
+    }
+
+    await bot.api.sendMessage(
+      Number(user.telegramChatId),
+      message,
+      sendOptions
+    );
 
     await prisma.notification.update({
       where: { id: notificationId },

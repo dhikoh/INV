@@ -5,6 +5,7 @@ import { calcLine, calcOrderTotals } from '@/lib/domain/order';
 import { baseFloor, lineFloor, isBelowFloor, isPromoActive, PromoRule } from '@/lib/domain/pricing';
 import { calcProfit } from '@/lib/domain/profit';
 import { formatRupiah } from '@/lib/domain/money';
+import { escapeHtml } from '@/lib/telegram/format';
 import { OrderCreateSchema, OrderRequestFinalInput } from '@/lib/validation/order';
 import { prisma } from '@/lib/db';
 import { lockOrder, assertStatus } from './orderGuard';
@@ -724,11 +725,38 @@ export async function submitOrder(
     },
   });
 
-  // Notifikasi untuk Super Admin
+  // Notifikasi untuk Super Admin (Seksi 12.4: Sales, customer, tipe invoice, total, profit dan margin, tanda di bawah minimal)
   const admins = await tx.user.findMany({
     where: { role: Role.SUPERADMIN, isActive: true },
     select: { id: true },
   });
+
+  const profitResult = calcProfit({
+    items: order.items.map((i) => ({
+      qty: i.qty,
+      lineNet: Number(i.lineNet),
+      costPrice: Number(i.costPrice),
+      discountSource: i.discountSource || 'MANUAL',
+      lineDiscount: Number(i.lineDiscount),
+    })),
+    returns: [],
+    shippingCharge: Number(order.shippingCharge),
+    shippingActualCost: 0,
+    extraCosts: [],
+  });
+
+  const marginPercent = (profitResult.marginBps / 100).toFixed(2);
+  const belowMinNotice = order.hasBelowMin
+    ? `\n⚠️ <b>Ada harga di bawah minimal</b>\nAlasan: ${escapeHtml(belowMinReason || '-')}`
+    : '';
+
+  const notifBody =
+    `Sales: <b>${escapeHtml(ctx.user.name)}</b>\n` +
+    `Pelanggan: <b>${escapeHtml(order.customer?.name || '-')}</b>\n` +
+    `Tipe: <b>Invoice ${invoiceType} v${version}</b>\n` +
+    `Total: <b>${formatRupiah(Number(invoiceAmount))}</b>\n` +
+    `Laba: <b>${formatRupiah(profitResult.profit)} (${marginPercent}%)</b>` +
+    belowMinNotice;
 
   for (const admin of admins) {
     await tx.notification.create({
@@ -737,7 +765,7 @@ export async function submitOrder(
         userId: admin.id,
         type: 'APPROVAL_REQUEST',
         title: 'Pengajuan Pesanan Baru',
-        body: `Pesanan #${order.orderNo || order.id.slice(-6)} diajukan oleh ${ctx.user.name} untuk persetujuan Invoice ${invoiceType}`,
+        body: notifBody,
         linkPath: '/approvals',
         dedupeKey: `approval_req_${invoice.id}_${admin.id}`,
       },
@@ -1063,6 +1091,12 @@ export async function requestFinalOrder(
     select: { id: true },
   });
 
+  const finalNotifBody =
+    `Sales: <b>${escapeHtml(ctx.user.name)}</b>\n` +
+    `Pelanggan: <b>${escapeHtml(order.customer?.name || '-')}</b>\n` +
+    `Tipe: <b>Invoice FINAL (Pelunasan) v${version}</b>\n` +
+    `Total: <b>${formatRupiah(Number(invoiceAmount))}</b>`;
+
   for (const sa of superAdmins) {
     await tx.notification.create({
       data: {
@@ -1070,8 +1104,8 @@ export async function requestFinalOrder(
         businessId,
         type: 'APPROVAL_REQUEST',
         title: 'Pengajuan Pelunasan Menunggu Persetujuan',
-        body: `Pesanan ${order.orderNo || order.id} mengajukan faktur pelunasan sebesar ${formatRupiah(Number(invoiceAmount))}`,
-        linkPath: `/approvals`,
+        body: finalNotifBody,
+        linkPath: `/approvals/${createdInvoice.id}`,
         dedupeKey: `req_final_${createdInvoice.id}_${sa.id}`,
       },
     });

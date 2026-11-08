@@ -15,3 +15,4 @@ export function prefix(businessCodeOrName: string, text: string): string {
   const safeCode = escapeHtml(businessCodeOrName || 'USAHA');
   return `<b>[${safeCode}]</b> ${text}`.slice(0, 4000);
 }
+

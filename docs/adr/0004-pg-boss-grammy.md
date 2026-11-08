@@ -35,3 +35,4 @@ Pada versi `pg-boss` v12:
 
 - Lingkungan pengujian Vitest dapat menguji logika bot, perintah `/start`, `/me`, `/today`, dan pemanggilan webhook tanpa memerlukan instance PostgreSQL worker atau token bot langsung (menggunakan mock handler).
 - Pada lingkungan produksi, proses worker dijalankan berdampingan sebagai container/service kedua di Coolify.
+
