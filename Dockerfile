@@ -30,6 +30,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV TZ=Asia/Jakarta
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 ENV HOME=/home/nextjs
+ENV NODE_PATH="/usr/local/lib/node_modules"
 
 # Install Chromium, fonts, and required tools
 RUN apt-get update && apt-get install -y --no-install-recommends \
