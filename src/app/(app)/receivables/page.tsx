@@ -11,6 +11,7 @@ import {
   ExternalLink,
   MessageCircle,
   FileText,
+  FileSpreadsheet,
   Loader2,
   CheckCircle2,
 } from 'lucide-react';
@@ -139,15 +140,37 @@ export default function ReceivablesPage() {
             Pantau saldo tagihan pelanggan yang belum lunas dan kendalikan risiko piutang macet.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={fetchReceivables}
-          disabled={loading}
-          className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-        >
-          <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-          Segarkan
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={fetchReceivables}
+            disabled={loading}
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          >
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            Segarkan
+          </button>
+          <a
+            href="/api/v1/reports/export?type=receivables-aging&format=xlsx"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-emerald-700 transition"
+            title="Ekspor Laporan Umur Piutang ke Excel (XLSX)"
+          >
+            <FileSpreadsheet className="h-4 w-4" />
+            Excel
+          </a>
+          <a
+            href="/api/v1/reports/export?type=receivables-aging&format=pdf"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-slate-800 px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-slate-900 transition"
+            title="Ekspor Laporan Umur Piutang ke PDF"
+          >
+            <FileText className="h-4 w-4" />
+            PDF
+          </a>
+        </div>
       </div>
 
       {/* Metrik Ringkasan Utama */}

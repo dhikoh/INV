@@ -133,6 +133,7 @@ import {
 import { GET as getSalesPerformanceReportHandler } from '@/app/api/v1/reports/sales-performance/route';
 import { GET as getCommissionReportHandler } from '@/app/api/v1/reports/commissions/route';
 import { POST as payCommissionHandler } from '@/app/api/v1/commissions/[id]/pay/route';
+import { GET as getReceivablesAgingReportHandler } from '@/app/api/v1/reports/receivables-aging/route';
 
 describe('Matriks Hak Akses Berbasis Tabel (Seksi 5.1 & 17.4 b)', () => {
   const APP_URL = 'http://localhost:3000';
@@ -799,6 +800,12 @@ describe('Matriks Hak Akses Berbasis Tabel (Seksi 5.1 & 17.4 b)', () => {
       handler: (req, r) => payCommissionHandler(req, r),
       params: { id: 'comm_1' },
       body: { note: 'Pembayaran komisi via transfer' },
+    },
+    {
+      name: 'GET /api/v1/reports/receivables-aging',
+      method: 'GET',
+      path: '/api/v1/reports/receivables-aging',
+      handler: (req) => getReceivablesAgingReportHandler(req),
     },
   ];
 

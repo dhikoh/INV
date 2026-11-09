@@ -246,6 +246,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     { label: 'Invoice', href: '/invoices', icon: FileText },
     { label: 'Piutang', href: '/receivables', icon: Receipt },
     { label: 'Customer', href: '/customers', icon: Users },
+    { label: 'Laporan CRM', href: '/reports/crm', icon: BarChart3 },
     { label: 'Katalog', href: '/catalogs', icon: BookOpen },
     { label: 'Pengingat', href: '/reminders', icon: Bell },
     {

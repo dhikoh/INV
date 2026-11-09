@@ -8,6 +8,31 @@ dan proyek ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Piutang, Laporan CRM, Ekspor Excel & PDF dengan Perlindungan Formula Injection sesuai Seksi 13.3, 16.2, 16.4 Dokumen Spesifikasi (T5.4):
+  - Adopsi Pustaka ExcelJS v4.4.0 & Pencatatan ADR:
+    - Pustaka `exceljs` (`v4.4.0`) diinstal dan didokumentasikan dalam [`docs/adr/0005-exceljs-export.md`](file:///D:/Data%20BentoCat/docs/adr/0005-exceljs-export.md) untuk pembuatan workbook XLSX streaming/in-memory secara aman tanpa risiko eksekusi kode dinamis.
+  - Sanitasi Sel Formula Spreadsheet (Mitigasi Seksi 16.4):
+    - Modul `exportSanitizer.ts` (`sanitizeFormulaInjection` dan `sanitizeRow`): Sel teks yang diawali karakter berbahaya formula spreadsheet (`=`, `+`, `-`, `@`) secara otomatis diberi awalan petik tunggal (`'`), memastikan formula injeksi (seperti `=cmd|' /C calc'!A0` atau `@SUM(...)`) diperlakukan murni sebagai teks biasa oleh Microsoft Excel, Google Sheets, LibreOffice Calc, dan WPS Office.
+  - Layanan Domain & Endpoint Laporan Umur Piutang (Seksi 13.3):
+    - `receivablesAging.ts` & `GET /api/v1/reports/receivables-aging`: Mengelompokkan invoice berstatus `APPROVED` yang memiliki sisa tagihan belum terbayar (`amount - paidAmount > 0`) ke dalam 5 bucket keterlambatan terhadap tanggal jatuh tempo (`dueDate`): `CURRENT` (belum jatuh tempo), `DAYS_1_7` (1–7 hari), `DAYS_8_30` (8–30 hari), `DAYS_31_60` (31–60 hari), dan `DAYS_OVER_60` (>60 hari).
+    - Invoice berstatus `DRAFT`, `VOID`, invoice lunas, serta order berstatus `CANCELLED` dikecualikan secara ketat dari umur piutang. Akses dibatasi khusus Super Admin (Sales ditolak 403 Forbidden).
+  - Layanan Domain & Endpoint Laporan CRM & Pipeline (Seksi 17.3 nomor 22, 18.1 nomor 33):
+    - `reportCrm.ts` & `GET /api/v1/reports/crm`: Menghasilkan ringkasan konversi pipeline pelanggan (`LEAD`, `PROSPECT`, `DEAL`, `REPEAT`, `LOST`), statistik tugas follow-up CRM (`PENDING`, `DONE`, `OVERDUE`), riwayat interaksi WhatsApp/Telepon/Kunjungan/Email, pengingat repeat order, serta daftar aktivitas terbaru.
+    - Hak akses: Super Admin dapat memantau agregat seluruh staf sales, sedangkan staf Sales dibatasi hanya melihat customer dan aktivitas miliknya sendiri (Zero-Leakage & Tenant Scoping).
+  - Mesin Ekspor Multi-Format XLSX & PDF (Seksi 16.2, 16.4):
+    - `reportExport.ts` & `GET /api/v1/reports/export`: Endpoint terpadu untuk mengekspor 5 jenis laporan (`receivables-aging`, `crm`, `margin`, `sales-performance`, `commissions`) ke dalam format `.xlsx` (ExcelJS) atau `.pdf` (Puppeteer PDF generator).
+    - Styling berkas Excel profesional: Header biru gelap BentoCat (`#1E293B`), teks putih tebal, zebra row striping, format angka mata uang rupiah `#,##0`, dan penyesuaian lebar kolom otomatis.
+    - Perlindungan akses: Laporan keuangan/margin, umur piutang, evaluasi sales, dan komisi ditolak 403 Forbidden jika diakses oleh Sales. Sales hanya diizinkan mengekspor laporan CRM miliknya sendiri.
+  - Antarmuka Pengguna:
+    - `/reports` (`src/app/(app)/reports/page.tsx`): Pusat Hub Laporan terpadu yang menampilkan navigasi kartu untuk Laporan Margin & Profit, Umur Piutang, Evaluasi Sales, Laporan Komisi, dan Laporan CRM dengan badge hak akses dan rincian fitur.
+    - `/reports/crm` (`src/app/(app)/reports/crm/page.tsx`): Halaman Laporan CRM dengan ringkasan konversi pipeline, metrik tugas & interaksi, tabel aktivitas terkini, dan tombol "Ekspor Excel (.xlsx)" serta "Ekspor PDF".
+    - `/receivables` (`src/app/(app)/receivables/page.tsx`): Penambahan tombol ekspor Excel dan PDF langsung dari tampilan umur piutang.
+    - `/reports/margin` (`src/app/(app)/reports/margin/page.tsx`): Penambahan tombol ekspor Excel dan PDF untuk laporan margin berbasis order maupun produk.
+    - `AppShell.tsx`: Penambahan tautan navigasi "Laporan CRM" untuk staf Sales di samping menu "Hub Laporan" untuk Super Admin.
+  - Pengujian Integrasi Komprehensif:
+    - `tests/integration/reports-export.test.ts`: 9 pengujian integrasi baru mencakup: pengelompokan bucket umur piutang, pengecualian order batal & invoice lunas, penolakan 403 role sales untuk umur piutang, agregasi CRM lintas sales untuk SA, pembatasan CRM berbasis sales ID untuk Sales, pembuktian mitigasi Formula Injection (karakter `=`, `+`, `-`, `@` diawali petik tunggal), ekspor CRM oleh Sales, serta blokir 403 saat Sales mencoba mengekspor laporan margin dan piutang.
+    - `tests/integration/permissions.test.ts`: Penambahan rute umur piutang dan ekspor ke matriks hak akses RBAC (lolos 100%).
+
 - Evaluasi Kinerja Sales, SalesTarget, OwnerSalesNote, Laporan Kinerja & Komisi dengan Tanda "Perlu Dikembalikan" sesuai Seksi 8, 17.3 nomor 23, 18.1 nomor 33, dan 18.1 nomor 35 Dokumen Spesifikasi (T5.3):
   - Skema Validasi (`src/lib/validation/salesEvaluation.ts`):
     - `OwnerSalesNoteCreateSchema`: Catatan rahasia evaluasi pemilik usaha maksimal 5000 karakter.

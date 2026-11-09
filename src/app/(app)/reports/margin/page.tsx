@@ -11,6 +11,8 @@ import {
   Users,
   ShoppingCart,
   Building2,
+  FileSpreadsheet,
+  FileText,
 } from 'lucide-react';
 import { Skeleton, ErrorState } from '@/components/ui/States';
 import { formatRupiah, formatPercentFromBps } from '@/lib/domain/money';
@@ -189,7 +191,7 @@ export default function MarginReportPage() {
             </p>
           </div>
 
-          <div className="flex items-center gap-2 self-start md:self-auto">
+          <div className="flex flex-wrap items-center gap-2 self-start md:self-auto">
             <button
               type="button"
               onClick={fetchReport}
@@ -200,6 +202,42 @@ export default function MarginReportPage() {
                 className={`w-4 h-4 ${loadingReport ? 'animate-spin' : ''}`}
               />
               Perbarui Laporan
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const params = new URLSearchParams();
+                params.set('type', 'margin');
+                params.set('format', 'xlsx');
+                params.set('groupBy', groupBy);
+                if (from) params.set('from', from);
+                if (to) params.set('to', to);
+                if (selectedSalesId) params.set('salesId', selectedSalesId);
+                window.open(`/api/v1/reports/export?${params.toString()}`, '_blank');
+              }}
+              className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold shadow-sm transition flex items-center gap-1.5 min-h-[44px]"
+              title="Ekspor Laporan Margin ke Excel (XLSX)"
+            >
+              <FileSpreadsheet className="w-4 h-4" />
+              Excel
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const params = new URLSearchParams();
+                params.set('type', 'margin');
+                params.set('format', 'pdf');
+                params.set('groupBy', groupBy);
+                if (from) params.set('from', from);
+                if (to) params.set('to', to);
+                if (selectedSalesId) params.set('salesId', selectedSalesId);
+                window.open(`/api/v1/reports/export?${params.toString()}`, '_blank');
+              }}
+              className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-semibold shadow-sm transition flex items-center gap-1.5 min-h-[44px]"
+              title="Ekspor Laporan Margin ke PDF"
+            >
+              <FileText className="w-4 h-4" />
+              PDF
             </button>
           </div>
         </div>
