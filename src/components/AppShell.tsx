@@ -20,6 +20,7 @@ import {
   Bell,
   Receipt,
   Sparkles,
+  BookOpen,
   User,
   LogOut,
   Building2,
@@ -183,6 +184,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     { label: 'Piutang', href: '/receivables', icon: Receipt },
     { label: 'Pengingat', href: '/reminders', icon: Bell },
     { label: 'Pelanggan', href: '/customers', icon: Users },
+    { label: 'Katalog', href: '/catalogs', icon: BookOpen },
     { label: 'Produk & Harga', href: '/products', icon: Package },
     { label: 'Stok & Opname', href: '/stock', icon: Boxes },
     { label: 'Purchase Order', href: '/purchase-orders', icon: ClipboardList },
@@ -205,6 +207,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     { label: 'Invoice', href: '/invoices', icon: FileText },
     { label: 'Piutang', href: '/receivables', icon: Receipt },
     { label: 'Customer', href: '/customers', icon: Users },
+    { label: 'Katalog', href: '/catalogs', icon: BookOpen },
     { label: 'Pengingat', href: '/reminders', icon: Bell },
     {
       label: 'Pembaruan',

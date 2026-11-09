@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import {
   Plus,
@@ -139,6 +139,8 @@ export function OrderForm({
   initialBelowMinReason = '',
 }: OrderFormProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const fromCatalogId = searchParams?.get('fromCatalog');
 
   // State User & Role
   const [currentUser, setCurrentUser] = useState<{
@@ -146,6 +148,8 @@ export function OrderForm({
     role: 'SUPERADMIN' | 'SALES';
     name: string;
   } | null>(null);
+
+  const [loadedCatalogTitle, setLoadedCatalogTitle] = useState<string | null>(null);
 
   // Master Data
   const [customers, setCustomers] = useState<CustomerOption[]>([]);
@@ -235,6 +239,44 @@ export function OrderForm({
     }
     loadBootstrap();
   }, []);
+
+  // Muat data katalog jika dibuat dari katalog (?fromCatalog=<id>)
+  useEffect(() => {
+    if (!fromCatalogId || mode !== 'create') return;
+
+    async function loadCatalog() {
+      try {
+        const res = await fetch(`/api/v1/catalogs/${fromCatalogId}`);
+        if (!res.ok) return;
+        const json = await res.json();
+        if (json.ok && json.data) {
+          const cat = json.data;
+          setLoadedCatalogTitle(cat.title);
+          if (cat.customerId) {
+            setCustomerId(cat.customerId);
+          }
+          if (Array.isArray(cat.items) && cat.items.length > 0) {
+            const mappedItems: FormItemLine[] = cat.items.map((it: { productId: string; price: number }, idx: number) => ({
+              id: `cat-line-${idx}-${Date.now()}`,
+              productId: it.productId,
+              qty: 1,
+              unitPrice: it.price,
+              discountType: 'NONE',
+              discountValue: 0,
+            }));
+            setItems(mappedItems);
+          }
+          if (cat.note) {
+            setNotes((prev) => (prev ? prev : `Dari Katalog: ${cat.title} - ${cat.note}`));
+          }
+        }
+      } catch {
+        // Abaikan
+      }
+    }
+
+    loadCatalog();
+  }, [fromCatalogId, mode]);
 
   // Muat data promo saat customerId berubah
   useEffect(() => {
@@ -563,6 +605,21 @@ export function OrderForm({
           </div>
         </div>
       </div>
+
+      {/* Banner Pesanan Berdasarkan Katalog */}
+      {loadedCatalogTitle && (
+        <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-950 flex items-center gap-3 text-xs sm:text-sm shadow-sm">
+          <Sparkles className="w-5 h-5 text-emerald-600 shrink-0" />
+          <div>
+            <p className="font-semibold text-emerald-950">
+              Pesanan dari Katalog: {loadedCatalogTitle}
+            </p>
+            <p className="text-xs text-emerald-700 mt-0.5">
+              Daftar produk dan harga telah otomatis disesuaikan sesuai harga katalog penawaran.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Error Alert Global */}
       {formError && (

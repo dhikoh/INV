@@ -8,6 +8,39 @@ dan proyek ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Manajemen Katalog Harga, Validasi Floor Price, Unduh PDF Resmi, dan Integrasi Buat Order sesuai Seksi 15.1–15.2, 17.3 nomor 18, dan 19.6 Dokumen Spesifikasi (T4.5):
+  - Skema Validasi & Paginasi Katalog (`src/lib/validation/catalog.ts`):
+    - Preset judul cepat: `'Grosir'`, `'Distributor Tunggal'`, `'Ecer'` atau teks bebas 1–60 karakter.
+    - Validasi `CreateCatalogSchema`, `UpdateCatalogSchema`, `ReplaceCatalogItemsSchema`, dan `CatalogQuerySchema`.
+  - Dokumen PDF Katalog Resmi (`src/lib/pdf/CatalogDocument.tsx`):
+    - Tata letak responsif bertema sesuai pengaturan usaha (5 tema invoice: Minimal, Modern, Klasik, Tegas, Berwarna).
+    - Grid & tabel produk lengkap dengan nama, SKU, satuan, harga jual, dan thumbnail foto teroptimasi (max 300 px JPEG via sharp base64 data URI).
+    - Footer resmi: kontak usaha, catatan katalog, kalimat wajib "Harga dapat berubah sewaktu-waktu", disclaimer PPN jika `ppnEnabled`, serta penomoran halaman otomatis.
+    - Proteksi Zero-Leakage: Tidak menampilkan HPP (`costPrice`), harga minimal (`minPrice`), stok (`stockQty`), maupun riwayat harga. Batas maksimal 300 produk per PDF.
+  - Domain Service & Logika Bisnis Katalog (`src/lib/services/catalog.ts`):
+    - Validasi batas harga minimal: Evaluasi terhadap `CustomerMinPrice` jika katalog dikaitkan ke customer, atau fallback ke `Product.minPrice` jika katalog umum. Penolakan instan `422 PRICE_BELOW_MIN` dengan `details: [{ productId, name, floorPrice }]` tanpa jalur persetujuan.
+    - Penanganan kedaluwarsa harga (Stale Handling): Jika Super Admin menaikkan harga minimal setelah katalog dibuat, server menandai `isStale: true`. Unduh PDF ditolak dengan `422 CATALOG_STALE` dengan daftar produk stale.
+    - Fitur penyesuaian otomatis `adjustCatalogToMinPrice`: Menyesuaikan seluruh item stale ke harga minimal terbaru dalam satu transaksi database.
+    - Isolasi hak akses: Staf Sales hanya dapat melihat, mengubah, dan menghapus katalog miliknya sendiri (`ownerId`), sedangkan Super Admin dapat mengelola seluruh katalog usaha.
+  - Endpoint REST API Terproteksi:
+    - `GET /api/v1/catalog-presets`: Mengambil daftar pilihan cepat judul katalog standar.
+    - `GET /api/v1/catalogs`: Daftar katalog dengan paginasi, pencarian judul/catatan, dan filter pelanggan.
+    - `POST /api/v1/catalogs`: Membuat katalog baru dengan baris produk dan validasi floor price.
+    - `GET /api/v1/catalogs/:id`: Detail katalog, evaluasi floor terkini, status stale, dan metadata kepemilikan.
+    - `PATCH /api/v1/catalogs/:id`: Memperbarui judul, pelanggan sasaran, atau catatan katalog.
+    - `DELETE /api/v1/catalogs/:id`: Soft delete katalog.
+    - `PUT /api/v1/catalogs/:id/items`: Mengganti seluruh baris produk katalog dengan validasi floor price.
+    - `POST /api/v1/catalogs/:id/adjust-min`: Menyesuaikan seluruh item stale ke batas floor price terbaru.
+    - `GET /api/v1/catalogs/:id/pdf`: Menghasilkan berkas PDF resmi berpenamaan `Katalog-<judul>-<YYYY-MM-DD>.pdf`.
+  - Antarmuka Pengguna Responsif (UI):
+    - Halaman daftar katalog `src/app/(app)/catalogs/page.tsx`: Pencarian, kartu metrik, tampilan kartu responsif 360 px, unduh PDF instan, dan tombol Buat Order.
+    - Formulir pembuatan katalog `src/app/(app)/catalogs/new/page.tsx`: Preset judul, pemilih pelanggan, picker produk dinamis, kalkulasi floor live, dan deteksi pelanggaran harga seketika.
+    - Detail katalog interaktif `src/app/(app)/catalogs/[id]/page.tsx`: Banner peringatan stale, tombol "Sesuaikan ke harga minimal", tombol "Unduh PDF", tombol "Buat Order", editor inline harga produk, dan tombol "Simpan untuk Offline" (PWA local storage caching).
+    - Integrasi alur order `src/components/orders/OrderForm.tsx` & `src/app/(app)/orders/new/page.tsx`: Dukungan query parameter `?fromCatalog=<id>` untuk prefill otomatis customer, produk, dan harga katalog, disertai banner konfirmasi visual.
+    - Navigasi utama `src/components/AppShell.tsx`: Penambahan menu "Katalog" pada sidebar desktop dan menu navigasi.
+  - Pengujian Komprehensif (`tests/integration/catalogs.test.ts`):
+    - 16 pengujian integrasi otomatis mencakup Tes 17.3 nomor 18: validasi floor customer vs produk umum, `PRICE_BELOW_MIN`, `CATALOG_STALE`, penyesuaian `adjust-min`, isolasi data sales, dan verifikasi zero-leakage `assertNoSecretKeys`.
+
 - Pengingat Otomatis Siklus Repeat Order Pelanggan, Job Terjadwal 13.2, dan Umur Piutang sesuai Seksi 13.1–13.3, 17.3 nomor 15, dan 19.5 Dokumen Spesifikasi (T4.4):
   - Logika Domain Umur Piutang (`src/lib/domain/receivable.ts`):
     - 5 aging bucket standar piutang: `CURRENT` (belum jatuh tempo), `DAYS_1_7` (1–7 hari terlambat), `DAYS_8_30` (8–30 hari), `DAYS_31_60` (31–60 hari), dan `DAYS_OVER_60` (> 60 hari terlambat).

@@ -297,6 +297,12 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
 | `GET/POST` | `/api/v1/reminders`            | Super Admin, Sales | Daftar pengingat repeat order (filter status/due) & buat pengingat manual |
 | `PATCH/DELETE` | `/api/v1/reminders/:id`    | Super Admin, Sales | Ubah interval (MANUAL), snooze, jeda, aktifkan, atau batalkan pengingat |
 | `GET`      | `/api/v1/receivables`          | Super Admin, Sales | Daftar umur piutang (5 aging bucket), ringkasan overdue, Zero-Leakage  |
+| `GET`      | `/api/v1/catalog-presets`      | Super Admin, Sales | Daftar preset judul katalog harga ('Grosir', 'Distributor Tunggal', 'Ecer') |
+| `GET/POST` | `/api/v1/catalogs`             | Super Admin, Sales | Daftar katalog (isolasi Sales) & buat katalog baru (validasi floor PRICE_BELOW_MIN) |
+| `GET/PATCH/DELETE` | `/api/v1/catalogs/:id` | Super Admin, Sales | Detail katalog (evaluasi stale), update metadata, & soft delete katalog |
+| `PUT`      | `/api/v1/catalogs/:id/items`   | Super Admin, Sales | Ganti seluruh item katalog dengan validasi floor price |
+| `POST`     | `/api/v1/catalogs/:id/adjust-min` | Super Admin, Sales | Sesuaikan seluruh item stale ke harga minimal terbaru |
+| `GET`      | `/api/v1/catalogs/:id/pdf`     | Super Admin, Sales | Unduh berkas PDF katalog resmi (tolak 422 CATALOG_STALE jika stale, Zero-Leakage) |
 
 ### Antarmuka Pengguna (UI Routes)
 
@@ -330,6 +336,9 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
 | `/tg`                  | Super Admin, Sales | Pintu masuk Telegram Mini App (TMA), autologin initData aman, & panduan tautan akun |
 | `/reminders`           | Super Admin, Sales | Daftar & manajemen pengingat repeat order pelanggan (snooze, ubah interval, kontak WA) |
 | `/receivables`         | Super Admin, Sales | Monitoring umur piutang (5 aging bucket), ringkasan piutang overdue, tagih WA, link faktur |
+| `/catalogs`            | Super Admin, Sales | Daftar katalog harga, filter customer/search, kartu 360 px, unduh PDF langsung |
+| `/catalogs/new`        | Super Admin, Sales | Formulir pembuatan katalog baru, preset cepat, kalkulasi floor live |
+| `/catalogs/:id`        | Super Admin, Sales | Detail katalog harga, thumbnail produk, banner stale, tombol sesuaikan harga minimal, unduh PDF, buat order |
 
 ---
 
