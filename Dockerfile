@@ -18,6 +18,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
+RUN pnpm prisma generate
 RUN pnpm build
 
 # Stage 4: Runner
@@ -42,7 +43,7 @@ RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nextjs
 
 # Create uploads directory and set permissions
-RUN mkdir -p /data/uploads && chown -R nextjs:nodejs /data/uploads
+RUN mkdir -p /data/uploads && chown -R nextjs:nodejs /data && chmod -R 775 /data
 
 # Copy public & standalone assets
 COPY --from=builder /app/public ./public

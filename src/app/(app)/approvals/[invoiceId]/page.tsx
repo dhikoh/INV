@@ -18,7 +18,16 @@ import {
 import { Skeleton, ErrorState } from '@/components/ui/States';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { formatRupiah, formatPercentFromBps } from '@/lib/domain/money';
-import { InvoiceTheme } from '@prisma/client';
+
+const InvoiceTheme = {
+  PROFESIONAL: 'PROFESIONAL',
+  FAMILY: 'FAMILY',
+  MINIMALIS: 'MINIMALIS',
+  MODERN: 'MODERN',
+  KLASIK: 'KLASIK',
+} as const;
+
+type InvoiceTheme = (typeof InvoiceTheme)[keyof typeof InvoiceTheme];
 
 interface InvoiceDetailData {
   id: string;
