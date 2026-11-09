@@ -42,3 +42,4 @@ Selain itu, pustaka ekspor harus kompatibel dengan lingkungan Node.js, tidak mem
 - `exceljs` ditambahkan ke dependencies proyek pada `package.json`.
 - Seluruh endpoint dan fungsi ekspor wajib mengalirkan data melalui fungsi `sanitizeFormulaInjection`.
 - Suite pengujian integrasi (`tests/integration/reports-export.test.ts`) memvalidasi bahwa sel berbahaya yang diawali `=`, `+`, `-`, atau `@` terbukti dinetralkan dengan awalan `'`.
+

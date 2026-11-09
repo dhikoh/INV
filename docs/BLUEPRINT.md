@@ -305,6 +305,16 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
 | `GET`      | `/api/v1/catalogs/:id/pdf`     | Super Admin, Sales | Unduh berkas PDF katalog resmi (tolak 422 CATALOG_STALE jika stale, Zero-Leakage) |
 | `GET`      | `/api/v1/dashboard`            | Super Admin, Sales | Ringkasan operasional & keuangan (DTO per role, metrik SA, fokus hari ini sales, Zero-Leakage) |
 | `GET`      | `/api/v1/reports/margin`       | Super Admin        | Laporan margin & profit (groupBy=order,product,sales,business, baris kerugian pembatalan Seksi 9.2, Zero-Leakage) |
+| `GET`      | `/api/v1/sales/:id/notes`      | Super Admin        | Riwayat catatan rahasia pemilik evaluasi staf sales (OwnerSalesNote, Zero-Leakage) |
+| `POST`     | `/api/v1/sales/:id/notes`      | Super Admin        | Tambah catatan rahasia pemilik usaha (audit log OWNER_SALES_NOTE_CREATE) |
+| `GET/PUT`  | `/api/v1/sales/:id/targets/:month` | Super Admin    | Ambil & simpan target omzet serta target profit bulanan sales (SalesTarget) |
+| `GET`      | `/api/v1/reports/sales-performance` | Super Admin    | Laporan kinerja komprehensif sales bulanan (omzet, profit, konversi CRM, komisi) |
+| `GET`      | `/api/v1/reports/commissions`  | Super Admin        | Laporan komisi staf sales, deteksi otomatis tanda perlu dikembalikan (needsReturn) |
+| `POST`     | `/api/v1/commissions/:id/pay`  | Super Admin        | Tandai komisi sales telah dibayarkan oleh pemilik usaha |
+| `GET`      | `/api/v1/reports/receivables-aging` | Super Admin    | Laporan umur piutang 5 bucket, pengecualian order batal & invoice lunas |
+| `GET`      | `/api/v1/reports/crm`          | Super Admin, Sales | Laporan aktivitas & pipeline CRM (agregat untuk SA, scoping sales ID untuk Sales) |
+| `GET`      | `/api/v1/reports/export`       | Super Admin, Sales | Ekspor laporan XLSX & PDF dengan perlindungan formula injection (=, +, -, @) |
+| `GET`      | `/api/v1/audit-logs`           | Super Admin        | Daftar log mutasi sistem append-only dengan filter aksi, entitas, tanggal, dan aktor |
 
 ### Antarmuka Pengguna (UI Routes)
 
@@ -312,7 +322,12 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
 | ---------------------- | ------------------ | ---------------------------------------------------------------- |
 | `/login`               | Publik             | Halaman login dengan rate-limiting & proteksi timing attack      |
 | `/dashboard`           | Super Admin, Sales | Dashboard operasional & keuangan (Super Admin: omzet, HPP, profit, leaderboard, antrean approval; Sales: fokus hari ini, target, estimasi komisi, Zero-Leakage) |
+| `/reports`             | Super Admin, Sales | Hub laporan terpadu: Margin, Umur Piutang, Kinerja Sales, Komisi, dan CRM |
 | `/reports/margin`      | Super Admin        | Laporan margin & analisis profitabilitas usaha (filter tanggal, groupBy order/product/sales/business, kerugian pembatalan) |
+| `/reports/crm`         | Super Admin, Sales | Laporan aktivitas & pipeline CRM dengan ringkasan konversi dan tombol ekspor |
+| `/sales`               | Super Admin        | Daftar staf sales & metrik eksekutif bulan berjalan (omzet, profit, margin, komisi) |
+| `/sales/:id`           | Super Admin        | Evaluasi bulanan sales: target omzet/profit, catatan pemilik rahasia, komisi & needsReturn |
+| `/audit`               | Super Admin        | Audit trail log mutasi append-only, filter aksi & entitas, komparasi state before vs after |
 | `/profile`             | Super Admin, Sales | Pengaturan profil, ganti password, & integrasi bot Telegram      |
 | `/settings/business`   | Super Admin        | Legalitas usaha, rekening bank, toggle operasional, tema invoice |
 | `/settings/users`      | Super Admin        | Manajemen pengguna staf sales, reset password, skema komisi      |
@@ -404,7 +419,7 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
 | **Fase 2** | `v0.3.0`     | Customer CRM, order draft, floor pricing, manajemen stok, PO & vendor ledger | **SELESAI** |
 | **Fase 3** | `v0.4.0`     | Persetujuan invoice, verifikasi pembayaran, mesin cetak PDF, void/retur, profit & komisi, UI persetujuan & invoice | **SELESAI** |
 | **Fase 4** | `v0.5.0`     | Bot Telegram, Mini App, pengingat repeat order, katalog PWA             | **SELESAI**         |
-| **Fase 5** | `v1.0.0`     | Dashboard profit, evaluasi sales, pengerasan keamanan, Go-Live          | Sedang berjalan (T5.1, T5.2, T5.3, & T5.4 selesai) |
+| **Fase 5** | `v1.0.0`     | Dashboard profit, evaluasi sales, pengerasan keamanan, Go-Live          | Sedang berjalan (T5.1 s/d T5.5 selesai) |
 
 ---
 

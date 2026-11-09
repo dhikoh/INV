@@ -5,6 +5,7 @@ import { DomainError, fromDb } from '../domain/money';
 import { requireContext, Ctx } from '../auth/context';
 import { assertSameOrigin } from '../auth/origin';
 import { clearSessionCookie } from '../auth/session';
+import { checkUserRateLimit } from '../auth/rateLimit';
 import { logger } from '../logger';
 
 export type Out = {
@@ -121,6 +122,7 @@ export function withApi<B = undefined, Q = undefined>(
     body?: ZodType<B>;
     query?: ZodType<Q>;
     allowPasswordChange?: boolean;
+    isUpload?: boolean;
   },
   handler: (a: Args<B, Q>) => Promise<Out>
 ): ApiHandler {
@@ -135,6 +137,15 @@ export function withApi<B = undefined, Q = undefined>(
       const ctx = await requireContext(req, opts.roles, {
         allowPasswordChange: opts.allowPasswordChange,
       });
+
+      // Token bucket rate limiting (Seksi 16.1): 120 req/menit (20 untuk upload)
+      if (
+        ctx?.user?.id &&
+        (process.env.NODE_ENV !== 'test' ||
+          process.env.TEST_RATE_LIMIT === 'true')
+      ) {
+        checkUserRateLimit(ctx.user.id, opts.isUpload);
+      }
 
       const params = route?.params ? await route.params : {};
 

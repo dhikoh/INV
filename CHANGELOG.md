@@ -8,6 +8,31 @@ dan proyek ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Audit Trail, Pengerasan Keamanan, Rate Limiting, Header CSP, dan Tes Inventaris Rute sesuai Seksi 14, 16.1, 16.4, 16.5, 17.4 c Dokumen Spesifikasi (T5.5):
+  - Layanan Domain & Endpoint Audit Trail (`src/lib/services/auditLogService.ts` & `GET /api/v1/audit-logs`):
+    - Penyajian catatan audit mutasi data append-only (`AuditLog`) dengan filter aksi (`action`), tipe entitas (`entityType`), ID entitas, aktor (`actorId`), rentang tanggal (`from`/`to`), pencarian teks (`q`), dan paginasi.
+    - Resolusi otomatis identitas pelaksana aksi (`actor`: nama, username, role).
+    - Hak akses ketat Super Admin only (Sales ditolak 403 Forbidden dengan pengujian di matriks permissions RBAC).
+  - Antarmuka Pengguna Audit Trail (`src/app/(app)/audit/page.tsx` & `AppShell.tsx`):
+    - Halaman `/audit` khusus Super Admin dilengkapi badge status trigger PostgreSQL immutable (tamper-proof).
+    - Bilah filter pencarian teks, dropdown aksi lazim, dropdown tipe entitas, dan input rentang tanggal lokal WIB.
+    - Tabel rekam jejak informatif dengan tombol interaktif "Bandingkan" untuk membandingkan snapshot data sebelum (`before`) vs sesudah (`after`) perubahan secara berdampingan (side-by-side formatted JSON) dalam modal drawer responsif.
+    - Penambahan menu navigasi "Audit Log" pada navigasi desktop dan mobile `AppShell.tsx` untuk Super Admin.
+  - Pembatasan Laju Berbasis Token Bucket di Memori (Seksi 16.1):
+    - Modul `src/lib/auth/rateLimit.ts` dilengkapi implementasi algoritma Token Bucket in-memory: batas umum 120 permintaan/menit per user, dan batas upload 20 permintaan/menit per user.
+    - Integrasi otomatis pada middleware wrapper `withApi.ts` dengan pelemparan respons 429 `RATE_LIMITED` saat kuota token habis.
+  - Pengerasan Header Keamanan & CSP (Seksi 16.4):
+    - Konfigurasi `next.config.ts` diperkaya dengan header: `Strict-Transport-Security: max-age=31536000; includeSubDomains`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, dan `Permissions-Policy: camera=(), microphone=(), geolocation=()`.
+    - Pemasangan Content-Security-Policy (CSP) dengan `frame-ancestors 'self' https://web.telegram.org https://webk.telegram.org https://webz.telegram.org;` tanpa `X-Frame-Options` agar Telegram Mini App versi web, PWA, dan penayangan PDF tetap berjalan sempurna.
+  - Tes Inventaris Rute API v1 & Konsistensi Blueprint (Seksi 17.4 c):
+    - Dibuat pengujian unit [`tests/unit/route-inventory.test.ts`](file:///D:/Data%20BentoCat/tests/unit/route-inventory.test.ts) yang memindai seluruh berkas `src/app/api/v1/**/route.ts` (112 berkas):
+      - Memastikan 100% route handler dibungkus wrapper otorisasi `withApi` (dengan pengecualian terdokumentasi untuk rute binary stream PDF, Excel, dan berkas).
+      - Memastikan seluruh endpoint API v1 terdaftar lengkap pada tabel dokumentasi [`docs/BLUEPRINT.md`](file:///D:/Data%20BentoCat/docs/BLUEPRINT.md).
+  - Pengujian & Validasi Keamanan:
+    - Pengujian integrasi [`tests/integration/audit-and-security.test.ts`](file:///D:/Data%20BentoCat/tests/integration/audit-and-security.test.ts) memverifikasi endpoint `/api/v1/audit-logs`, penyaringan mutasi, dan kelengkapan header keamanan CSP.
+    - Pengujian unit [`tests/unit/rate-limit.test.ts`](file:///D:/Data%20BentoCat/tests/unit/rate-limit.test.ts) diperluas menguji kapasitas token bucket umum (120 req/menit), upload (20 req/menit), dan isolasi token antar user.
+    - Pemeriksaan kerentanan pasokan paket via `pnpm audit --prod` dengan override versi aman `postcss` (`8.5.32`) dan `sharp` (`0.35.5`) di `pnpm-workspace.yaml`.
+
 - Piutang, Laporan CRM, Ekspor Excel & PDF dengan Perlindungan Formula Injection sesuai Seksi 13.3, 16.2, 16.4 Dokumen Spesifikasi (T5.4):
   - Adopsi Pustaka ExcelJS v4.4.0 & Pencatatan ADR:
     - Pustaka `exceljs` (`v4.4.0`) diinstal dan didokumentasikan dalam [`docs/adr/0005-exceljs-export.md`](file:///D:/Data%20BentoCat/docs/adr/0005-exceljs-export.md) untuk pembuatan workbook XLSX streaming/in-memory secara aman tanpa risiko eksekusi kode dinamis.

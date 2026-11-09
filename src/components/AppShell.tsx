@@ -18,6 +18,7 @@ import {
   Target,
   Settings,
   UserCog,
+  ShieldCheck,
   Bell,
   Receipt,
   Sparkles,
@@ -231,6 +232,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     { label: 'Laporan', href: '/reports', icon: BarChart3 },
     { label: 'Pengaturan Usaha', href: '/settings/business', icon: Settings },
     { label: 'Pengguna', href: '/settings/users', icon: UserCog },
+    { label: 'Audit Log', href: '/audit', icon: ShieldCheck },
     {
       label: 'Pembaruan',
       href: '/updates',

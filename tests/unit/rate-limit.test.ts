@@ -2,8 +2,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   checkLoginRateLimit,
   recordLoginAttempt,
+  checkUserRateLimit,
+  resetUserRateLimits,
   MAX_FAILURES_PER_USERNAME,
   MAX_FAILURES_PER_IP,
+  GENERAL_RATE_LIMIT_PER_MINUTE,
+  UPLOAD_RATE_LIMIT_PER_MINUTE,
 } from '@/lib/auth/rateLimit';
 import { prisma } from '@/lib/db';
 import { DomainError } from '@/lib/domain/money';
@@ -84,5 +88,68 @@ describe('Login Rate Limiting (T1.1 & Seksi 16.1)', () => {
   it('konstanta batas percobaan sesuai dokumen spesifikasi 16.1', () => {
     expect(MAX_FAILURES_PER_USERNAME).toBe(5);
     expect(MAX_FAILURES_PER_IP).toBe(20);
+  });
+});
+
+describe('Token Bucket General & Upload Rate Limiting (Seksi 16.1)', () => {
+  beforeEach(() => {
+    resetUserRateLimits();
+  });
+
+  it('konstanta batas per menit sesuai Seksi 16.1: 120 umum dan 20 upload', () => {
+    expect(GENERAL_RATE_LIMIT_PER_MINUTE).toBe(120);
+    expect(UPLOAD_RATE_LIMIT_PER_MINUTE).toBe(20);
+  });
+
+  it('mengizinkan permintaan hingga batas kapasitas umum (120 req/menit)', () => {
+    const userId = 'usr_test_general_01';
+
+    // 120 permintaan berturut-turut harus lolos
+    for (let i = 0; i < 120; i++) {
+      expect(() => checkUserRateLimit(userId, false)).not.toThrow();
+    }
+
+    // Permintaan ke-121 harus melempar 429 RATE_LIMITED
+    expect(() => checkUserRateLimit(userId, false)).toThrow(DomainError);
+    try {
+      checkUserRateLimit(userId, false);
+    } catch (e) {
+      expect((e as DomainError).code).toBe('RATE_LIMITED');
+      expect((e as DomainError).status).toBe(429);
+      expect((e as DomainError).message).toContain('120 per menit');
+    }
+  });
+
+  it('mengizinkan permintaan unggah berkas hingga batas kapasitas upload (20 req/menit)', () => {
+    const userId = 'usr_test_upload_01';
+
+    // 20 permintaan upload berturut-turut harus lolos
+    for (let i = 0; i < 20; i++) {
+      expect(() => checkUserRateLimit(userId, true)).not.toThrow();
+    }
+
+    // Permintaan upload ke-21 harus melempar 429 RATE_LIMITED
+    expect(() => checkUserRateLimit(userId, true)).toThrow(DomainError);
+    try {
+      checkUserRateLimit(userId, true);
+    } catch (e) {
+      expect((e as DomainError).code).toBe('RATE_LIMITED');
+      expect((e as DomainError).status).toBe(429);
+      expect((e as DomainError).message).toContain('20 per menit');
+    }
+  });
+
+  it('mengisolasi token bucket antar user yang berbeda', () => {
+    const userA = 'user_A';
+    const userB = 'user_B';
+
+    // Habiskan kuota user A
+    for (let i = 0; i < 120; i++) {
+      checkUserRateLimit(userA, false);
+    }
+    expect(() => checkUserRateLimit(userA, false)).toThrow(DomainError);
+
+    // User B tetap memiliki kuota penuh
+    expect(() => checkUserRateLimit(userB, false)).not.toThrow();
   });
 });
