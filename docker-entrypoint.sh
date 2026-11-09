@@ -1,13 +1,13 @@
 #!/bin/sh
 set -e
 
-# Otomatisasi inisialisasi database jika DATABASE_URL tersedia
+# Auto-initialize database when DATABASE_URL is available
 if [ -n "$DATABASE_URL" ]; then
-  echo "==> [OmniCat] Sinkronisasi skema database (prisma db push)..."
-  prisma db push --skip-generate || echo "[OmniCat] Catatan: prisma db push dilewati atau menemui kendala koneksi"
+  echo "==> [OmniCat] Syncing database schema (prisma db push)..."
+  npx prisma db push --schema=prisma/schema.prisma --skip-generate || echo "[OmniCat] Note: prisma db push skipped or connection issue"
 
-  echo "==> [OmniCat] Pengecekan seed superadmin..."
-  tsx prisma/seed.ts || echo "[OmniCat] Catatan: Seed dilewati (Super Admin sudah ada atau tidak disetel)"
+  echo "==> [OmniCat] Checking superadmin seed..."
+  tsx prisma/seed.ts || echo "[OmniCat] Note: Seed skipped (Super Admin exists or env not set)"
 fi
 
 exec "$@"

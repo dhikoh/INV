@@ -52,6 +52,10 @@ RUN mkdir -p /home/nextjs && \
 # Create uploads directory and set permissions
 RUN mkdir -p /data/uploads && chown -R nextjs:nodejs /data && chmod -R 775 /data
 
+# Copy full node_modules from deps stage so tsx seed, prisma CLI, and Next.js
+# runtime can resolve all production modules (adapter-pg, pg, argon2, pino, etc.)
+COPY --from=deps --chown=nextjs:nodejs /app/node_modules ./node_modules
+
 # Copy source and prisma configuration files needed for migrations, seeding, and CLI commands
 COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
 COPY --from=builder --chown=nextjs:nodejs /app/prisma.config.ts ./prisma.config.ts
@@ -64,7 +68,7 @@ COPY --from=builder --chown=nextjs:nodejs /app/tsconfig.json ./tsconfig.json
 COPY docker-entrypoint.sh ./docker-entrypoint.sh
 RUN chmod +x ./docker-entrypoint.sh && chown nextjs:nodejs ./docker-entrypoint.sh
 
-# Copy public & standalone assets
+# Copy public & standalone assets (overwrites server.js and .next/ from standalone)
 COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
