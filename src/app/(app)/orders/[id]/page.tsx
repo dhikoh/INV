@@ -1973,7 +1973,7 @@ export default function OrderDetailPage() {
                     <div>
                       <span className="text-xs text-slate-400">Waktu Dikirim</span>
                       <p className="text-slate-700 mt-0.5">
-                        {new Date(shipment.shippedAt).toLocaleString('id-ID')}
+                        {shipment.shippedAt ? new Date(shipment.shippedAt).toLocaleString('id-ID') : '-'}
                       </p>
                     </div>
                   )}
@@ -1982,7 +1982,7 @@ export default function OrderDetailPage() {
                     <div>
                       <span className="text-xs text-slate-400">Waktu Diterima</span>
                       <p className="text-slate-700 mt-0.5">
-                        {new Date(shipment.deliveredAt).toLocaleString('id-ID')}
+                        {shipment.deliveredAt ? new Date(shipment.deliveredAt).toLocaleString('id-ID') : '-'}
                       </p>
                     </div>
                   )}

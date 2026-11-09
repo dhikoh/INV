@@ -43,11 +43,12 @@ export function applyBps(amount: Rupiah, bps: Bps): Rupiah {
 }
 
 export function formatRupiah(n: Rupiah): string {
+  const val = typeof n === 'number' && !isNaN(n) ? n : 0;
   return new Intl.NumberFormat('id-ID', {
     style: 'currency',
     currency: 'IDR',
     maximumFractionDigits: 0,
-  }).format(n);
+  }).format(val);
 }
 
 export function formatPercentFromBps(bps: Bps): string {

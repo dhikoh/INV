@@ -614,7 +614,7 @@ export default function SalesDetailEvaluationPage() {
                   <div className="flex items-center justify-between text-xs text-amber-900 font-semibold">
                     <span>{n.authorName || 'Super Admin'}</span>
                     <span className="text-slate-400 font-normal">
-                      {new Date(n.createdAt).toLocaleString('id-ID')}
+                      {n.createdAt ? new Date(n.createdAt).toLocaleString('id-ID') : '-'}
                     </span>
                   </div>
                   <p className="text-slate-800 whitespace-pre-wrap leading-relaxed">

@@ -35,7 +35,7 @@ export function PercentInput({
     if (bps === 0) return '0';
     if (!bps || isNaN(bps)) return '';
     const num = bps / 100;
-    return num.toLocaleString('id-ID', {
+    return (num ?? 0).toLocaleString('id-ID', {
       maximumFractionDigits: 2,
     });
   };

@@ -596,7 +596,7 @@ export default function MarginReportPage() {
                         {row.sku} ({row.unit})
                       </td>
                       <td className="py-3 px-4 text-right font-bold text-slate-900">
-                        {row.qtySold.toLocaleString('id-ID')}
+                        {(row.qtySold ?? 0).toLocaleString('id-ID')}
                       </td>
                       <td className="py-3 px-4 text-right font-medium text-slate-900">
                         {formatRupiah(row.grossRevenue)}

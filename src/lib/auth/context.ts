@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { Role } from '@prisma/client';
+import { prisma } from '../db';
 import { DomainError } from '../domain/money';
 import { env } from '../env';
 import { findValidSession } from './session';
@@ -48,8 +49,28 @@ export async function requireContext(
     throw new DomainError('FORBIDDEN', 'Anda tidak punya akses', 403);
   }
 
-  const businessId =
+  let businessId =
     s.user.role === Role.SALES ? s.user.businessId : s.activeBusinessId;
+
+  // Auto-resolve unit usaha untuk SUPERADMIN bila belum diset di sesi
+  if (s.user.role === Role.SUPERADMIN && !businessId) {
+    const defaultBiz = await prisma.business.findFirst({
+      where: { deletedAt: null },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true },
+    });
+    if (defaultBiz) {
+      businessId = defaultBiz.id;
+      // Perbarui sesi secara asinkron agar request berikutnya langsung memiliki activeBusinessId
+      prisma.session
+        .update({
+          where: { id: s.id },
+          data: { activeBusinessId: defaultBiz.id },
+        })
+        .catch(() => {});
+    }
+  }
+
   if (s.user.role === Role.SALES && !businessId) {
     throw new DomainError(
       'FORBIDDEN',

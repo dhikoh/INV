@@ -68,11 +68,22 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       data: { lastLoginAt: new Date() },
     });
 
+    // Bila Superadmin belum memiliki businessId, auto-select bisnis pertama yang aktif
+    let initialBusinessId = user.businessId;
+    if (user.role === 'SUPERADMIN' && !initialBusinessId) {
+      const firstBiz = await prisma.business.findFirst({
+        where: { deletedAt: null },
+        orderBy: { createdAt: 'asc' },
+        select: { id: true },
+      });
+      initialBusinessId = firstBiz?.id ?? null;
+    }
+
     // Buat sesi baru (otomatis membatasi maksimal 5 sesi aktif)
     const { token, session } = await createSession(user.id, {
       ip,
       userAgent: req.headers.get('user-agent'),
-      activeBusinessId: user.businessId,
+      activeBusinessId: initialBusinessId,
     });
 
     const res = NextResponse.json(

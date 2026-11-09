@@ -8,6 +8,13 @@ import {
   PipelineStage,
   PoStatus,
   OrderStatus,
+  InvoiceType,
+  InvoiceStatus,
+  PaymentType,
+  PaymentMethod,
+  PaymentStatus,
+  DiscountType,
+  DiscountSource,
 } from '@prisma/client';
 import { logger } from '../src/lib/logger';
 
@@ -18,21 +25,29 @@ export interface SeedOptions {
 
 export async function seedSuperAdmin(options?: SeedOptions) {
   const username = options?.username ?? process.env.SEED_SUPERADMIN_USERNAME ?? 'superadmin';
-  const password = options?.password ?? process.env.SEED_SUPERADMIN_PASSWORD ?? 'Superadmin123!';
+  const password = options?.password ?? process.env.SEED_SUPERADMIN_PASSWORD ?? 'bismillahbento';
+
+  const passwordHash = await hashPassword(password, username);
 
   const existingSuperAdmin = await prisma.user.findFirst({
     where: { role: Role.SUPERADMIN, deletedAt: null },
   });
 
   if (existingSuperAdmin) {
+    const updated = await prisma.user.update({
+      where: { id: existingSuperAdmin.id },
+      data: {
+        passwordHash,
+        isActive: true,
+        mustChangePassword: false,
+      },
+    });
     logger.info(
-      { userId: existingSuperAdmin.id, username: existingSuperAdmin.username },
-      'Super Admin sudah ada di database.'
+      { userId: updated.id, username: updated.username },
+      'Super Admin diperbarui dengan password bismillahbento.'
     );
-    return existingSuperAdmin;
+    return updated;
   }
-
-  const passwordHash = await hashPassword(password, username);
 
   const superAdmin = await prisma.user.create({
     data: {
@@ -42,13 +57,13 @@ export async function seedSuperAdmin(options?: SeedOptions) {
       role: Role.SUPERADMIN,
       businessId: null,
       isActive: true,
-      mustChangePassword: true,
+      mustChangePassword: false,
     },
   });
 
   logger.info(
     { userId: superAdmin.id, username: superAdmin.username },
-    'Super Admin berhasil dibuat.'
+    'Super Admin berhasil dibuat (password: bismillahbento).'
   );
 
   return superAdmin;
@@ -228,7 +243,7 @@ export async function seedBentoCatData(superAdmin: { id: string }) {
       costPrice: BigInt(63250), // HPP dari user
       basePrice: BigInt(72000), // Harga Baru Blitar (Acuan)
       minPrice: BigInt(68500),  // Floor price
-      stockQty: 500,
+      stockQty: 1000,
       categoryId: catBento.id,
       defaultVendorId: vendorMojo.id,
       oldCostPrice: BigInt(58000),
@@ -242,7 +257,7 @@ export async function seedBentoCatData(superAdmin: { id: string }) {
       costPrice: BigInt(32000), // HPP dari user
       basePrice: BigInt(36000), // Harga Baru Blitar
       minPrice: BigInt(34000),
-      stockQty: 800,
+      stockQty: 1200,
       categoryId: catBento.id,
       defaultVendorId: vendorMojo.id,
       oldCostPrice: BigInt(29000),
@@ -251,40 +266,40 @@ export async function seedBentoCatData(superAdmin: { id: string }) {
     {
       sku: 'BC-5.5L',
       name: 'BentoCat Premium Cat Litter 5.5L',
-      description: 'Pasir gumpal wangi premium BentoCat kemasan praktis 5.5 Liter (bobot ±4.3 kg).',
+      description: 'Pasir gumpal wangi premium BentoCat kemasan 5.5 Liter (bobot ±4.3 kg). Ringan & praktis.',
       unit: 'karung',
       costPrice: BigInt(18500), // HPP dari user
       basePrice: BigInt(20750), // Harga Baru Blitar
-      minPrice: BigInt(19750),
-      stockQty: 1200,
+      minPrice: BigInt(20000),
+      stockQty: 1500,
       categoryId: catBento.id,
       defaultVendorId: vendorMojo.id,
-      oldCostPrice: BigInt(16500),
-      oldBasePrice: BigInt(19750),
+      oldCostPrice: BigInt(17000),
+      oldBasePrice: BigInt(19500),
     },
     {
       sku: 'ZEO-01',
-      name: 'Pasir Zeolite No. 1',
-      description: 'Pasir Zeolite No. 1 butiran halus kemasan sak 20 kg untuk sanitasi dan alas kandang.',
+      name: 'Pasir Zeolite No 1 (Halus)',
+      description: 'Pasir kucing zeolite butiran halus No. 1 kemasan 20 kg/sak.',
       unit: 'sak',
-      costPrice: BigInt(9500), // Modal Zeolite dari user
+      costPrice: BigInt(9500), // Modal dari user
       basePrice: BigInt(20500),
       minPrice: BigInt(18000),
-      stockQty: 250,
+      stockQty: 500,
       categoryId: catZeo.id,
       defaultVendorId: vendorMojo.id,
       oldCostPrice: BigInt(8500),
-      oldBasePrice: BigInt(19000),
+      oldBasePrice: BigInt(18500),
     },
     {
       sku: 'ZEO-02',
-      name: 'Pasir Zeolite No. 2',
-      description: 'Pasir Zeolite No. 2 butiran sedang kemasan sak 20 kg.',
+      name: 'Pasir Zeolite No 2 (Sedang)',
+      description: 'Pasir kucing zeolite butiran sedang No. 2 kemasan 20 kg/sak.',
       unit: 'sak',
       costPrice: BigInt(9500),
       basePrice: BigInt(11000),
       minPrice: BigInt(10000),
-      stockQty: 400,
+      stockQty: 600,
       categoryId: catZeo.id,
       defaultVendorId: vendorMojo.id,
       oldCostPrice: BigInt(8500),
@@ -292,13 +307,13 @@ export async function seedBentoCatData(superAdmin: { id: string }) {
     },
     {
       sku: 'ZEO-03',
-      name: 'Pasir Zeolite No. 3',
-      description: 'Pasir Zeolite No. 3 butiran kasar kemasan sak 20 kg.',
+      name: 'Pasir Zeolite No 3 (Kasar)',
+      description: 'Pasir kucing zeolite butiran kasar No. 3 kemasan 20 kg/sak.',
       unit: 'sak',
       costPrice: BigInt(9500),
       basePrice: BigInt(11000),
       minPrice: BigInt(10000),
-      stockQty: 350,
+      stockQty: 600,
       categoryId: catZeo.id,
       defaultVendorId: vendorMojo.id,
       oldCostPrice: BigInt(8500),
@@ -306,24 +321,24 @@ export async function seedBentoCatData(superAdmin: { id: string }) {
     },
     {
       sku: 'ZEO-GRANUL',
-      name: 'Pasir Granul Zeolite',
-      description: 'Pasir Granul Zeolite kemasan sak 20 kg kualitas filtrasi tinggi.',
+      name: 'Granul Zeolite (Butiran Bundar)',
+      description: 'Pasir kucing mineral zeolite granul bulat kemasan 20 kg/sak.',
       unit: 'sak',
       costPrice: BigInt(9500),
       basePrice: BigInt(21500),
-      minPrice: BigInt(19500),
-      stockQty: 200,
+      minPrice: BigInt(20000),
+      stockQty: 500,
       categoryId: catZeo.id,
       defaultVendorId: vendorMojo.id,
       oldCostPrice: BigInt(8500),
-      oldBasePrice: BigInt(20000),
+      oldBasePrice: BigInt(19000),
     },
   ];
 
-  const seededProducts: Record<string, { id: string; sku: string; name: string }> = {};
+  const seededProducts: Record<string, { id: string; name: string; sku: string }> = {};
 
   for (const p of productsData) {
-    const prod = await prisma.product.upsert({
+    const product = await prisma.product.upsert({
       where: {
         businessId_sku: {
           businessId: business.id,
@@ -345,55 +360,57 @@ export async function seedBentoCatData(superAdmin: { id: string }) {
         isActive: true,
       },
       update: {
+        name: p.name,
         costPrice: p.costPrice,
         basePrice: p.basePrice,
         minPrice: p.minPrice,
         stockQty: p.stockQty,
-        name: p.name,
       },
     });
 
-    seededProducts[p.sku] = { id: prod.id, sku: prod.sku, name: prod.name };
+    seededProducts[p.sku] = { id: product.id, name: product.name, sku: product.sku };
 
-    // PriceHistory: Catat Jejak Riwayat Perubahan HPP & Harga Jual
+    // Simpan Jejak Sejarah Perubahan Harga Produk (PriceHistory)
     const existingHist = await prisma.priceHistory.findFirst({
-      where: { businessId: business.id, productId: prod.id },
+      where: {
+        businessId: business.id,
+        productId: product.id,
+        field: PriceField.BASE,
+      },
     });
 
     if (!existingHist) {
-      // 1. Histori HPP Modal
       await prisma.priceHistory.create({
         data: {
           businessId: business.id,
-          productId: prod.id,
-          field: PriceField.COST,
-          oldValue: p.oldCostPrice,
-          newValue: p.costPrice,
-          reason: 'Penyesuaian HPP pasokan bahan baku dari Vendor Mojoagung',
-          changedById: superAdmin.id,
-          createdAt: new Date('2026-01-15T08:00:00Z'),
-        },
-      });
-
-      // 2. Histori Harga Jual Dasar (Base Price)
-      await prisma.priceHistory.create({
-        data: {
-          businessId: business.id,
-          productId: prod.id,
+          productId: product.id,
           field: PriceField.BASE,
           oldValue: p.oldBasePrice,
           newValue: p.basePrice,
-          reason: 'Pembaruan Daftar Harga Resmi BentoCat 2026',
+          reason: 'Penyesuaian kenaikan harga baku & operasional per arsip invoice resmi BentoCat',
           changedById: superAdmin.id,
-          createdAt: new Date('2026-02-01T09:00:00Z'),
+          createdAt: new Date('2026-01-01T08:00:00Z'),
+        },
+      });
+
+      await prisma.priceHistory.create({
+        data: {
+          businessId: business.id,
+          productId: product.id,
+          field: PriceField.COST,
+          oldValue: p.oldCostPrice,
+          newValue: p.costPrice,
+          reason: 'Penyesuaian HPP modal pabrik vendor Mojoagung',
+          changedById: superAdmin.id,
+          createdAt: new Date('2026-01-01T08:00:00Z'),
         },
       });
     }
   }
 
-  logger.info('Master Produk dan Riwayat Harga awal berhasil di-seed.');
+  logger.info('Master Produk BentoCat & Zeolite beserta PriceHistory berhasil di-seed.');
 
-  // 7. Pelanggan Riil & Alamat Lengkap
+  // 7. Master Pelanggan (Petshop) Lintas Wilayah
   const customersData = [
     {
       code: 'VETMA-BLT',
@@ -440,6 +457,7 @@ export async function seedBentoCatData(superAdmin: { id: string }) {
         'BC-10L': BigInt(37000),
         'BC-5.5L': BigInt(21000),
         'ZEO-02': BigInt(11000),
+        'ZEO-GRANUL': BigInt(21500),
       },
       promoHistories: {
         'BC-25L': BigInt(72500),
@@ -451,7 +469,7 @@ export async function seedBentoCatData(superAdmin: { id: string }) {
       code: 'AULIA-BJN',
       name: 'Aulia Petshop (Bp. Hamid / drh. Aulia Insani)',
       contactName: 'Bp. Hamid',
-      address: 'Jl. Raya Bojonegoro - Tuban, Jawa Timur',
+      address: 'Jl. Ahmad Yani No. 2 Jambean, Sukorejo, Kec. Bojonegoro, Jawa Timur',
       phone: '081234567804',
       specialPrices: {
         'BC-25L': BigInt(75500),
@@ -462,6 +480,40 @@ export async function seedBentoCatData(superAdmin: { id: string }) {
         'BC-25L': BigInt(74000),
         'BC-10L': BigInt(37000),
         'BC-5.5L': BigInt(21250),
+      },
+    },
+    {
+      code: 'AULIA-TBN',
+      name: 'Aulia Petshop (Tuban)',
+      contactName: 'drh. Aulia Insani',
+      address: 'Jl. Raya Tuban, Kab. Tuban, Jawa Timur',
+      phone: '081234567808',
+      specialPrices: {
+        'BC-25L': BigInt(75500),
+        'BC-10L': BigInt(38000),
+        'BC-5.5L': BigInt(21500),
+      },
+      promoHistories: {
+        'BC-25L': BigInt(74000),
+        'BC-10L': BigInt(37000),
+        'BC-5.5L': BigInt(21250),
+      },
+    },
+    {
+      code: 'AURA-LMG',
+      name: 'Aura Petshop (Lamongan)',
+      contactName: 'Owner Aura Petshop',
+      address: 'Jl. Lamongan Raya, Kab. Lamongan, Jawa Timur',
+      phone: '081234567807',
+      specialPrices: {
+        'BC-25L': BigInt(75000),
+        'BC-10L': BigInt(38000),
+        'BC-5.5L': BigInt(21500),
+      },
+      promoHistories: {
+        'BC-25L': BigInt(74000),
+        'BC-10L': BigInt(37000),
+        'BC-5.5L': BigInt(21000),
       },
     },
     {
@@ -483,22 +535,24 @@ export async function seedBentoCatData(superAdmin: { id: string }) {
     },
     {
       code: 'TIMIKA-PAP',
-      name: 'Timika Petshop',
-      contactName: 'Owner Timika Petshop',
+      name: 'Pak Anwar (Meka Petshop Timika)',
+      contactName: 'Pak Anwar',
       address: 'Jl. Cenderawasih, Timika, Papua',
-      phone: '081234567806',
+      phone: '085244972449',
       specialPrices: {
-        'BC-25L': BigInt(75500),
-        'BC-10L': BigInt(39000),
-        'BC-5.5L': BigInt(22750),
+        'BC-25L': BigInt(72500),
+        'BC-10L': BigInt(37000),
+        'BC-5.5L': BigInt(21750),
       },
       promoHistories: {
-        'BC-25L': BigInt(74500),
-        'BC-10L': BigInt(38000),
-        'BC-5.5L': BigInt(22500),
+        'BC-25L': BigInt(71500),
+        'BC-10L': BigInt(36500),
+        'BC-5.5L': BigInt(21500),
       },
     },
   ];
+
+  const seededCustomers: Record<string, { id: string; name: string; address: string }> = {};
 
   for (const c of customersData) {
     const customer = await prisma.customer.upsert({
@@ -531,7 +585,9 @@ export async function seedBentoCatData(superAdmin: { id: string }) {
       },
     });
 
-    // Masukkan Harga Minimal Khusus Pelanggan (CustomerMinPrice)
+    seededCustomers[c.code] = { id: customer.id, name: customer.name, address: customer.address ?? '' };
+
+    // Masukkan Batas Harga Khusus Pelanggan (CustomerMinPrice)
     for (const [sku, specialMinPrice] of Object.entries(c.specialPrices)) {
       const prodMeta = seededProducts[sku];
       if (prodMeta) {
@@ -595,10 +651,11 @@ export async function seedBentoCatData(superAdmin: { id: string }) {
 
   if (!existingPo && seededProducts['BC-25L'] && seededProducts['BC-10L']) {
     const poItems = [
-      { productId: seededProducts['BC-25L'].id, qty: 300, unitCost: BigInt(63250), lineTotal: BigInt(63250 * 300) },
-      { productId: seededProducts['BC-10L'].id, qty: 500, unitCost: BigInt(32000), lineTotal: BigInt(32000 * 500) },
-      { productId: seededProducts['BC-5.5L'].id, qty: 600, unitCost: BigInt(18500), lineTotal: BigInt(18500 * 600) },
-      { productId: seededProducts['ZEO-02'].id, qty: 200, unitCost: BigInt(9500), lineTotal: BigInt(9500 * 200) },
+      { productId: seededProducts['BC-25L'].id, qty: 500, unitCost: BigInt(63250), lineTotal: BigInt(63250 * 500) },
+      { productId: seededProducts['BC-10L'].id, qty: 800, unitCost: BigInt(32000), lineTotal: BigInt(32000 * 800) },
+      { productId: seededProducts['BC-5.5L'].id, qty: 1000, unitCost: BigInt(18500), lineTotal: BigInt(18500 * 1000) },
+      { productId: seededProducts['ZEO-02'].id, qty: 300, unitCost: BigInt(9500), lineTotal: BigInt(9500 * 300) },
+      { productId: seededProducts['ZEO-GRANUL'].id, qty: 200, unitCost: BigInt(9500), lineTotal: BigInt(9500 * 200) },
     ];
     const poSubtotal = poItems.reduce((acc, it) => acc + it.lineTotal, BigInt(0));
 
@@ -611,7 +668,7 @@ export async function seedBentoCatData(superAdmin: { id: string }) {
         orderDate: new Date('2026-11-01T09:00:00Z'),
         expectedDate: new Date('2026-11-04T15:00:00Z'),
         subtotal: poSubtotal,
-        shippingCost: BigInt(1500000), // Ongkir truk ekspedisi
+        shippingCost: BigInt(1500000),
         total: poSubtotal + BigInt(1500000),
         paidTotal: poSubtotal + BigInt(1500000),
         notes: 'Pengadaan stok awal pasir BentoCat dan Zeolite dari Vendor Mojoagung',
@@ -631,87 +688,277 @@ export async function seedBentoCatData(superAdmin: { id: string }) {
     logger.info('Sample Purchase Order ke Mojoagung berhasil di-seed.');
   }
 
-  // 9. Sample Transaksi Riil (Vetma Petshop Blitar Dok 2)
-  const vetmaCustomer = await prisma.customer.findFirst({
-    where: { businessId: business.id, code: 'VETMA-BLT' },
-  });
+  // 9. Transaksi Operasional Riil Lintas Kota (Blitar, Cilacap, Bojonegoro, Semarang, Lamongan, Timika)
+  interface SeedOrderItem {
+    sku: string;
+    qty: number;
+    unitPrice: bigint;
+    costPrice: bigint;
+    discountType?: DiscountType;
+    discountValue?: bigint;
+    lineDiscount?: bigint;
+  }
 
-  const existingOrder = await prisma.order.findFirst({
-    where: { businessId: business.id, orderNo: 'VETMA/INV/02/05/2026/0002' },
-  });
+  interface SeedTransaction {
+    customerCode: string;
+    orderNo: string;
+    invoiceNo: string;
+    customerSeq: number;
+    orderDate: Date;
+    notes: string;
+    shippingCharge: bigint;
+    discountTotal: bigint;
+    dpAmount: bigint;
+    items: SeedOrderItem[];
+  }
 
-  if (!existingOrder && vetmaCustomer && seededProducts['BC-10L'] && seededProducts['BC-5.5L']) {
-    const item1Qty = 250;
-    const item1Price = BigInt(36000);
-    const item1Cost = BigInt(32000);
-    const item1Subtotal = item1Price * BigInt(item1Qty);
+  const transactionsToSeed: SeedTransaction[] = [
+    // 1. Blitar (Vetma Petshop) - Dok 2
+    {
+      customerCode: 'VETMA-BLT',
+      orderNo: 'VETMA/INV/02/05/2026/0002',
+      invoiceNo: 'INV/BLT/2026/05/0002',
+      customerSeq: 2,
+      orderDate: new Date('2026-05-02T10:00:00Z'),
+      notes: 'Repeat Order Dok 2 Vetma Petshop Blitar',
+      shippingCharge: BigInt(0),
+      discountTotal: BigInt(0),
+      dpAmount: BigInt(4000000),
+      items: [
+        { sku: 'BC-10L', qty: 250, unitPrice: BigInt(36000), costPrice: BigInt(32000) },
+        { sku: 'BC-5.5L', qty: 250, unitPrice: BigInt(20750), costPrice: BigInt(18500) },
+      ],
+    },
+    // 2. Cilacap (Cherry Petshop) - Dok 13 BentoCat
+    {
+      customerCode: 'CHERRY-CLP',
+      orderNo: 'CHERRY/INV/13/11/2023/0013',
+      invoiceNo: 'INV/CLP/2023/11/0013',
+      customerSeq: 13,
+      orderDate: new Date('2023-11-09T10:00:00Z'),
+      notes: 'Repeat Order Dok 13 Cherry Petshop Cilacap (Diskon 2% & Subsidi Ongkir)',
+      shippingCharge: BigInt(1900000),
+      discountTotal: BigInt(578100),
+      dpAmount: BigInt(10000000),
+      items: [
+        {
+          sku: 'BC-25L',
+          qty: 410,
+          unitPrice: BigInt(70500),
+          costPrice: BigInt(63250),
+          discountType: DiscountType.PERCENT,
+          discountValue: BigInt(200), // 2%
+          lineDiscount: BigInt(578100),
+        },
+      ],
+    },
+    // 3. Cilacap (Cherry Petshop) - Dok 4 Zeolite
+    {
+      customerCode: 'CHERRY-CLP',
+      orderNo: 'CHERRY/ZEO/04/03/2025/0004',
+      invoiceNo: 'INV/ZEO/2025/03/0004',
+      customerSeq: 14,
+      orderDate: new Date('2025-03-11T10:00:00Z'),
+      notes: 'Repeat Order Dok 4 Pasir Zeolite Cherry Petshop Cilacap',
+      shippingCharge: BigInt(0),
+      discountTotal: BigInt(0),
+      dpAmount: BigInt(1000000),
+      items: [
+        { sku: 'ZEO-02', qty: 150, unitPrice: BigInt(11000), costPrice: BigInt(9500) },
+        { sku: 'ZEO-GRANUL', qty: 100, unitPrice: BigInt(21500), costPrice: BigInt(9500) },
+      ],
+    },
+    // 4. Bojonegoro (Aulia Petshop) - Dok 11
+    {
+      customerCode: 'AULIA-BJN',
+      orderNo: 'AULIA/INV/11/02/2024/0011',
+      invoiceNo: 'INV/BJN/2024/02/0011',
+      customerSeq: 11,
+      orderDate: new Date('2024-02-05T10:00:00Z'),
+      notes: 'Repeat Order Dok 11 Drh. Aulia (Aulia Petshop Bojonegoro)',
+      shippingCharge: BigInt(850000),
+      discountTotal: BigInt(0),
+      dpAmount: BigInt(10000000),
+      items: [
+        { sku: 'BC-25L', qty: 330, unitPrice: BigInt(72000), costPrice: BigInt(63250) },
+        { sku: 'BC-10L', qty: 150, unitPrice: BigInt(36000), costPrice: BigInt(32000) },
+        { sku: 'BC-5.5L', qty: 200, unitPrice: BigInt(20500), costPrice: BigInt(18500) },
+      ],
+    },
+    // 5. Semarang (Gukguk Meong) - Dok 35
+    {
+      customerCode: 'GUKGUK-SMG',
+      orderNo: 'GUKGUK/INV/35/10/2026/0035',
+      invoiceNo: 'INV/SMG/2026/10/0035',
+      customerSeq: 35,
+      orderDate: new Date('2026-10-05T10:00:00Z'),
+      notes: 'Repeat Order Dok 35 Ny. Noni & Ny. Maria (Semarang)',
+      shippingCharge: BigInt(1450000),
+      discountTotal: BigInt(0),
+      dpAmount: BigInt(10000000),
+      items: [
+        { sku: 'BC-25L', qty: 373, unitPrice: BigInt(76500), costPrice: BigInt(63250) },
+        { sku: 'BC-10L', qty: 50, unitPrice: BigInt(38500), costPrice: BigInt(32000) },
+        { sku: 'BC-5.5L', qty: 50, unitPrice: BigInt(21750), costPrice: BigInt(18500) },
+      ],
+    },
+    // 6. Lamongan (Aura Petshop) - Dok 11
+    {
+      customerCode: 'AURA-LMG',
+      orderNo: 'AURA/INV/11/06/2026/0011',
+      invoiceNo: 'INV/LMG/2026/06/0011',
+      customerSeq: 11,
+      orderDate: new Date('2026-06-17T10:00:00Z'),
+      notes: 'Repeat Order Dok 11 Aura Petshop Lamongan',
+      shippingCharge: BigInt(850000),
+      discountTotal: BigInt(0),
+      dpAmount: BigInt(10000000),
+      items: [
+        { sku: 'BC-25L', qty: 330, unitPrice: BigInt(75000), costPrice: BigInt(63250) },
+        { sku: 'BC-10L', qty: 135, unitPrice: BigInt(38000), costPrice: BigInt(32000) },
+        { sku: 'BC-5.5L', qty: 270, unitPrice: BigInt(21500), costPrice: BigInt(18500) },
+      ],
+    },
+    // 7. Timika (Meka Petshop - Pak Anwar) - Dok 5
+    {
+      customerCode: 'TIMIKA-PAP',
+      orderNo: 'MEKA/INV/05/08/2026/0005',
+      invoiceNo: 'INV/TMK/2026/08/0005',
+      customerSeq: 5,
+      orderDate: new Date('2026-08-03T10:00:00Z'),
+      notes: 'Repeat Order Dok 5 Pak Anwar (Meka Petshop Timika, Papua)',
+      shippingCharge: BigInt(750000),
+      discountTotal: BigInt(0),
+      dpAmount: BigInt(3000000),
+      items: [
+        { sku: 'BC-25L', qty: 75, unitPrice: BigInt(72500), costPrice: BigInt(63250) },
+        { sku: 'BC-10L', qty: 50, unitPrice: BigInt(37000), costPrice: BigInt(32000) },
+        { sku: 'BC-5.5L', qty: 50, unitPrice: BigInt(21750), costPrice: BigInt(18500) },
+      ],
+    },
+  ];
 
-    const item2Qty = 250;
-    const item2Price = BigInt(20750);
-    const item2Cost = BigInt(18500);
-    const item2Subtotal = item2Price * BigInt(item2Qty);
+  for (const t of transactionsToSeed) {
+    const customer = seededCustomers[t.customerCode];
+    if (!customer) continue;
 
-    const grandTotal = item1Subtotal + item2Subtotal;
-    const dpAmount = BigInt(4000000);
+    const existingOrder = await prisma.order.findFirst({
+      where: { businessId: business.id, orderNo: t.orderNo },
+    });
 
-    await prisma.order.create({
+    if (existingOrder) {
+      logger.info({ orderNo: t.orderNo }, 'Pesanan sudah ada di database, lewati.');
+      continue;
+    }
+
+    let subtotal = BigInt(0);
+    const orderItemsToCreate = [];
+
+    for (let idx = 0; idx < t.items.length; idx++) {
+      const it = t.items[idx];
+      const prodMeta = seededProducts[it.sku];
+      if (!prodMeta) continue;
+
+      const lineSubtotal = it.unitPrice * BigInt(it.qty);
+      const lineDiscount = it.lineDiscount ?? BigInt(0);
+      const lineNet = lineSubtotal - lineDiscount;
+      subtotal += lineNet;
+
+      orderItemsToCreate.push({
+        businessId: business.id,
+        productId: prodMeta.id,
+        productName: prodMeta.name,
+        sku: prodMeta.sku,
+        unit: it.sku.startsWith('ZEO') ? 'sak' : 'karung',
+        qty: it.qty,
+        listPrice: it.unitPrice,
+        unitPrice: it.unitPrice,
+        discountType: it.discountType ?? DiscountType.NONE,
+        discountValue: it.discountValue ?? BigInt(0),
+        discountSource: it.discountType ? DiscountSource.PROMO : DiscountSource.MANUAL,
+        lineSubtotal,
+        lineDiscount,
+        lineNet,
+        costPrice: it.costPrice,
+        floorPrice: it.unitPrice,
+        belowMin: false,
+        sortOrder: idx + 1,
+      });
+    }
+
+    const grandTotal = subtotal + t.shippingCharge;
+    const dueDate = new Date(t.orderDate.getTime() + 14 * 24 * 3600 * 1000);
+
+    // 1. Buat Pesanan
+    const order = await prisma.order.create({
       data: {
         businessId: business.id,
-        customerId: vetmaCustomer.id,
+        customerId: customer.id,
         salesId: dinia.id,
         status: OrderStatus.COMPLETED,
         version: 1,
-        customerSeq: 2,
-        orderNo: 'VETMA/INV/02/05/2026/0002',
-        orderDate: new Date('2026-05-02T10:00:00Z'),
-        deliveryAddress: vetmaCustomer.address,
-        notes: 'Transaksi Repeat Order Dok No 2 Vetma Petshop Blitar',
-        subtotal: grandTotal,
+        customerSeq: t.customerSeq,
+        orderNo: t.orderNo,
+        orderDate: t.orderDate,
+        deliveryAddress: customer.address,
+        notes: t.notes,
+        subtotal,
+        discountTotal: t.discountTotal,
+        shippingCharge: t.shippingCharge,
         grandTotal,
         dpBps: 3000,
-        dpAmount,
+        dpAmount: t.dpAmount,
         paidTotal: grandTotal,
         items: {
-          create: [
-            {
-              businessId: business.id,
-              productId: seededProducts['BC-10L'].id,
-              productName: seededProducts['BC-10L'].name,
-              sku: seededProducts['BC-10L'].sku,
-              unit: 'karung',
-              qty: item1Qty,
-              listPrice: item1Price,
-              unitPrice: item1Price,
-              lineSubtotal: item1Subtotal,
-              lineDiscount: BigInt(0),
-              lineNet: item1Subtotal,
-              costPrice: item1Cost,
-              floorPrice: item1Price,
-            },
-            {
-              businessId: business.id,
-              productId: seededProducts['BC-5.5L'].id,
-              productName: seededProducts['BC-5.5L'].name,
-              sku: seededProducts['BC-5.5L'].sku,
-              unit: 'karung',
-              qty: item2Qty,
-              listPrice: item2Price,
-              unitPrice: item2Price,
-              lineSubtotal: item2Subtotal,
-              lineDiscount: BigInt(0),
-              lineNet: item2Subtotal,
-              costPrice: item2Cost,
-              floorPrice: item2Price,
-            },
-          ],
+          create: orderItemsToCreate,
         },
       },
     });
 
-    logger.info('Sample Order & Transaksi Vetma Petshop Dok 2 berhasil di-seed.');
+    // 2. Buat Faktur Penjualan (Invoice APPROVED)
+    const invoice = await prisma.invoice.create({
+      data: {
+        businessId: business.id,
+        orderId: order.id,
+        customerId: customer.id,
+        type: InvoiceType.FINAL,
+        status: InvoiceStatus.APPROVED,
+        version: 1,
+        number: t.invoiceNo,
+        amount: grandTotal,
+        paidAmount: grandTotal,
+        issueDate: t.orderDate,
+        dueDate,
+        theme: InvoiceTheme.PROFESIONAL,
+        requestedById: dinia.id,
+        approvedById: superAdmin.id,
+        approvedAt: t.orderDate,
+      },
+    });
+
+    // 3. Catat Pembayaran Lunas (Payment VERIFIED via BCA)
+    await prisma.payment.create({
+      data: {
+        businessId: business.id,
+        orderId: order.id,
+        invoiceId: invoice.id,
+        type: PaymentType.RECEIPT,
+        method: PaymentMethod.TRANSFER,
+        status: PaymentStatus.VERIFIED,
+        amount: grandTotal,
+        paidAt: t.orderDate,
+        reference: `TRF-BCA-${t.invoiceNo.replace(/\//g, '-')}`,
+        notes: `Pelunasan via transfer BCA 0901422817 a.n. DHIKO HERLAMBANG untuk pesanan ${t.orderNo}`,
+        createdById: dinia.id,
+        verifiedById: superAdmin.id,
+        verifiedAt: t.orderDate,
+      },
+    });
+
+    logger.info({ orderNo: t.orderNo, invoiceNo: t.invoiceNo, grandTotal: grandTotal.toString() }, 'Pesanan, Faktur, dan Pembayaran berhasil di-seed.');
   }
 
-  logger.info('==> Seluruh data operasional BentoCat SUKSES di-seed!');
+  logger.info('==> Seluruh data operasional BentoCat & Faktur SUKSES di-seed!');
 }
 
 export async function runAllSeed() {

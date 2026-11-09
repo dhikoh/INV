@@ -36,8 +36,8 @@ export function MoneyInput({
 }: MoneyInputProps) {
   // Format tampilan angka ribuan dengan pemisah titik
   const formatDisplay = (num: number): string => {
-    if (!num || isNaN(num) || num <= 0) return '';
-    return num.toLocaleString('id-ID');
+    if (num === null || num === undefined || isNaN(num) || num <= 0) return '';
+    return Number(num).toLocaleString('id-ID');
   };
 
   const [displayValue, setDisplayValue] = useState<string>(formatDisplay(value));
@@ -62,7 +62,7 @@ export function MoneyInput({
       finalVal = max;
     }
 
-    setDisplayValue(finalVal.toLocaleString('id-ID'));
+    setDisplayValue((finalVal ?? 0).toLocaleString('id-ID'));
     onChange(finalVal);
   };
 

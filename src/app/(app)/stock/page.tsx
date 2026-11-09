@@ -279,9 +279,9 @@ export default function StockPage() {
   };
 
   // Ringkasan metrik stok
-  const totalPhysical = products.reduce((acc, p) => acc + p.stockQty, 0);
-  const totalReserved = products.reduce((acc, p) => acc + p.reservedQty, 0);
-  const totalAvailable = products.reduce((acc, p) => acc + p.available, 0);
+  const totalPhysical = products.reduce((acc, p) => acc + (p.stockQty ?? 0), 0);
+  const totalReserved = products.reduce((acc, p) => acc + (p.reservedQty ?? 0), 0);
+  const totalAvailable = products.reduce((acc, p) => acc + (p.available ?? 0), 0);
   const negativeCount = products.filter((p) => p.isNegative).length;
 
   return (
@@ -324,7 +324,7 @@ export default function StockPage() {
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
           <span className="text-xs font-medium text-slate-500">Total Stok Fisik</span>
           <p className="text-xl sm:text-2xl font-bold text-slate-900 mt-1">
-            {totalPhysical.toLocaleString('id-ID')}
+            {(totalPhysical ?? 0).toLocaleString('id-ID')}
           </p>
           <span className="text-[11px] text-slate-400 mt-0.5 block">Di seluruh gudang</span>
         </div>
@@ -332,7 +332,7 @@ export default function StockPage() {
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
           <span className="text-xs font-medium text-amber-700">Dipesan / Reservasi</span>
           <p className="text-xl sm:text-2xl font-bold text-amber-600 mt-1">
-            {totalReserved.toLocaleString('id-ID')}
+            {(totalReserved ?? 0).toLocaleString('id-ID')}
           </p>
           <span className="text-[11px] text-amber-600/80 mt-0.5 block">Terkunci untuk order</span>
         </div>
@@ -340,7 +340,7 @@ export default function StockPage() {
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
           <span className="text-xs font-medium text-emerald-700">Stok Tersedia</span>
           <p className="text-xl sm:text-2xl font-bold text-emerald-600 mt-1">
-            {totalAvailable.toLocaleString('id-ID')}
+            {(totalAvailable ?? 0).toLocaleString('id-ID')}
           </p>
           <span className="text-[11px] text-emerald-600/80 mt-0.5 block">Siap dijual</span>
         </div>
@@ -920,13 +920,15 @@ export default function StockPage() {
                       label: m.type,
                       color: 'bg-slate-100 text-slate-700',
                     };
-                    const dateStr = new Date(m.createdAt).toLocaleString('id-ID', {
-                      day: 'numeric',
-                      month: 'short',
-                      year: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    });
+                    const dateStr = m.createdAt
+                      ? new Date(m.createdAt).toLocaleString('id-ID', {
+                          day: 'numeric',
+                          month: 'short',
+                          year: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })
+                      : '-';
 
                     return (
                       <div key={m.id} className="py-2.5 flex items-start justify-between gap-3 text-xs">
