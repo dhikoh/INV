@@ -119,10 +119,10 @@ export default function UsersManagementPage() {
       }
       if (bizJson.ok && Array.isArray(bizJson.data)) {
         setBusinesses(bizJson.data);
-        if (bizJson.data.length > 0 && !newUserData.businessId) {
+        if (bizJson.data.length > 0) {
           setNewUserData((prev) => ({
             ...prev,
-            businessId: bizJson.data[0].id,
+            businessId: prev.businessId || bizJson.data[0].id,
           }));
         }
       }
@@ -131,10 +131,10 @@ export default function UsersManagementPage() {
     } finally {
       setLoading(false);
     }
-  }, [newUserData.businessId]);
+  }, []);
 
   useEffect(() => {
-    loadData();
+    void loadData();
   }, [loadData]);
 
   // Tambah User Sales Baru
@@ -144,14 +144,46 @@ export default function UsersManagementPage() {
       setSavingNewUser(true);
       setAddUserError(null);
 
+      const businessId = newUserData.businessId || businesses[0]?.id;
+      if (!businessId) {
+        setAddUserError('Silakan pilih unit usaha untuk sales');
+        return;
+      }
+
+      const name = newUserData.name.trim();
+      if (name.length < 2) {
+        setAddUserError('Nama lengkap minimal 2 karakter');
+        return;
+      }
+
+      const username = newUserData.username.trim().toLowerCase();
+      if (username.length < 3) {
+        setAddUserError('Username minimal 3 karakter');
+        return;
+      }
+      if (!/^[a-zA-Z0-9_.-]+$/.test(username)) {
+        setAddUserError('Username hanya boleh huruf, angka, titik (.), strip (-), dan garis bawah (_)');
+        return;
+      }
+
+      const password = newUserData.password;
+      if (password.length < 10) {
+        setAddUserError('Password minimal 10 karakter');
+        return;
+      }
+      if (password.toLowerCase() === username) {
+        setAddUserError('Password tidak boleh sama dengan username');
+        return;
+      }
+
       const res = await fetch('/api/v1/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          username: newUserData.username.toLowerCase().trim(),
-          name: newUserData.name.trim(),
-          password: newUserData.password,
-          businessId: newUserData.businessId,
+          username,
+          name,
+          password,
+          businessId,
           role: 'SALES',
           commissionMode: newUserData.commissionMode || null,
           commissionRateBps: newUserData.commissionMode
@@ -165,7 +197,14 @@ export default function UsersManagementPage() {
 
       const json = await res.json();
       if (!res.ok || !json.ok) {
-        throw new Error(json.error?.message || 'Gagal menambahkan sales');
+        let msg = json.error?.message || 'Gagal menambahkan sales';
+        if (json.error?.fields) {
+          const fieldMsgs = Object.entries(json.error.fields)
+            .map(([f, m]) => `${f}: ${m}`)
+            .join(' | ');
+          msg = `${msg}: ${fieldMsgs}`;
+        }
+        throw new Error(msg);
       }
 
       setShowAddModal(false);
@@ -202,7 +241,7 @@ export default function UsersManagementPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: editFormData.name.trim(),
-          businessId: editFormData.businessId,
+          businessId: editFormData.businessId || null,
           commissionMode: editFormData.commissionMode || null,
           commissionRateBps: editFormData.commissionMode
             ? Number(editFormData.commissionRateBps)
@@ -215,7 +254,14 @@ export default function UsersManagementPage() {
 
       const json = await res.json();
       if (!res.ok || !json.ok) {
-        throw new Error(json.error?.message || 'Gagal memperbarui pengguna');
+        let msg = json.error?.message || 'Gagal memperbarui pengguna';
+        if (json.error?.fields) {
+          const fieldMsgs = Object.entries(json.error.fields)
+            .map(([f, m]) => `${f}: ${m}`)
+            .join(' | ');
+          msg = `${msg}: ${fieldMsgs}`;
+        }
+        throw new Error(msg);
       }
 
       setEditingUser(null);
@@ -240,6 +286,15 @@ export default function UsersManagementPage() {
       setSavingReset(true);
       setResetError(null);
 
+      if (newPassword.length < 10) {
+        setResetError('Password minimal 10 karakter');
+        return;
+      }
+      if (newPassword.toLowerCase() === resettingUser.username.toLowerCase()) {
+        setResetError('Password tidak boleh sama dengan username');
+        return;
+      }
+
       const res = await fetch(`/api/v1/users/${resettingUser.id}/reset-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -248,7 +303,14 @@ export default function UsersManagementPage() {
 
       const json = await res.json();
       if (!res.ok || !json.ok) {
-        throw new Error(json.error?.message || 'Gagal me-reset password');
+        let msg = json.error?.message || 'Gagal me-reset password';
+        if (json.error?.fields) {
+          const fieldMsgs = Object.entries(json.error.fields)
+            .map(([f, m]) => `${f}: ${m}`)
+            .join(' | ');
+          msg = `${msg}: ${fieldMsgs}`;
+        }
+        throw new Error(msg);
       }
 
       setResettingUser(null);
@@ -388,7 +450,19 @@ export default function UsersManagementPage() {
 
         <button
           type="button"
-          onClick={() => setShowAddModal(true)}
+          onClick={() => {
+            setNewUserData({
+              username: '',
+              name: '',
+              password: '',
+              businessId: businesses[0]?.id || selectedBusinessId || '',
+              commissionMode: '',
+              commissionRateBps: 1000,
+              commissionFixedAmount: 0,
+            });
+            setAddUserError(null);
+            setShowAddModal(true);
+          }}
           className="h-11 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-colors shadow-sm"
         >
           <Plus className="w-4 h-4" />
@@ -646,7 +720,7 @@ export default function UsersManagementPage() {
             <form onSubmit={handleCreateUser} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
-                  Unit Usaha Sales
+                  Unit Usaha Sales <span className="text-rose-500">*</span>
                 </label>
                 <select
                   required
@@ -657,8 +731,11 @@ export default function UsersManagementPage() {
                       businessId: e.target.value,
                     }))
                   }
-                  className="w-full h-11 px-3 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-900 font-semibold"
+                  className="w-full h-11 px-3 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-900 font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
+                  <option value="" disabled>
+                    -- Pilih Unit Usaha --
+                  </option>
                   {businesses.map((b) => (
                     <option key={b.id} value={b.id}>
                       {b.code} - {b.name}
@@ -669,11 +746,12 @@ export default function UsersManagementPage() {
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
-                  Nama Lengkap
+                  Nama Lengkap <span className="text-rose-500">*</span>
                 </label>
                 <input
                   type="text"
                   required
+                  minLength={2}
                   placeholder="Contoh: Budi Santoso"
                   value={newUserData.name}
                   onChange={(e) =>
@@ -682,37 +760,42 @@ export default function UsersManagementPage() {
                       name: e.target.value,
                     }))
                   }
-                  className="w-full h-11 px-3.5 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-900"
+                  className="w-full h-11 px-3.5 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
-                    Username (Huruf Kecil & Angka)
+                    Username <span className="text-rose-500">*</span>
                   </label>
                   <input
                     type="text"
                     required
+                    minLength={3}
                     placeholder="budisales"
                     value={newUserData.username}
                     onChange={(e) =>
                       setNewUserData((prev) => ({
                         ...prev,
-                        username: e.target.value.toLowerCase(),
+                        username: e.target.value.toLowerCase().replace(/\s+/g, '_'),
                       }))
                     }
-                    className="w-full h-11 px-3.5 bg-slate-50 border border-slate-300 rounded-lg text-sm font-mono text-slate-900"
+                    className="w-full h-11 px-3.5 bg-slate-50 border border-slate-300 rounded-lg text-sm font-mono text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    Huruf kecil, angka, titik, strip, garis bawah (_)
+                  </p>
                 </div>
 
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
-                    Password Awal (Min 10 Karakter)
+                    Password Awal <span className="text-rose-500">*</span>
                   </label>
                   <input
                     type="password"
                     required
+                    minLength={10}
                     placeholder="Minimal 10 karakter"
                     value={newUserData.password}
                     onChange={(e) =>
@@ -721,8 +804,11 @@ export default function UsersManagementPage() {
                         password: e.target.value,
                       }))
                     }
-                    className="w-full h-11 px-3.5 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-900"
+                    className="w-full h-11 px-3.5 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    Min 10 karakter & beda dari username
+                  </p>
                 </div>
               </div>
 
@@ -946,15 +1032,16 @@ export default function UsersManagementPage() {
             <form onSubmit={handleResetPassword} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
-                  Password Baru (Min 10 Karakter)
+                  Password Baru (Min 10 Karakter) <span className="text-rose-500">*</span>
                 </label>
                 <input
                   type="password"
                   required
-                  placeholder="Masukkan password baru"
+                  minLength={10}
+                  placeholder="Masukkan password baru (minimal 10 karakter)"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
-                  className="w-full h-11 px-3.5 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-900"
+                  className="w-full h-11 px-3.5 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
 

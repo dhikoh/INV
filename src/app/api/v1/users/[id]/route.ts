@@ -8,7 +8,7 @@ import { CommissionMode } from '@prisma/client';
 const UserUpdateSchema = z
   .object({
     name: z.string().trim().min(2, 'Nama lengkap minimal 2 karakter').max(100).optional(),
-    businessId: z.string().min(1, 'Unit usaha tidak valid').optional(),
+    businessId: z.string().min(1, 'Unit usaha tidak valid').optional().nullable(),
     commissionMode: z.nativeEnum(CommissionMode).optional().nullable(),
     commissionRateBps: z.number().int().min(0).max(10000).optional().nullable(),
     commissionFixedAmount: z.number().int().min(0).optional().nullable(),

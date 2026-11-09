@@ -14,8 +14,8 @@ const UserCreateSchema = z
       .min(3, 'Username minimal 3 karakter')
       .max(50, 'Username maksimal 50 karakter')
       .regex(
-        /^[a-zA-Z0-9_]+$/,
-        'Username hanya boleh berisi huruf, angka, dan garis bawah (_)'
+        /^[a-zA-Z0-9_.-]+$/,
+        'Username hanya boleh berisi huruf, angka, titik (.), strip (-), dan garis bawah (_)'
       )
       .transform((v) => v.toLowerCase()),
     password: z
