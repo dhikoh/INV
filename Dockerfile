@@ -22,15 +22,16 @@ RUN pnpm prisma generate
 RUN pnpm build
 
 # Stage 4: Runner
-FROM node:22-bookworm-slim AS runner
+FROM base AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV TZ=Asia/Jakarta
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+ENV HOME=/home/nextjs
 
-# Install Chromium and required fonts for PDF rendering (Section 3.4)
+# Install Chromium, fonts, and required tools
 RUN apt-get update && apt-get install -y --no-install-recommends \
     chromium \
     fonts-liberation \
@@ -38,12 +39,29 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     tzdata \
     && rm -rf /var/lib/apt/lists/*
 
-# Non-root user
-RUN addgroup --system --gid 1001 nodejs && \
-    adduser --system --uid 1001 nextjs
+# Install prisma and tsx globally so CLI tools work directly in terminal & entrypoint
+RUN pnpm add -g prisma@7.10.1 tsx@4.23.15 && chmod -R 755 /pnpm
+
+# Create dedicated home directory and non-root user
+RUN mkdir -p /home/nextjs && \
+    addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 --home /home/nextjs --ingroup nodejs nextjs && \
+    chown -R nextjs:nodejs /home/nextjs
 
 # Create uploads directory and set permissions
 RUN mkdir -p /data/uploads && chown -R nextjs:nodejs /data && chmod -R 775 /data
+
+# Copy source and prisma configuration files needed for migrations, seeding, and CLI commands
+COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
+COPY --from=builder --chown=nextjs:nodejs /app/prisma.config.ts ./prisma.config.ts
+COPY --from=builder --chown=nextjs:nodejs /app/package.json ./package.json
+COPY --from=builder --chown=nextjs:nodejs /app/src ./src
+COPY --from=builder --chown=nextjs:nodejs /app/scripts ./scripts
+COPY --from=builder --chown=nextjs:nodejs /app/tsconfig.json ./tsconfig.json
+
+# Copy entrypoint script
+COPY docker-entrypoint.sh ./docker-entrypoint.sh
+RUN chmod +x ./docker-entrypoint.sh && chown nextjs:nodejs ./docker-entrypoint.sh
 
 # Copy public & standalone assets
 COPY --from=builder /app/public ./public
@@ -56,4 +74,5 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
+ENTRYPOINT ["./docker-entrypoint.sh"]
 CMD ["node", "server.js"]
