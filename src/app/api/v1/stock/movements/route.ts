@@ -67,10 +67,13 @@ export const GET = withApi(
 
     // Ambil info produk
     const productIds = [...new Set(movements.map((m) => m.productId))];
-    const products = await prisma.product.findMany({
-      where: { id: { in: productIds } },
-      select: { id: true, sku: true, name: true, unit: true },
-    });
+    const products =
+      productIds.length > 0
+        ? await prisma.product.findMany({
+            where: { businessId, id: { in: productIds } },
+            select: { id: true, sku: true, name: true, unit: true },
+          })
+        : [];
     const productMap = new Map(products.map((p) => [p.id, p]));
 
     const items = movements.map((m) => ({

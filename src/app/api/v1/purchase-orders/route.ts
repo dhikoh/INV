@@ -85,10 +85,13 @@ export const GET = withApi(
     ]);
 
     const allItemProductIds = [...new Set(orders.flatMap((o) => o.items.map((i) => i.productId)))];
-    const products = await prisma.product.findMany({
-      where: { id: { in: allItemProductIds } },
-      select: { id: true, sku: true, name: true, unit: true },
-    });
+    const products =
+      allItemProductIds.length > 0
+        ? await prisma.product.findMany({
+            where: { businessId, id: { in: allItemProductIds } },
+            select: { id: true, sku: true, name: true, unit: true },
+          })
+        : [];
     const prodMap = new Map(products.map((p) => [p.id, p]));
 
     const items = orders.map((o) => formatPurchaseOrderDto(o, prodMap));

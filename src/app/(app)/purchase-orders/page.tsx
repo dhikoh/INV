@@ -88,7 +88,10 @@ export default function PurchaseOrdersPage() {
         const res = await fetch('/api/v1/vendors?limit=100');
         if (res.ok) {
           const json = await res.json();
-          setVendorOptions(json.data.items || []);
+          const vList = Array.isArray(json.data)
+            ? json.data
+            : json.data?.items || [];
+          setVendorOptions(vList);
         }
       } catch {
         // Abaikan

@@ -45,7 +45,7 @@ export const GET = withApi(
       throw new DomainError('PO_NOT_FOUND', 'Purchase Order tidak ditemukan', 404);
     }
 
-    const prodMap = await getProductMapForPo(prisma as unknown as Tx, po.items);
+    const prodMap = await getProductMapForPo(prisma as unknown as Tx, po.items, businessId);
 
     return {
       status: 200,

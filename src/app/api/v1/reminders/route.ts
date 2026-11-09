@@ -80,7 +80,7 @@ export const GET = withApi(
     const products =
       productIds.length > 0
         ? await prisma.product.findMany({
-            where: { id: { in: productIds } },
+            where: { businessId, id: { in: productIds } },
             select: { id: true, name: true, sku: true, unit: true },
           })
         : [];

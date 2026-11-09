@@ -69,12 +69,18 @@ export default function NewPurchaseOrderPage() {
 
         if (vRes.ok) {
           const vJson = await vRes.json();
-          setVendors(vJson.data.items || []);
+          const vList = Array.isArray(vJson.data)
+            ? vJson.data
+            : vJson.data?.items || [];
+          setVendors(vList);
         }
 
         if (pRes.ok) {
           const pJson = await pRes.json();
-          setProducts(pJson.data.items || []);
+          const pList = Array.isArray(pJson.data)
+            ? pJson.data
+            : pJson.data?.items || [];
+          setProducts(pList);
         }
       } catch {
         setFormError('Gagal memuat data master vendor dan produk');

@@ -98,13 +98,17 @@ export function formatPurchaseOrderDto(
  */
 export async function getProductMapForPo(
   client: Tx,
-  items: Array<{ productId: string }>
+  items: Array<{ productId: string }>,
+  businessId?: string
 ): Promise<Map<string, PoProductSummary>> {
   const productIds = [...new Set(items.map((i) => i.productId))];
   if (productIds.length === 0) return new Map();
 
   const products = await client.product.findMany({
-    where: { id: { in: productIds } },
+    where: {
+      ...(businessId ? { businessId } : {}),
+      id: { in: productIds },
+    },
     select: { id: true, sku: true, name: true, unit: true },
   });
 
@@ -201,7 +205,7 @@ export async function createPurchaseOrder(
     },
   });
 
-  const prodMap = await getProductMapForPo(tx, po.items);
+  const prodMap = await getProductMapForPo(tx, po.items, businessId);
   return { po, prodMap };
 }
 
@@ -318,7 +322,7 @@ export async function updatePurchaseOrder(
     },
   });
 
-  const prodMap = await getProductMapForPo(tx, updated.items);
+  const prodMap = await getProductMapForPo(tx, updated.items, businessId);
   return { po: updated, prodMap };
 }
 
@@ -396,7 +400,7 @@ export async function orderPurchaseOrder(
     },
   });
 
-  const prodMap = await getProductMapForPo(tx, updated.items);
+  const prodMap = await getProductMapForPo(tx, updated.items, businessId);
   return { po: updated, prodMap };
 }
 
@@ -546,7 +550,7 @@ export async function receivePurchaseOrder(
     },
   });
 
-  const prodMap = await getProductMapForPo(tx, updated.items);
+  const prodMap = await getProductMapForPo(tx, updated.items, businessId);
   return { po: updated, prodMap };
 }
 
@@ -623,6 +627,6 @@ export async function cancelPurchaseOrder(
     },
   });
 
-  const prodMap = await getProductMapForPo(tx, updated.items);
+  const prodMap = await getProductMapForPo(tx, updated.items, businessId);
   return { po: updated, prodMap };
 }
