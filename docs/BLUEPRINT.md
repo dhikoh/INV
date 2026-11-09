@@ -386,17 +386,61 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
 
 ## 9. Operasional
 
-1. **Deploy Coolify**:
-   - Single Docker Image, multi-stage build.
-   - Dua instance service: `web` (port 3000) dan `worker` (proses background).
-   - Eksekusi migrasi hanya pada tahap pre-deploy service `web`: `pnpm prisma migrate deploy`.
-2. **Backup & Restore**:
-   - Jadwal snapshot database harian otomatis pada PostgreSQL.
-   - Volume `/data/uploads` dicadangkan bersama snapshot harian.
-3. **Pengujian Rutin**:
-   - `pnpm lint`: Memastikan kebersihan sintaks dan aturan typescript.
-   - `pnpm typecheck`: Memastikan kesesuaian tipe data dan integritas tanpa `@ts-ignore`.
-   - `pnpm test`: Menjalankan suite Vitest pada unit rumus dan integrasi.
+### 1. Deploy Coolify (Dua Service dari Single Docker Image)
+
+- **Dockerfile Multi-Stage**: `node:22-bookworm-slim`, memasang `chromium`, font liberation, dan non-root user `nextjs`.
+- **Dua Service di Coolify**:
+  1. `web`: Menjalankan `node server.js`, port 3000, healthcheck `GET /api/health`.
+     - Perintah pra-deploy (Pre-deployment command): `pnpm prisma migrate deploy`.
+     - Satu replika (tanpa horizontal scaling pada rilis ini).
+  2. `worker`: Menjalankan `pnpm worker` (`tsx src/worker/index.ts`), tanpa port publik.
+- **Volume Persisten**: `/data/uploads` dipasang ke container `web` dan `worker`.
+- **Seed Super Admin Awal (Mode Produksi)**:
+  - Disetel di env: `SEED_SUPERADMIN_USERNAME` dan `SEED_SUPERADMIN_PASSWORD` (min. 12 karakter).
+  - Dijalankan sekali: `pnpm db:seed`. Menolak berjalan bila Super Admin sudah ada, dan menyetel `mustChangePassword = true`.
+
+### 2. Integrasi Telegram Bot & Webhook
+
+- Setup satu kali setelah deploy awal:
+  ```bash
+  pnpm tsx scripts/setup-telegram-webhook.ts
+  ```
+  Skrip secara otomatis memvalidasi `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET` (min. 32 karakter), dan `APP_URL` HTTPS, lalu mendaftarkan `setWebhook` dan tombol menu `setChatMenuButton` mengarah ke `/tg`.
+
+### 3. Prosedur Cadangan & Pemulihan (Backup & Restore)
+
+- **Jadwal Harian Otomatis**:
+  - Dijalankan via cron atau Coolify scheduled task:
+    ```bash
+    bash scripts/backup.sh
+    ```
+  - Mengekspor database PostgreSQL (`pg_dump` format custom kompresi level 9) dan arsip direktori berkas `/data/uploads` ke `/data/backups/`. Retensi otomatis 30 hari.
+- **Pemulihan Bencana (Disaster Recovery & Uji Restore Seksi 18.1 no. 38)**:
+  - Pemulihan dieksekusi dengan:
+    ```bash
+    bash scripts/restore.sh /data/backups/db_bentocat_YYYYMMDD_HHMMSS.dump /data/backups/uploads_bentocat_YYYYMMDD_HHMMSS.tar.gz
+    ```
+  - **Integritas Penomoran Sequential**: Tabel `DocumentCounter` ikut dicadangkan dan dipulihkan. Pengujian otomatis (`tests/integration/backup-restore.test.ts`) membuktikan bahwa urutan nomor order/invoice berikutnya langsung melanjutkan dari urutan terakhir (`lastSeq + 1`) tanpa reset dan tanpa risiko tabrakan nomor dokumen resmi.
+  - **Integritas Audit Log**: Trigger database PostgreSQL `audit_log_immutable` tetap aktif pasca-pemulihan, menjamin riwayat audit tidak dapat dimanipulasi.
+
+### 4. Prosedur Rotasi Secret & Kredensial
+
+1. **`APP_SECRET`**:
+   - Digunakan untuk menandatangani token unduh PDF Telegram (`/downloads` -> `/dl/:token`).
+   - Buat string acak 32+ byte: `openssl rand -hex 32`. Perbarui variabel di Coolify dan restart service. Token unduh aktif (<5 menit) akan kedaluwarsa dan pengguna cukup menekan tombol cetak ulang.
+2. **`TELEGRAM_WEBHOOK_SECRET`**:
+   - Buat token acak 32+ karakter baru.
+   - Perbarui di Coolify environment variables, lalu jalankan `pnpm tsx scripts/setup-telegram-webhook.ts` untuk menyelaraskan secret token ke Telegram Bot API.
+3. **`SESSION_COOKIE_NAME` & Sesi Pengguna**:
+   - Sesi tersimpan di tabel `Session` sebagai SHA-256 hash. Bila terjadi insiden keamanan, jalankan `TRUNCATE "Session" CASCADE;` pada PostgreSQL untuk mencabut seluruh sesi login seketika.
+
+### 5. Pengujian Rutin & Quality Gates
+
+- `pnpm lint`: Memastikan kebersihan sintaks ESLint tanpa `any`, tanpa `console.log`, dan tanpa `dangerouslySetInnerHTML`.
+- `pnpm typecheck`: Memastikan kesesuaian tipe data TypeScript Strict (`tsc --noEmit`) tanpa `@ts-ignore`.
+- `pnpm test`: Menjalankan 68 test files Vitest (unit domain dan integrasi database).
+- `pnpm test:e2e`: Menjalankan suite Playwright E2E testing (alur order, invoice, theme preview, PWA).
+- `pnpm build`: Memastikan Next.js App Router standalone build sukses.
 
 ---
 
@@ -414,12 +458,12 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
 
 | Fase       | Target Rilis | Deskripsi                                                               | Status              |
 | ---------- | ------------ | ----------------------------------------------------------------------- | ------------------- |
-| **Fase 0** | `v0.1.0`     | Fondasi proyek, env, skema Prisma, rumus domain, infra tes              | **SELESAI** |
-| **Fase 1** | `v0.2.0`     | Login, manajemen usaha, akun sales, master produk & vendor, pembaruan   | **SELESAI**         |
-| **Fase 2** | `v0.3.0`     | Customer CRM, order draft, floor pricing, manajemen stok, PO & vendor ledger | **SELESAI** |
-| **Fase 3** | `v0.4.0`     | Persetujuan invoice, verifikasi pembayaran, mesin cetak PDF, void/retur, profit & komisi, UI persetujuan & invoice | **SELESAI** |
-| **Fase 4** | `v0.5.0`     | Bot Telegram, Mini App, pengingat repeat order, katalog PWA             | **SELESAI**         |
-| **Fase 5** | `v1.0.0`     | Dashboard profit, evaluasi sales, pengerasan keamanan, Go-Live          | Sedang berjalan (T5.1 s/d T5.5 selesai) |
+| **Fase 0** | `v0.1.0`     | Fondasi proyek, env, skema Prisma, rumus domain, infra tes              | **SELESAI** (`v0.1.0`) |
+| **Fase 1** | `v0.2.0`     | Login, manajemen usaha, akun sales, master produk & vendor, pembaruan   | **SELESAI** (`v0.2.0`) |
+| **Fase 2** | `v0.3.0`     | Customer CRM, order draft, floor pricing, manajemen stok, PO & vendor ledger | **SELESAI** (`v0.3.0`) |
+| **Fase 3** | `v0.4.0`     | Persetujuan invoice, verifikasi pembayaran, mesin cetak PDF, void/retur, profit & komisi, UI persetujuan & invoice | **SELESAI** (`v0.4.0`) |
+| **Fase 4** | `v0.5.0`     | Bot Telegram, Mini App, pengingat repeat order, katalog PWA             | **SELESAI** (`v0.5.0`) |
+| **Fase 5** | `v1.0.0`     | Dashboard profit, evaluasi sales, pengerasan keamanan, Go-Live          | **SELESAI** (`v1.0.0`) |
 
 ---
 

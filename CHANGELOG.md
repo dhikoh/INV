@@ -6,7 +6,26 @@ dan proyek ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-11-09
+
 ### Added
+
+- Go-Live Fase 5, Skrip Backup Terjadwal & Uji Pemulihan, Setup Webhook Telegram Bot, dan Finalisasi Dokumentasi Operasional (T5.6):
+  - Skrip Cadangan Database & Storage Otomatis (`scripts/backup.sh`):
+    - Mengekspor database PostgreSQL melalui `pg_dump` format custom kompresi level 9 dan mengarsipkan volume berkas fisik `/data/uploads` dengan stempel waktu berformat `YYYYMMDD_HHMMSS`.
+    - Mekanisme retensi mandiri: otomatis membersihkan berkas backup berumur lebih dari 30 hari.
+  - Skrip Pemulihan Bencana & Storage (`scripts/restore.sh`):
+    - Memulihkan seluruh basis data secara bersih (`pg_restore --clean`), mengekstrak kembali arsip storage `/data/uploads`, dan mengeksekusi `pnpm prisma migrate deploy` untuk memastikan kompatibilitas skema.
+  - Skrip Setup Webhook & Menu Button Telegram Bot (`scripts/setup-telegram-webhook.ts`):
+    - Menyediakan alur konfigurasi otomatis satu perintah untuk mendaftarkan `setWebhook` dengan `TELEGRAM_WEBHOOK_SECRET` aman dan memasang tombol menu Mini App `setChatMenuButton` mengarah ke `[APP_URL]/tg`.
+  - Pembuktian Uji Pemulihan Database & DocumentCounter (`tests/integration/backup-restore.test.ts`):
+    - Pengujian integrasi memverifikasi ketersediaan dan sintaks seluruh skrip operasional.
+    - Pembuktian ketat Seksi 18.1 nomor 38: tabel `DocumentCounter` berhasil dicadangkan dan dipulihkan ke database bersih; alokasi sequence berikutnya terbukti langsung melanjutkan dari `lastSeq + 1` tanpa reset ke 1 dan tanpa risiko tabrakan nomor dokumen.
+    - Integritas trigger database `audit_log_immutable` terbukti tetap aktif pasca-pemulihan dan menggagalkan segala upaya `UPDATE` maupun `DELETE` pada riwayat audit.
+  - Finalisasi Operasional & Dokumentasi Rilis Produksi:
+    - Pembaruan versi aplikasi menjadi `v1.0.0` pada `package.json`.
+    - Dokumentasi menyeluruh di `docs/BLUEPRINT.md` mencakup arsitektur 2-service Coolify (`web` dan `worker`), jadwal background worker, rotasi rahasia (`APP_SECRET`, `TELEGRAM_WEBHOOK_SECRET`), dan panduan uji penerimaan pemilik (Seksi 19.8).
+    - Status Fase 0 hingga Fase 5 pada Roadmap resmi dinyatakan SELESAI (`v1.0.0`).
 
 - Audit Trail, Pengerasan Keamanan, Rate Limiting, Header CSP, dan Tes Inventaris Rute sesuai Seksi 14, 16.1, 16.4, 16.5, 17.4 c Dokumen Spesifikasi (T5.5):
   - Layanan Domain & Endpoint Audit Trail (`src/lib/services/auditLogService.ts` & `GET /api/v1/audit-logs`):
