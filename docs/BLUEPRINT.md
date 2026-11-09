@@ -303,13 +303,14 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
 | `PUT`      | `/api/v1/catalogs/:id/items`   | Super Admin, Sales | Ganti seluruh item katalog dengan validasi floor price |
 | `POST`     | `/api/v1/catalogs/:id/adjust-min` | Super Admin, Sales | Sesuaikan seluruh item stale ke harga minimal terbaru |
 | `GET`      | `/api/v1/catalogs/:id/pdf`     | Super Admin, Sales | Unduh berkas PDF katalog resmi (tolak 422 CATALOG_STALE jika stale, Zero-Leakage) |
+| `GET`      | `/api/v1/dashboard`            | Super Admin, Sales | Ringkasan operasional & keuangan (DTO per role, metrik SA, fokus hari ini sales, Zero-Leakage) |
 
 ### Antarmuka Pengguna (UI Routes)
 
 | Path                   | Hak Akses          | Deskripsi                                                        |
 | ---------------------- | ------------------ | ---------------------------------------------------------------- |
 | `/login`               | Publik             | Halaman login dengan rate-limiting & proteksi timing attack      |
-| `/dashboard`           | Super Admin, Sales | Ringkasan navigasi cepat & kartu usaha aktif                     |
+| `/dashboard`           | Super Admin, Sales | Dashboard operasional & keuangan (Super Admin: omzet, HPP, profit, leaderboard, antrean approval; Sales: fokus hari ini, target, estimasi komisi, Zero-Leakage) |
 | `/profile`             | Super Admin, Sales | Pengaturan profil, ganti password, & integrasi bot Telegram      |
 | `/settings/business`   | Super Admin        | Legalitas usaha, rekening bank, toggle operasional, tema invoice |
 | `/settings/users`      | Super Admin        | Manajemen pengguna staf sales, reset password, skema komisi      |
@@ -400,7 +401,7 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
 | **Fase 2** | `v0.3.0`     | Customer CRM, order draft, floor pricing, manajemen stok, PO & vendor ledger | **SELESAI** |
 | **Fase 3** | `v0.4.0`     | Persetujuan invoice, verifikasi pembayaran, mesin cetak PDF, void/retur, profit & komisi, UI persetujuan & invoice | **SELESAI** |
 | **Fase 4** | `v0.5.0`     | Bot Telegram, Mini App, pengingat repeat order, katalog PWA             | **SELESAI**         |
-| **Fase 5** | `v1.0.0`     | Dashboard profit, evaluasi sales, pengerasan keamanan, Go-Live          | Belum dimulai       |
+| **Fase 5** | `v1.0.0`     | Dashboard profit, evaluasi sales, pengerasan keamanan, Go-Live          | Sedang berjalan (T5.1 selesai) |
 
 ---
 

@@ -8,6 +8,33 @@ dan proyek ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Dashboard Operasional & Keuangan (DTO Berbeda per Role, Metrik Super Admin, Fokus Hari Ini Sales, Zero-Leakage) sesuai Seksi 11, 17.3 nomor 21, 17.4 a, dan 18.1 nomor 17 Dokumen Spesifikasi (T5.1):
+  - Layanan Domain Dashboard (`src/lib/services/dashboard.ts`):
+    - Fungsi rentang waktu WIB (`getWibMonthRange`, `getWibDayRange`) untuk konsistensi zona waktu operasional Indonesia Barat (UTC+7).
+    - Query agregasi Super Admin dengan batasan tenant `businessId`: antrean approval (`PENDING_APPROVAL`, `FINAL_PENDING_APPROVAL`), verifikasi pembayaran bank (`PENDING_VERIFICATION`), stok minus (`stockQty - reservedQty < 0`), stok menipis (`available <= minStockAlert`), faktur piutang overdue, pelanggan tanpa staf sales (`unassignedCustomersCount`), serta omzet, HPP modal, laba bersih, dan leaderboard performa sales.
+    - Query fokus harian Staf Sales: pengingat repeat order jatuh tempo hari ini/lewat, tugas CRM follow-up, status order saya (khususnya order ditolak `REVISION_REQUIRED` beserta `rejectReason` yang jelas), piutang customer sales, capaian target sales bulanan, dan estimasi komisi.
+    - Enforcing Strict Zero-Leakage: data HPP (`costPrice`, `hpp`, `cogs`), `profit`, `margin`, `targetProfit`, dan catatan pemilik usaha tidak pernah disertakan ke DTO sales.
+  - Endpoint REST API Terproteksi (`src/app/api/v1/dashboard/route.ts`):
+    - `GET /api/v1/dashboard`: Mengembalikan DTO operasional dan keuangan spesifik role (`SUPERADMIN` atau `SALES`) yang terautentikasi dan terikat pada tenant aktif.
+  - Antarmuka Dashboard Responsif Mobile 360 px (`src/app/(app)/dashboard/page.tsx`):
+    - Tampilan Pemilik / Super Admin:
+      - 4 Kartu KPI Keuangan Bulan Ini: Omzet Bersih, HPP (Modal Barang), Laba Bersih & Margin %, dan Piutang Jatuh Tempo.
+      - 5 Kotak Aksi Segera: Antrean Approval, Verifikasi Pembayaran, Stok Minus, Stok Menipis, dan Pelanggan Orphan.
+      - Daftar Antrean Approval (dengan tag `hasBelowMin` dan alasan diskon) dan Pembayaran Menunggu Verifikasi (dengan tautan bukti transfer).
+      - Peringkat Omzet Tim Sales (Leaderboard) bulan berjalan lengkap dengan medali dan laba.
+      - Pintasan operasional cepat.
+    - Tampilan Staf Sales:
+      - Bar Pintasan Aksi Cepat (+ Order Baru, Pelanggan Saya, Katalog Produk, Daftar Order).
+      - Kartu Capaian Target Penjualan dengan progress bar dinamis dan Estimasi Komisi bulan berjalan.
+      - Kotak Status Perhatian: Peringatan order ditolak (`REVISION_REQUIRED`) lengkap dengan kartu merah menampilkan alasan penolakan pemilik (`rejectReason`) yang transparan.
+      - Daftar Fokus "Hari Ini": Pengingat repeat order dengan pintasan chat WhatsApp dan order baru, tugas CRM hari ini, serta piutang pelanggan yang jatuh tempo.
+      - Proteksi Zero-Leakage antarmuka pengguna: Bersih dari indikator margin/profit/modal.
+  - Pengujian Integrasi Komprehensif (`tests/integration/dashboard.test.ts`):
+    - Verifikasi DTO Super Admin (semua counter summary, perhitungan omzet/HPP/profit/margin, antrean aksi, leaderboard).
+    - Verifikasi DTO Sales (fokus hari ini, alasan penolakan order pada order status `REVISION_REQUIRED`, piutang customernya, capaian target).
+    - Verifikasi Ketat Zero-Leakage (`assertNoSecretKeys` dan audit stringified JSON terhadap kata kunci rahasia).
+    - Verifikasi Isolasi Sales (Sales A tidak dapat melihat pengingat, tugas CRM, atau order milik Sales B).
+
 - Dukungan PWA Penuh, Service Worker Cerdas, Cache Terisolasi per Pengguna, dan Mode Katalog Offline sesuai Seksi 15.3, 17.5 nomor 5, dan 19.6 Dokumen Spesifikasi (T4.6):
   - Web App Manifest (`src/app/manifest.ts`):
     - Konfigurasi `manifest.json` dinamis Next.js: `name`, `short_name`, `start_url: '/dashboard'`, `display: 'standalone'`, tema `#1F3A5F`, latar `#ffffff`, bahasa `id`.
