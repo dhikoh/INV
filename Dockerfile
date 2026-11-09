@@ -2,7 +2,7 @@
 # Stage 1: Base
 FROM node:22-bookworm-slim AS base
 ENV PNPM_HOME="/pnpm"
-ENV PATH="$PNPM_HOME:$PATH"
+ENV PATH="$PNPM_HOME:$PNPM_HOME/bin:$PATH"
 RUN corepack enable && corepack prepare pnpm@12.18.0 --activate
 
 # Stage 2: Dependencies
@@ -40,7 +40,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Install prisma and tsx globally so CLI tools work directly in terminal & entrypoint
-RUN pnpm add -g prisma@7.10.1 tsx@4.23.15 && chmod -R 755 /pnpm
+RUN npm install -g prisma@7.10.1 tsx@4.23.15
 
 # Create dedicated home directory and non-root user
 RUN mkdir -p /home/nextjs && \
