@@ -8,6 +8,32 @@ dan proyek ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Laporan Margin & Profitabilitas Usaha (GET /api/v1/reports/margin, GroupBy Order/Produk/Sales/Usaha, Baris Kerugian Pembatalan, dan Invarian Profit) sesuai Seksi 7.4, 9.2, 17.3 nomor 22, dan 18.1 nomor 33 Dokumen Spesifikasi (T5.2):
+  - Skema Validasi Query (`src/lib/validation/report.ts`):
+    - `MarginReportQuerySchema`: validasi parameter `groupBy` (`order`, `product`, `sales`, `business`), `from`, `to`, `salesId`, dan `productId`.
+  - Layanan Domain Laporan Margin (`src/lib/services/reportMargin.ts`):
+    - Hak akses ketat Super Admin only (sales ditolak 403 Forbidden dengan proteksi Zero-Leakage).
+    - Parsing rentang tanggal berbasis Waktu Indonesia Barat (WIB / UTC+7).
+    - Perhitungan profit per order sesuai Rumus Seksi 7.4: Pendapatan barang (dikurangi retur non-void) + Pendapatan ongkir - HPP modal terjual (dikoreksi retur restock) - Biaya ongkir aktual - Biaya lain.
+    - Penanganan Order Dibatalkan (`CANCELLED`) sesuai Seksi 9.2 & Table 19.7: Dikeluarkan dari laporan omzet & HPP normal. Jika pesanan sudah mengeluarkan ongkir aktual atau biaya lain, dimasukkan sebagai baris khusus "Kerugian pembatalan" dengan profit negatif (`profit = -loss`). Pesanan dibatalkan tanpa biaya riil diabaikan total.
+    - Pembuktian Invarian Matematis T5.2: Total profit laporan sama persis dengan jumlah profit seluruh baris order laporan (`summary.profit === sum(rows.profit)` dan `summary.profit === activeOrdersProfit - cancellationLoss`).
+    - Agregasi 4 mode `groupBy`:
+      - `order`: Daftar seluruh pesanan aktif dan baris kerugian pembatalan dengan rincian omzet, HPP, ongkir, biaya lain, profit, dan margin bps.
+      - `product`: Penjualan per produk (qtySold, omzet, HPP modal, laba kotor, margin bps).
+      - `sales`: Performa per staf sales (omzet, HPP, ongkir, biaya lain, kerugian pembatalan, laba bersih, margin bps).
+      - `business`: Ringkasan profitabilitas konsolidasian unit usaha.
+  - Endpoint REST API Terproteksi (`src/app/api/v1/reports/margin/route.ts`):
+    - `GET /api/v1/reports/margin`: Endpoint Super Admin only dengan validasi query dan isolasi tenant aktif.
+  - Antarmuka Pengguna Laporan Margin (`src/app/(app)/reports/margin/page.tsx`):
+    - Banner rahasia pemilik usaha dengan proteksi role client-side.
+    - Bilah filter interaktif: Tab GroupBy (Per Order, Per Produk, Per Sales, Ringkasan Usaha), tombol preset tanggal cepat ("Bulan Ini", "Bulan Lalu", "Reset"), filter input kalender, dan dropdown filter staf sales.
+    - 4 Kartu KPI Ringkasan: Total Omzet Bersih, Total HPP Modal Barang, Laba Bersih Usaha (Net Profit) & Rasio Margin %, serta Ongkir Aktual & Biaya Lain.
+    - Banner peringatan merah Kerugian Pembatalan Pesanan jika terdapat biaya yang keluar pada order yang dibatalkan (Seksi 9.2).
+    - Tabel responsif (desktop & kartu mobile 360 px) untuk masing-masing mode GroupBy, dengan penandaan baris "Kerugian Pembatalan" yang tegas.
+  - Pengujian Integrasi Komprehensif (`tests/integration/reports-margin.test.ts` & `tests/integration/permissions.test.ts`):
+    - 7 pengujian otomatis mencakup hak akses Super Admin, penolakan Sales 403 Forbidden dan `assertNoSecretKeys`, pembuktian invarian total profit terhadap jumlah profit per baris dan kerugian pembatalan, agregasi `groupBy=order`, `groupBy=product`, `groupBy=sales`, `groupBy=business`, dan filter rentang tanggal.
+    - Pendaftaran `GET /api/v1/reports/margin` pada matriks hak akses `permissions.test.ts` (80 pengujian lolos 100%).
+
 - Dashboard Operasional & Keuangan (DTO Berbeda per Role, Metrik Super Admin, Fokus Hari Ini Sales, Zero-Leakage) sesuai Seksi 11, 17.3 nomor 21, 17.4 a, dan 18.1 nomor 17 Dokumen Spesifikasi (T5.1):
   - Layanan Domain Dashboard (`src/lib/services/dashboard.ts`):
     - Fungsi rentang waktu WIB (`getWibMonthRange`, `getWibDayRange`) untuk konsistensi zona waktu operasional Indonesia Barat (UTC+7).

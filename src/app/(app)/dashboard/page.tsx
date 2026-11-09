@@ -328,10 +328,18 @@ function SuperAdminView({ data }: { data: SuperAdminDashboardData }) {
     <div className="space-y-6">
       {/* 1. Baris KPI Keuangan Utama (Bulan Ini) */}
       <section aria-labelledby="kpi-keuangan-heading">
-        <h2 id="kpi-keuangan-heading" className="text-lg font-bold text-slate-900 mb-3 flex items-center gap-2">
-          <TrendingUp className="w-5 h-5 text-blue-600" />
-          Kinerja Keuangan ({monthlyMetrics.month})
-        </h2>
+        <div className="flex items-center justify-between mb-3">
+          <h2 id="kpi-keuangan-heading" className="text-lg font-bold text-slate-900 flex items-center gap-2">
+            <TrendingUp className="w-5 h-5 text-blue-600" />
+            Kinerja Keuangan ({monthlyMetrics.month})
+          </h2>
+          <Link
+            href="/reports/margin"
+            className="text-xs font-semibold text-blue-600 hover:underline flex items-center gap-1 min-h-[44px] px-2"
+          >
+            Laporan Margin Lengkap <ArrowUpRight className="w-3.5 h-3.5" />
+          </Link>
+        </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Omzet Bersih */}
           <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
@@ -742,6 +750,13 @@ function SuperAdminView({ data }: { data: SuperAdminDashboardData }) {
                 className="p-3 bg-white rounded-xl border border-slate-200 text-xs font-bold text-slate-900 hover:border-blue-500 transition min-h-[44px] flex items-center justify-center text-center"
               >
                 Daftar Order
+              </Link>
+              <Link
+                href="/reports/margin"
+                className="col-span-2 p-3 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 text-xs font-bold text-blue-900 hover:border-blue-500 rounded-xl transition min-h-[44px] flex items-center justify-center text-center gap-1.5"
+              >
+                <TrendingUp className="w-4 h-4 text-blue-600" />
+                Laporan Margin & Profit
               </Link>
             </div>
           </div>

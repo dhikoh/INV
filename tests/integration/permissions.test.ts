@@ -121,6 +121,7 @@ import {
   GET as getCommissionTiersHandler,
   PUT as setCommissionTiersHandler,
 } from '@/app/api/v1/commission/tiers/route';
+import { GET as getMarginReportHandler } from '@/app/api/v1/reports/margin/route';
 
 describe('Matriks Hak Akses Berbasis Tabel (Seksi 5.1 & 17.4 b)', () => {
   const APP_URL = 'http://localhost:3000';
@@ -731,6 +732,12 @@ describe('Matriks Hak Akses Berbasis Tabel (Seksi 5.1 & 17.4 b)', () => {
       path: '/api/v1/commission/tiers',
       handler: (req) => setCommissionTiersHandler(req),
       body: { tiers: [{ minAchievementBps: 10000, rateBps: 1500 }] },
+    },
+    {
+      name: 'GET /api/v1/reports/margin',
+      method: 'GET',
+      path: '/api/v1/reports/margin',
+      handler: (req) => getMarginReportHandler(req),
     },
   ];
 
