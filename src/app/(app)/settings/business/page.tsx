@@ -326,16 +326,33 @@ export default function BusinessSettingsPage() {
       setSavingBiz(true);
       setNewBizError(null);
 
+      const payload = {
+        code: newBiz.code.trim().toUpperCase(),
+        name: newBiz.name.trim(),
+        legalName: newBiz.legalName?.trim() || null,
+        address: newBiz.address?.trim() || null,
+        phone: newBiz.phone?.trim() || null,
+        email: newBiz.email?.trim() || null,
+        npwp: newBiz.npwp?.trim() || null,
+      };
+
       const res = await fetch('/api/v1/businesses', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newBiz),
+        body: JSON.stringify(payload),
       });
 
       const json = await res.json();
       if (!res.ok || !json.ok) {
         throw new Error(json.error?.message || 'Gagal membuat unit usaha');
       }
+
+      // Otomatis aktifkan unit usaha baru ke sesi agar tidak muncul error "Pilih usaha terlebih dulu"
+      await fetch('/api/v1/session/business', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ businessId: json.data.id }),
+      });
 
       setShowAddBiz(false);
       setNewBiz({
@@ -347,13 +364,160 @@ export default function BusinessSettingsPage() {
         email: '',
         npwp: '',
       });
-      await loadBusinesses();
-      setSelectedId(json.data.id);
+
+      // Reload halaman agar AppShell, header, dan seluruh sesi langsung sinkron
+      window.location.reload();
     } catch (err: unknown) {
       setNewBizError(err instanceof Error ? err.message : 'Gagal membuat usaha');
     } finally {
       setSavingBiz(false);
     }
+  };
+
+  const renderAddBizModal = () => {
+    if (!showAddBiz) return null;
+    return (
+      <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+          <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+            <h3 className="font-bold text-slate-900 text-base">
+              Tambah Unit Usaha Baru
+            </h3>
+            <button
+              type="button"
+              onClick={() => setShowAddBiz(false)}
+              className="text-slate-400 hover:text-slate-600 p-1"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {newBizError && (
+            <p className="text-xs font-semibold text-rose-600">
+              {newBizError}
+            </p>
+          )}
+
+          <form onSubmit={handleCreateBusiness} className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
+                  Kode Usaha (Kapital)
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Contoh: CAT"
+                  value={newBiz.code}
+                  onChange={(e) =>
+                    setNewBiz((b) => ({
+                      ...b,
+                      code: e.target.value.toUpperCase(),
+                    }))
+                  }
+                  className="w-full h-11 px-3.5 bg-slate-50 border border-slate-300 rounded-lg text-sm font-bold text-slate-900 uppercase"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
+                  Nama Usaha / Brand
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Contoh: BentoCat Snack"
+                  value={newBiz.name}
+                  onChange={(e) =>
+                    setNewBiz((b) => ({ ...b, name: e.target.value }))
+                  }
+                  className="w-full h-11 px-3.5 bg-slate-50 border border-slate-300 rounded-lg text-sm font-medium text-slate-900"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
+                Nama Badan Hukum (Opsional)
+              </label>
+              <input
+                type="text"
+                placeholder="PT / CV"
+                value={newBiz.legalName}
+                onChange={(e) =>
+                  setNewBiz((b) => ({ ...b, legalName: e.target.value }))
+                }
+                className="w-full h-11 px-3.5 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-900"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
+                  Nomor Telepon (Opsional)
+                </label>
+                <input
+                  type="text"
+                  placeholder="08..."
+                  value={newBiz.phone}
+                  onChange={(e) =>
+                    setNewBiz((b) => ({ ...b, phone: e.target.value }))
+                  }
+                  className="w-full h-11 px-3.5 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-900"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
+                  Email (Opsional)
+                </label>
+                <input
+                  type="email"
+                  placeholder="kontak@usaha.com"
+                  value={newBiz.email}
+                  onChange={(e) =>
+                    setNewBiz((b) => ({ ...b, email: e.target.value }))
+                  }
+                  className="w-full h-11 px-3.5 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-900"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
+                Alamat Lengkap (Opsional)
+              </label>
+              <textarea
+                rows={2}
+                placeholder="Alamat kantor"
+                value={newBiz.address}
+                onChange={(e) =>
+                  setNewBiz((b) => ({ ...b, address: e.target.value }))
+                }
+                className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-900"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-4">
+              <button
+                type="button"
+                onClick={() => setShowAddBiz(false)}
+                className="h-10 px-4 rounded-lg text-sm font-semibold border border-slate-200 text-slate-700 hover:bg-slate-50"
+              >
+                Batal
+              </button>
+              <button
+                type="submit"
+                disabled={savingBiz}
+                className="h-10 px-5 rounded-lg text-sm font-bold bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50"
+              >
+                {savingBiz ? 'Menyimpan...' : 'Buat Unit Usaha'}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    );
   };
 
   if (loading) {
@@ -380,12 +544,15 @@ export default function BusinessSettingsPage() {
 
   if (businesses.length === 0) {
     return (
-      <EmptyState
-        title="Belum Ada Unit Usaha"
-        description="Buat unit usaha pertama Anda untuk mulai mengatur operasional dan rekening bank."
-        actionText="Tambah Usaha Baru"
-        onAction={() => setShowAddBiz(true)}
-      />
+      <div className="space-y-8 pb-12">
+        <EmptyState
+          title="Belum Ada Unit Usaha"
+          description="Buat unit usaha pertama Anda untuk mulai mengatur operasional dan rekening bank."
+          actionText="Tambah Usaha Baru"
+          onAction={() => setShowAddBiz(true)}
+        />
+        {renderAddBizModal()}
+      </div>
     );
   }
 
@@ -1157,148 +1324,7 @@ export default function BusinessSettingsPage() {
       )}
 
       {/* Modal Tambah Unit Usaha Baru */}
-      {showAddBiz && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-              <h3 className="font-bold text-slate-900 text-base">
-                Tambah Unit Usaha Baru
-              </h3>
-              <button
-                type="button"
-                onClick={() => setShowAddBiz(false)}
-                className="text-slate-400 hover:text-slate-600 p-1"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {newBizError && (
-              <p className="text-xs font-semibold text-rose-600">
-                {newBizError}
-              </p>
-            )}
-
-            <form onSubmit={handleCreateBusiness} className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
-                    Kode Usaha (Kapital)
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Contoh: CAT"
-                    value={newBiz.code}
-                    onChange={(e) =>
-                      setNewBiz((b) => ({
-                        ...b,
-                        code: e.target.value.toUpperCase(),
-                      }))
-                    }
-                    className="w-full h-11 px-3.5 bg-slate-50 border border-slate-300 rounded-lg text-sm font-bold text-slate-900 uppercase"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
-                    Nama Usaha / Brand
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Contoh: BentoCat Snack"
-                    value={newBiz.name}
-                    onChange={(e) =>
-                      setNewBiz((b) => ({ ...b, name: e.target.value }))
-                    }
-                    className="w-full h-11 px-3.5 bg-slate-50 border border-slate-300 rounded-lg text-sm font-medium text-slate-900"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
-                  Nama Badan Hukum (Opsional)
-                </label>
-                <input
-                  type="text"
-                  placeholder="PT / CV"
-                  value={newBiz.legalName}
-                  onChange={(e) =>
-                    setNewBiz((b) => ({ ...b, legalName: e.target.value }))
-                  }
-                  className="w-full h-11 px-3.5 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-900"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
-                    Nomor Telepon (Opsional)
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="08..."
-                    value={newBiz.phone}
-                    onChange={(e) =>
-                      setNewBiz((b) => ({ ...b, phone: e.target.value }))
-                    }
-                    className="w-full h-11 px-3.5 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-900"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
-                    Email (Opsional)
-                  </label>
-                  <input
-                    type="email"
-                    placeholder="kontak@usaha.com"
-                    value={newBiz.email}
-                    onChange={(e) =>
-                      setNewBiz((b) => ({ ...b, email: e.target.value }))
-                    }
-                    className="w-full h-11 px-3.5 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-900"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
-                  Alamat Lengkap (Opsional)
-                </label>
-                <textarea
-                  rows={2}
-                  placeholder="Alamat kantor"
-                  value={newBiz.address}
-                  onChange={(e) =>
-                    setNewBiz((b) => ({ ...b, address: e.target.value }))
-                  }
-                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-900"
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-4">
-                <button
-                  type="button"
-                  onClick={() => setShowAddBiz(false)}
-                  className="h-10 px-4 rounded-lg text-sm font-semibold border border-slate-200 text-slate-700 hover:bg-slate-50"
-                >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  disabled={savingBiz}
-                  className="h-10 px-5 rounded-lg text-sm font-bold bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50"
-                >
-                  {savingBiz ? 'Menyimpan...' : 'Buat Unit Usaha'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      {renderAddBizModal()}
     </div>
   );
 }

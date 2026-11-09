@@ -21,19 +21,19 @@ const BusinessCreateSchema = z
         z.string().regex(/^[A-Z0-9]+$/, 'Kode usaha harus berupa huruf kapital dan angka')
       ),
     name: z.string().trim().min(2, 'Nama usaha minimal 2 karakter').max(100),
-    legalName: z.string().trim().max(150).optional().nullable(),
-    address: z.string().trim().max(500).optional().nullable(),
-    phone: z.string().trim().max(30).optional().nullable(),
+    legalName: z.string().trim().max(150).optional().nullable().or(z.literal('').transform(() => null)),
+    address: z.string().trim().max(500).optional().nullable().or(z.literal('').transform(() => null)),
+    phone: z.string().trim().max(30).optional().nullable().or(z.literal('').transform(() => null)),
     email: z
       .string()
       .trim()
       .email('Format email tidak valid')
       .optional()
       .nullable()
-      .or(z.literal('')),
-    npwp: z.string().trim().max(50).optional().nullable(),
+      .or(z.literal('').transform(() => null)),
+    npwp: z.string().trim().max(50).optional().nullable().or(z.literal('').transform(() => null)),
     invoiceTheme: z.nativeEnum(InvoiceTheme).default(InvoiceTheme.PROFESIONAL),
-    invoiceFooterNote: z.string().trim().max(1000).optional().nullable(),
+    invoiceFooterNote: z.string().trim().max(1000).optional().nullable().or(z.literal('').transform(() => null)),
     ppnEnabled: z.boolean().default(false),
     ppnRateBps: z.number().int().min(0).max(10000).default(1100),
     allowNegativeStock: z.boolean().default(false),
@@ -126,6 +126,14 @@ export const POST = withApi(
         summary: `Pembuatan unit usaha baru: ${created.code} - ${created.name}`,
         after: created,
       });
+
+      // Jika Super Admin belum memiliki unit usaha aktif di sesinya, otomatis pasang usaha baru ini
+      if (!ctx.businessId && ctx.sessionId) {
+        await tx.session.update({
+          where: { id: ctx.sessionId },
+          data: { activeBusinessId: created.id },
+        });
+      }
 
       return created;
     });

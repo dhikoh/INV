@@ -23,7 +23,7 @@ import {
   RefreshCw,
   ExternalLink,
 } from 'lucide-react';
-import { Skeleton, ErrorState } from '@/components/ui/States';
+import { Skeleton, EmptyState, ErrorState } from '@/components/ui/States';
 import { formatRupiah, formatPercentFromBps } from '@/lib/domain/money';
 
 // Types for Super Admin Dashboard DTO
@@ -245,6 +245,21 @@ export default function DashboardPage() {
   }
 
   if (error || !dashboardData) {
+    if (error?.includes('Pilih usaha') || !business) {
+      return (
+        <div className="py-8">
+          <EmptyState
+            title="Belum Ada Unit Usaha Aktif"
+            description="Silakan buat unit usaha pertama Anda atau pilih unit usaha pada menu navigasi untuk melihat ringkasan operasional."
+            actionText="Buka Pengaturan Usaha"
+            onAction={() => {
+              window.location.href = '/settings/business';
+            }}
+          />
+        </div>
+      );
+    }
+
     return (
       <div className="py-8">
         <ErrorState
