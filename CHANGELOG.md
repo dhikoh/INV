@@ -8,6 +8,30 @@ dan proyek ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Dukungan PWA Penuh, Service Worker Cerdas, Cache Terisolasi per Pengguna, dan Mode Katalog Offline sesuai Seksi 15.3, 17.5 nomor 5, dan 19.6 Dokumen Spesifikasi (T4.6):
+  - Web App Manifest (`src/app/manifest.ts`):
+    - Konfigurasi `manifest.json` dinamis Next.js: `name`, `short_name`, `start_url: '/dashboard'`, `display: 'standalone'`, tema `#1F3A5F`, latar `#ffffff`, bahasa `id`.
+    - Ikon PWA standar dan maskable (`/icons/icon-192.png`, `/icons/icon-512.png`, `/icons/icon-maskable-512.png`).
+  - Service Worker Cerdas & Aman (`public/sw.js`):
+    - Siklus hidup cache terisolasi per akun: cache offline berformat `catalog-<userId>` sehingga saat pergantian akun di perangkat yang sama, data tidak saling bocor.
+    - Penanganan pesan `SAVE_CATALOG`: menyimpan URL API katalog dan URL foto produk ke cache pengguna.
+    - Penanganan pesan `CLEAR`: menghapus seluruh cache katalog saat pengguna melakukan logout atau saat berganti akun login.
+    - Strategi Cache-First untuk aset statis (`/_next/static/` dan `/icons/`) dan Network-First dengan fallback cache untuk API katalog (`apiStrategy`).
+    - Fallback navigasi offline ke halaman `/offline` saat koneksi internet terputus (`req.mode === 'navigate'`).
+  - Halaman Khusus Offline (`src/app/offline/page.tsx`):
+    - Tampilan ramah offline yang memuat daftar katalog tersimpan di penyimpanan lokal HP beserta informasi produk dan tombol coba muat ulang koneksi.
+  - Komponen PWA & Banner Offline (`src/components/pwa/`):
+    - `RegisterSW`: mendaftarkan service worker `/sw.js` secara otomatis di browser.
+    - `OfflineBanner`: hook live `useIsOnline` dan banner sticky pemberitahuan saat perangkat kehilangan koneksi internet.
+    - `PwaInstallPrompt`: tombol pasang PWA di Android (menangkap `beforeinstallprompt`) dan petunjuk instalasi di iOS Safari (*Share -> Tambah ke Layar Utama*), serta otomatis disembunyikan jika sudah dalam mode standalone atau dibuka di dalam Telegram Mini App.
+  - Integrasi Layout Utama (`src/components/AppShell.tsx`):
+    - Pemasangan `RegisterSW`, `OfflineBanner`, dan `PwaInstallPrompt`.
+    - Otomasi pembersihan cache service worker (`CLEAR`) dan storage lokal saat tombol logout ditekan atau saat sesi mendeteksi pergantian user ID.
+  - Konfigurasi Server Next.js (`next.config.ts`):
+    - Penambahan header HTTP untuk `/sw.js`: `Cache-Control: no-cache, no-store, must-revalidate` dan `Service-Worker-Allowed: /`.
+  - Pengujian Komprehensif (`tests/unit/pwa.test.ts` & `tests/integration/pwa.test.ts`):
+    - 9 pengujian otomatis mencakup validasi skema manifest, keberadaan berkas ikon, kontrak isi service worker, isolasi cache pengguna, aturan header HTTP, dan verifikasi zero-leakage.
+
 - Manajemen Katalog Harga, Validasi Floor Price, Unduh PDF Resmi, dan Integrasi Buat Order sesuai Seksi 15.1–15.2, 17.3 nomor 18, dan 19.6 Dokumen Spesifikasi (T4.5):
   - Skema Validasi & Paginasi Katalog (`src/lib/validation/catalog.ts`):
     - Preset judul cepat: `'Grosir'`, `'Distributor Tunggal'`, `'Ecer'` atau teks bebas 1–60 karakter.

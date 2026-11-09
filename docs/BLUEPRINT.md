@@ -339,6 +339,7 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
 | `/catalogs`            | Super Admin, Sales | Daftar katalog harga, filter customer/search, kartu 360 px, unduh PDF langsung |
 | `/catalogs/new`        | Super Admin, Sales | Formulir pembuatan katalog baru, preset cepat, kalkulasi floor live |
 | `/catalogs/:id`        | Super Admin, Sales | Detail katalog harga, thumbnail produk, banner stale, tombol sesuaikan harga minimal, unduh PDF, buat order |
+| `/offline`             | Publik (Offline)   | Halaman ramah fallback saat offline, daftar katalog tersimpan di penyimpanan lokal HP |
 
 ---
 
@@ -398,7 +399,7 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
 | **Fase 1** | `v0.2.0`     | Login, manajemen usaha, akun sales, master produk & vendor, pembaruan   | **SELESAI**         |
 | **Fase 2** | `v0.3.0`     | Customer CRM, order draft, floor pricing, manajemen stok, PO & vendor ledger | **SELESAI** |
 | **Fase 3** | `v0.4.0`     | Persetujuan invoice, verifikasi pembayaran, mesin cetak PDF, void/retur, profit & komisi, UI persetujuan & invoice | **SELESAI** |
-| **Fase 4** | `v0.5.0`     | Bot Telegram, Mini App, pengingat repeat order, katalog PWA             | **DALAM PROGRES** (T4.1, T4.2, T4.3, T4.4, T4.5 Selesai) |
+| **Fase 4** | `v0.5.0`     | Bot Telegram, Mini App, pengingat repeat order, katalog PWA             | **SELESAI**         |
 | **Fase 5** | `v1.0.0`     | Dashboard profit, evaluasi sales, pengerasan keamanan, Go-Live          | Belum dimulai       |
 
 ---

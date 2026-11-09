@@ -29,6 +29,9 @@ import {
   X,
 } from 'lucide-react';
 import { Skeleton } from './ui/States';
+import { RegisterSW } from './pwa/RegisterSW';
+import { OfflineBanner } from './pwa/OfflineBanner';
+import { PwaInstallPrompt } from './pwa/PwaInstallPrompt';
 
 export interface UserContext {
   id: string;
@@ -73,6 +76,25 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         const data = await res.json();
         if (data.ok) {
           setUser(data.data.user);
+
+          // Cek apakah akun berganti di perangkat yang sama (Seksi 15.3 & 17.5 nomor 5)
+          try {
+            const lastUid = localStorage.getItem('bentocat_last_user_id');
+            if (lastUid && lastUid !== data.data.user.id) {
+              if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+                navigator.serviceWorker.controller.postMessage({ type: 'CLEAR' });
+              }
+              const keysToRemove: string[] = [];
+              for (let i = 0; i < localStorage.length; i++) {
+                const k = localStorage.key(i);
+                if (k && k.startsWith('catalog_offline_')) keysToRemove.push(k);
+              }
+              keysToRemove.forEach((k) => localStorage.removeItem(k));
+            }
+            localStorage.setItem('bentocat_last_user_id', data.data.user.id);
+          } catch {
+            // Abaikan kesalahan localStorage
+          }
 
           // Muat info usaha aktif
           const bizRes = await fetch('/api/v1/business');
@@ -151,6 +173,21 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   async function handleLogout() {
     try {
+      // Hapus seluruh cache offline service worker dan localStorage saat logout (Seksi 15.3 & 17.5 nomor 5)
+      if (typeof window !== 'undefined' && 'serviceWorker' in navigator && navigator.serviceWorker.controller) {
+        navigator.serviceWorker.controller.postMessage({ type: 'CLEAR' });
+      }
+      try {
+        const keysToRemove: string[] = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && k.startsWith('catalog_offline_')) keysToRemove.push(k);
+        }
+        keysToRemove.forEach((k) => localStorage.removeItem(k));
+      } catch {
+        // Abaikan
+      }
+
       await fetch('/api/v1/auth/logout', { method: 'POST' });
     } finally {
       router.push('/login');
@@ -233,6 +270,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col text-slate-900 pb-16 md:pb-0">
+      {/* PWA & Service Worker Support (Seksi 15.3) */}
+      <RegisterSW />
+      <OfflineBanner />
+      <PwaInstallPrompt />
+
       {/* Banner Wajib Ganti Password */}
       {user.mustChangePassword && (
         <div className="bg-amber-500 text-slate-950 px-4 py-2 text-center text-sm font-semibold flex items-center justify-center gap-2 shadow-sm">

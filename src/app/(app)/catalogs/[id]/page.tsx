@@ -20,6 +20,7 @@ import {
 import { Skeleton } from '@/components/ui/States';
 import { MoneyInput } from '@/components/ui/MoneyInput';
 import { formatRupiah } from '@/lib/domain/money';
+import { useIsOnline } from '@/components/pwa/OfflineBanner';
 
 interface CustomerSummary {
   id: string;
@@ -72,6 +73,8 @@ export default function CatalogDetailPage() {
   const [savingItems, setSavingItems] = useState(false);
 
   // Action states
+  const isOnline = useIsOnline();
+  const [isOfflineView, setIsOfflineView] = useState(false);
   const [adjustingMin, setAdjustingMin] = useState(false);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -85,6 +88,19 @@ export default function CatalogDetailPage() {
     try {
       const res = await fetch(`/api/v1/catalogs/${catalogId}`);
       if (!res.ok) {
+        // Coba fallback offline dari cache lokal bila gagal atau offline (Seksi 15.3)
+        try {
+          const offlineRaw = localStorage.getItem(`catalog_offline_${catalogId}`);
+          if (offlineRaw) {
+            const offlineData = JSON.parse(offlineRaw);
+            setCatalog(offlineData);
+            setIsOfflineView(true);
+            return;
+          }
+        } catch {
+          // Abaikan
+        }
+
         if (res.status === 404) {
           setError('Katalog tidak ditemukan atau Anda tidak memiliki hak akses.');
         } else {
@@ -95,6 +111,7 @@ export default function CatalogDetailPage() {
       const json = await res.json();
       if (json.ok && json.data) {
         setCatalog(json.data);
+        setIsOfflineView(false);
         const map = new Map<string, number>();
         json.data.items.forEach((it: CatalogDetailItem) => {
           map.set(it.productId, it.price);
@@ -102,7 +119,19 @@ export default function CatalogDetailPage() {
         setEditablePrices(map);
       }
     } catch {
-      setError('Terjadi kesalahan jaringan.');
+      // Coba fallback offline dari cache lokal
+      try {
+        const offlineRaw = localStorage.getItem(`catalog_offline_${catalogId}`);
+        if (offlineRaw) {
+          const offlineData = JSON.parse(offlineRaw);
+          setCatalog(offlineData);
+          setIsOfflineView(true);
+          return;
+        }
+      } catch {
+        // Abaikan
+      }
+      setError('Terjadi kesalahan jaringan atau perangkat sedang offline.');
     } finally {
       setLoading(false);
     }
@@ -258,12 +287,29 @@ export default function CatalogDetailPage() {
     }
   };
 
-  // PWA Offline Caching Simpan
+  // PWA Offline Caching Simpan (Seksi 15.3 & 17.5 nomor 5)
   const handleSaveForOffline = () => {
     if (!catalog) return;
     try {
       const offlineKey = `catalog_offline_${catalog.id}`;
       localStorage.setItem(offlineKey, JSON.stringify(catalog));
+
+      // Kirim pesan SAVE_CATALOG ke Service Worker untuk menyimpan respons API dan aset foto
+      if (typeof window !== 'undefined' && 'serviceWorker' in navigator && navigator.serviceWorker.controller) {
+        const urlsToCache = [
+          `/api/v1/catalogs/${catalog.id}`,
+          ...catalog.items
+            .filter((it) => it.imagePath)
+            .map((it) => `/api/v1/uploads/${it.imagePath}`),
+        ];
+
+        navigator.serviceWorker.controller.postMessage({
+          type: 'SAVE_CATALOG',
+          userId: catalog.ownerId,
+          urls: urlsToCache,
+        });
+      }
+
       setOfflineSaved(true);
       showToast('Katalog berhasil disimpan untuk akses offline di perangkat ini.');
       setTimeout(() => setOfflineSaved(false), 3000);
@@ -377,6 +423,19 @@ export default function CatalogDetailPage() {
         </div>
       </div>
 
+      {/* Banner Mode Offline */}
+      {isOfflineView && (
+        <div className="p-4 rounded-xl bg-blue-50 border border-blue-200 text-blue-950 flex items-center gap-3 shadow-sm">
+          <DownloadCloud className="w-5 h-5 text-blue-600 shrink-0" />
+          <div className="text-xs md:text-sm">
+            <p className="font-bold text-blue-950">Menampilkan Salinan Offline</p>
+            <p className="text-blue-700 mt-0.5">
+              Katalog ini dibuka dari penyimpanan offline perangkat Anda. Perubahan harga dinonaktifkan hingga koneksi internet kembali pulih.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Banner Peringatan STALE (Kedaluwarsa Harga Minimal) */}
       {catalog.hasStaleItems && (
         <div className="p-4 rounded-xl bg-amber-50 border border-amber-300 text-amber-950 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
@@ -395,8 +454,9 @@ export default function CatalogDetailPage() {
           <button
             type="button"
             onClick={handleAdjustMin}
-            disabled={adjustingMin}
-            className="inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-lg shadow-sm transition-colors shrink-0"
+            disabled={adjustingMin || !isOnline}
+            title={!isOnline ? 'Koneksi internet diperlukan untuk menyesuaikan harga' : undefined}
+            className="inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-lg shadow-sm transition-colors shrink-0 disabled:opacity-50"
           >
             {adjustingMin ? (
               <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -478,7 +538,9 @@ export default function CatalogDetailPage() {
               <button
                 type="button"
                 onClick={() => setIsEditingItems(true)}
-                className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+                disabled={!isOnline}
+                title={!isOnline ? 'Koneksi internet diperlukan untuk mengubah harga' : undefined}
+                className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Edit2 className="w-3.5 h-3.5" />
                 <span>Ubah Harga</span>
@@ -573,8 +635,9 @@ export default function CatalogDetailPage() {
         <button
           type="button"
           onClick={handleDeleteCatalog}
-          disabled={deleting}
-          className="inline-flex items-center gap-1 text-red-600 hover:text-red-700 hover:underline font-medium"
+          disabled={deleting || !isOnline}
+          title={!isOnline ? 'Koneksi internet diperlukan untuk menghapus katalog' : undefined}
+          className="inline-flex items-center gap-1 text-red-600 hover:text-red-700 hover:underline font-medium disabled:opacity-50 disabled:no-underline disabled:cursor-not-allowed"
         >
           {deleting ? (
             <Loader2 className="w-3.5 h-3.5 animate-spin" />
