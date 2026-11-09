@@ -512,13 +512,13 @@ export default function ApprovalDetailPage() {
                 <div className="font-bold text-xs uppercase tracking-wider text-slate-600">
                   Rekening Bank Pembayaran
                 </div>
-                {data.bankAccounts.length === 0 ? (
+                {(data.bankAccounts?.length ?? 0) === 0 ? (
                   <p className="text-xs text-slate-400 italic">
                     Belum ada rekening bank aktif yang terdaftar.
                   </p>
                 ) : (
                   <div className="space-y-1.5">
-                    {data.bankAccounts.map((acc) => (
+                    {data.bankAccounts?.map((acc) => (
                       <div
                         key={acc.id}
                         className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs"

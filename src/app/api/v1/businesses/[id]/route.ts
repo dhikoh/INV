@@ -160,6 +160,12 @@ export const PATCH = withApi(
           commissionTrigger: body.commissionTrigger,
           isActive: body.isActive,
         },
+        include: {
+          bankAccounts: {
+            where: { deletedAt: null },
+            orderBy: { isDefault: 'desc' },
+          },
+        },
       });
 
       await audit(tx, ctx, {

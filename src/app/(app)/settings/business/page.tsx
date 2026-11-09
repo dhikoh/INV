@@ -142,7 +142,10 @@ export default function BusinessSettingsPage() {
       }
       const json = await res.json();
       if (json.ok && json.data) {
-        setBusiness(json.data);
+        setBusiness({
+          ...json.data,
+          bankAccounts: json.data.bankAccounts || [],
+        });
         setFormData(json.data);
       }
     } catch (err: unknown) {
@@ -208,8 +211,15 @@ export default function BusinessSettingsPage() {
         throw new Error(json.error?.message || 'Gagal menyimpan pengaturan');
       }
 
-      setBusiness(json.data);
-      setFormData(json.data);
+      setBusiness((prev) => ({
+        ...(prev || {}),
+        ...json.data,
+        bankAccounts: json.data.bankAccounts || prev?.bankAccounts || [],
+      }));
+      setFormData((prev) => ({
+        ...prev,
+        ...json.data,
+      }));
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 4000);
     } catch (err: unknown) {
@@ -1151,13 +1161,13 @@ export default function BusinessSettingsPage() {
             </button>
           </div>
 
-          {business.bankAccounts.length === 0 ? (
+          {(business.bankAccounts?.length ?? 0) === 0 ? (
             <p className="text-sm text-slate-500 py-4 text-center">
               Belum ada rekening bank yang didaftarkan untuk unit usaha ini.
             </p>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {business.bankAccounts.map((account) => (
+              {business.bankAccounts?.map((account) => (
                 <div
                   key={account.id}
                   className={`p-4 rounded-xl border transition-all ${
