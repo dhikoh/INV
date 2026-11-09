@@ -8,6 +8,39 @@ dan proyek ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Evaluasi Kinerja Sales, SalesTarget, OwnerSalesNote, Laporan Kinerja & Komisi dengan Tanda "Perlu Dikembalikan" sesuai Seksi 8, 17.3 nomor 23, 18.1 nomor 33, dan 18.1 nomor 35 Dokumen Spesifikasi (T5.3):
+  - Skema Validasi (`src/lib/validation/salesEvaluation.ts`):
+    - `OwnerSalesNoteCreateSchema`: Catatan rahasia evaluasi pemilik usaha maksimal 5000 karakter.
+    - `SalesTargetUpsertSchema`: Target omzet dan profit bulanan staf sales (non-negatif).
+    - `SalesPerformanceQuerySchema`: Filter evaluasi kinerja per bulan (`YYYY-MM`) dan staf sales.
+    - `CommissionReportQuerySchema`: Filter laporan komisi dengan paginasi, filter sales, bulan, dan status komisi.
+    - `CommissionPaySchema`: Catatan pembayaran komisi saat ditandai lunas.
+  - Layanan Domain Evaluasi Sales & Komisi (`src/lib/services/salesEvaluation.ts`):
+    - `getOwnerSalesNotes` & `createOwnerSalesNote`: Catatan rahasia evaluasi pemilik usaha (Super Admin only, Zero-Leakage). Dilengkapi pencatatan audit log `OWNER_SALES_NOTE_CREATE`.
+    - `getSalesTarget` & `upsertSalesTarget`: Penyimpanan dan pembaruan target omzet dan target profit bulanan per staf sales, diaudit dengan `SALES_TARGET_SET`.
+    - `getSalesPerformanceReport`: Laporan komprehensif kinerja sales bulanan (omzet riil, profit riil, margin bps, capaian target %, rasio penolakan/revisi order, konversi pipeline pelanggan lead/prospect/deal/repeat/lost, aktivitas follow-up tugas & interaksi CRM, reminder repeat order aktif, serta ringkasan komisi).
+    - `getCommissionReport`: Laporan komisi per staf sales dengan kalkulasi summary (`totalEarned`, `totalPaid`, `totalReversed`, `totalNeedsReturn`, `needsReturnCount`) dan deteksi otomatis flag `needsReturn: true` jika komisi berstatus `REVERSED` namun sudah pernah `PAID` (Seksi 18.1 nomor 35).
+  - Endpoint REST API Terproteksi (Super Admin Only):
+    - `GET /api/v1/sales/:id/notes`: Mengambil riwayat catatan rahasia pemilik.
+    - `POST /api/v1/sales/:id/notes`: Menambah catatan rahasia pemilik untuk staf sales.
+    - `GET /api/v1/sales/:id/targets/:month`: Mengambil target bulanan sales.
+    - `PUT /api/v1/sales/:id/targets/:month`: Menyimpan target bulanan sales.
+    - `GET /api/v1/reports/sales-performance`: Mengambil agregat evaluasi kinerja seluruh atau per staf sales.
+    - `GET /api/v1/reports/commissions`: Mengambil laporan komisi lengkap dengan indikator `needsReturn`.
+    - `POST /api/v1/commissions/:id/pay`: Menandai komisi telah dibayarkan oleh Super Admin.
+  - Antarmuka Pengguna (`src/app/(app)/sales/page.tsx` & `src/app/(app)/sales/[id]/page.tsx`):
+    - `/sales`: Daftar staf sales dengan ringkasan metrik eksekutif bulan berjalan (omzet, profit, margin %, total deal, komisi), bilah pencarian, dan tautan detail evaluasi.
+    - `/sales/[id]`: Halaman detail evaluasi sales per bulan:
+      - Formulir target omzet & target profit bulanan (`SalesTarget`) dengan input mata uang rupiah.
+      - Kartu metrik performa: omzet riil vs target (% capaian), profit riil & margin, rasio order ditolak, rincian pipeline konversi, dan aktivitas CRM.
+      - Panel catatan rahasia pemilik usaha (`OwnerSalesNote`) berlabel 100% Rahasia dengan form penambahan catatan baru dan linimasa catatan terdahulu.
+      - Panel laporan komisi dengan banner peringatan merah khusus jika terdapat komisi yang "Perlu Dikembalikan" (Seksi 18.1 nomor 35), dan modal konfirmasi pembayaran komisi.
+    - Penambahan menu navigasi "Kinerja Sales" pada `AppShell.tsx` untuk Super Admin.
+  - Pengujian Integrasi Otomatis (`tests/integration/sales-evaluation.test.ts` & `tests/integration/permissions.test.ts`):
+    - 14 skenario pengujian komprehensif pada `sales-evaluation.test.ts` mencakup operasi CRUD target bulanan, catatan pemilik rahasia, laporan kinerja sales, deteksi `needsReturn`, pembayaran komisi, dan penolakan 403 Forbidden untuk role Sales.
+    - 7 endpoint baru ditambahkan ke matriks pengujian `permissions.test.ts` (87 pengujian lolos 100%).
+
+
 - Laporan Margin & Profitabilitas Usaha (GET /api/v1/reports/margin, GroupBy Order/Produk/Sales/Usaha, Baris Kerugian Pembatalan, dan Invarian Profit) sesuai Seksi 7.4, 9.2, 17.3 nomor 22, dan 18.1 nomor 33 Dokumen Spesifikasi (T5.2):
   - Skema Validasi Query (`src/lib/validation/report.ts`):
     - `MarginReportQuerySchema`: validasi parameter `groupBy` (`order`, `product`, `sales`, `business`), `from`, `to`, `salesId`, dan `productId`.
@@ -628,6 +661,39 @@ dan proyek ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 ## [0.1.0] - 2026-11-07
 
 ### Added
+
+- Evaluasi Kinerja Sales, SalesTarget, OwnerSalesNote, Laporan Kinerja & Komisi dengan Tanda "Perlu Dikembalikan" sesuai Seksi 8, 17.3 nomor 23, 18.1 nomor 33, dan 18.1 nomor 35 Dokumen Spesifikasi (T5.3):
+  - Skema Validasi (`src/lib/validation/salesEvaluation.ts`):
+    - `OwnerSalesNoteCreateSchema`: Catatan rahasia evaluasi pemilik usaha maksimal 5000 karakter.
+    - `SalesTargetUpsertSchema`: Target omzet dan profit bulanan staf sales (non-negatif).
+    - `SalesPerformanceQuerySchema`: Filter evaluasi kinerja per bulan (`YYYY-MM`) dan staf sales.
+    - `CommissionReportQuerySchema`: Filter laporan komisi dengan paginasi, filter sales, bulan, dan status komisi.
+    - `CommissionPaySchema`: Catatan pembayaran komisi saat ditandai lunas.
+  - Layanan Domain Evaluasi Sales & Komisi (`src/lib/services/salesEvaluation.ts`):
+    - `getOwnerSalesNotes` & `createOwnerSalesNote`: Catatan rahasia evaluasi pemilik usaha (Super Admin only, Zero-Leakage). Dilengkapi pencatatan audit log `OWNER_SALES_NOTE_CREATE`.
+    - `getSalesTarget` & `upsertSalesTarget`: Penyimpanan dan pembaruan target omzet dan target profit bulanan per staf sales, diaudit dengan `SALES_TARGET_SET`.
+    - `getSalesPerformanceReport`: Laporan komprehensif kinerja sales bulanan (omzet riil, profit riil, margin bps, capaian target %, rasio penolakan/revisi order, konversi pipeline pelanggan lead/prospect/deal/repeat/lost, aktivitas follow-up tugas & interaksi CRM, reminder repeat order aktif, serta ringkasan komisi).
+    - `getCommissionReport`: Laporan komisi per staf sales dengan kalkulasi summary (`totalEarned`, `totalPaid`, `totalReversed`, `totalNeedsReturn`, `needsReturnCount`) dan deteksi otomatis flag `needsReturn: true` jika komisi berstatus `REVERSED` namun sudah pernah `PAID` (Seksi 18.1 nomor 35).
+  - Endpoint REST API Terproteksi (Super Admin Only):
+    - `GET /api/v1/sales/:id/notes`: Mengambil riwayat catatan rahasia pemilik.
+    - `POST /api/v1/sales/:id/notes`: Menambah catatan rahasia pemilik untuk staf sales.
+    - `GET /api/v1/sales/:id/targets/:month`: Mengambil target bulanan sales.
+    - `PUT /api/v1/sales/:id/targets/:month`: Menyimpan target bulanan sales.
+    - `GET /api/v1/reports/sales-performance`: Mengambil agregat evaluasi kinerja seluruh atau per staf sales.
+    - `GET /api/v1/reports/commissions`: Mengambil laporan komisi lengkap dengan indikator `needsReturn`.
+    - `POST /api/v1/commissions/:id/pay`: Menandai komisi telah dibayarkan oleh Super Admin.
+  - Antarmuka Pengguna (`src/app/(app)/sales/page.tsx` & `src/app/(app)/sales/[id]/page.tsx`):
+    - `/sales`: Daftar staf sales dengan ringkasan metrik eksekutif bulan berjalan (omzet, profit, margin %, total deal, komisi), bilah pencarian, dan tautan detail evaluasi.
+    - `/sales/[id]`: Halaman detail evaluasi sales per bulan:
+      - Formulir target omzet & target profit bulanan (`SalesTarget`) dengan input mata uang rupiah.
+      - Kartu metrik performa: omzet riil vs target (% capaian), profit riil & margin, rasio order ditolak, rincian pipeline konversi, dan aktivitas CRM.
+      - Panel catatan rahasia pemilik usaha (`OwnerSalesNote`) berlabel 100% Rahasia dengan form penambahan catatan baru dan linimasa catatan terdahulu.
+      - Panel laporan komisi dengan banner peringatan merah khusus jika terdapat komisi yang "Perlu Dikembalikan" (Seksi 18.1 nomor 35), dan modal konfirmasi pembayaran komisi.
+    - Penambahan menu navigasi "Kinerja Sales" pada `AppShell.tsx` untuk Super Admin.
+  - Pengujian Integrasi Otomatis (`tests/integration/sales-evaluation.test.ts` & `tests/integration/permissions.test.ts`):
+    - 14 skenario pengujian komprehensif pada `sales-evaluation.test.ts` mencakup operasi CRUD target bulanan, catatan pemilik rahasia, laporan kinerja sales, deteksi `needsReturn`, pembayaran komisi, dan penolakan 403 Forbidden untuk role Sales.
+    - 7 endpoint baru ditambahkan ke matriks pengujian `permissions.test.ts` (87 pengujian lolos 100%).
+
 
 - Pengingat Otomatis Siklus Repeat Order Pelanggan, Job Terjadwal 13.2, dan Umur Piutang sesuai Seksi 13.1–13.3, 17.3 nomor 15, dan 19.5 Dokumen Spesifikasi (T4.4):
   - Logika Domain Umur Piutang (`src/lib/domain/receivable.ts`):

@@ -122,6 +122,17 @@ import {
   PUT as setCommissionTiersHandler,
 } from '@/app/api/v1/commission/tiers/route';
 import { GET as getMarginReportHandler } from '@/app/api/v1/reports/margin/route';
+import {
+  GET as getSalesNotesHandler,
+  POST as createSalesNoteHandler,
+} from '@/app/api/v1/sales/[id]/notes/route';
+import {
+  GET as getSalesTargetHandler,
+  PUT as setSalesTargetHandler,
+} from '@/app/api/v1/sales/[id]/targets/[month]/route';
+import { GET as getSalesPerformanceReportHandler } from '@/app/api/v1/reports/sales-performance/route';
+import { GET as getCommissionReportHandler } from '@/app/api/v1/reports/commissions/route';
+import { POST as payCommissionHandler } from '@/app/api/v1/commissions/[id]/pay/route';
 
 describe('Matriks Hak Akses Berbasis Tabel (Seksi 5.1 & 17.4 b)', () => {
   const APP_URL = 'http://localhost:3000';
@@ -738,6 +749,56 @@ describe('Matriks Hak Akses Berbasis Tabel (Seksi 5.1 & 17.4 b)', () => {
       method: 'GET',
       path: '/api/v1/reports/margin',
       handler: (req) => getMarginReportHandler(req),
+    },
+    {
+      name: 'GET /api/v1/sales/:id/notes',
+      method: 'GET',
+      path: '/api/v1/sales/sales_1/notes',
+      handler: (req, r) => getSalesNotesHandler(req, r),
+      params: { id: 'sales_1' },
+    },
+    {
+      name: 'POST /api/v1/sales/:id/notes',
+      method: 'POST',
+      path: '/api/v1/sales/sales_1/notes',
+      handler: (req, r) => createSalesNoteHandler(req, r),
+      params: { id: 'sales_1' },
+      body: { note: 'Catatan rahasia evaluasi' },
+    },
+    {
+      name: 'GET /api/v1/sales/:id/targets/:month',
+      method: 'GET',
+      path: '/api/v1/sales/sales_1/targets/2026-11',
+      handler: (req, r) => getSalesTargetHandler(req, r),
+      params: { id: 'sales_1', month: '2026-11' },
+    },
+    {
+      name: 'PUT /api/v1/sales/:id/targets/:month',
+      method: 'PUT',
+      path: '/api/v1/sales/sales_1/targets/2026-11',
+      handler: (req, r) => setSalesTargetHandler(req, r),
+      params: { id: 'sales_1', month: '2026-11' },
+      body: { targetRevenue: 50000000, targetProfit: 10000000 },
+    },
+    {
+      name: 'GET /api/v1/reports/sales-performance',
+      method: 'GET',
+      path: '/api/v1/reports/sales-performance',
+      handler: (req) => getSalesPerformanceReportHandler(req),
+    },
+    {
+      name: 'GET /api/v1/reports/commissions',
+      method: 'GET',
+      path: '/api/v1/reports/commissions',
+      handler: (req) => getCommissionReportHandler(req),
+    },
+    {
+      name: 'POST /api/v1/commissions/:id/pay',
+      method: 'POST',
+      path: '/api/v1/commissions/comm_1/pay',
+      handler: (req, r) => payCommissionHandler(req, r),
+      params: { id: 'comm_1' },
+      body: { note: 'Pembayaran komisi via transfer' },
     },
   ];
 
