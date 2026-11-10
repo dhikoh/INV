@@ -227,7 +227,7 @@ export default function SalesDetailEvaluationPage() {
     setError(null);
 
     try {
-      const res = await fetch(`/api/v1/commissions/${encodeURIComponent(commId)}/pay`, {
+      const res = await fetch(`/api/v1/commission/entries/${encodeURIComponent(commId)}/pay`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ note: payNote || undefined }),

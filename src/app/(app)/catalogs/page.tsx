@@ -140,13 +140,21 @@ export default function CatalogsPage() {
             Kelola katalog harga khusus customer atau umum, cetak PDF resmi, dan buat pesanan cepat.
           </p>
         </div>
-        <Link
-          href="/catalogs/new"
-          className="inline-flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium px-4 py-2.5 rounded-lg shadow-sm transition-colors text-sm w-full sm:w-auto"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Buat Katalog Baru</span>
-        </Link>
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
+          <Link
+            href="/price-list"
+            className="inline-flex items-center justify-center gap-2 border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-medium px-4 py-2.5 rounded-lg shadow-sm transition-colors text-sm w-full sm:w-auto"
+          >
+            <span>Daftar Harga Resmi</span>
+          </Link>
+          <Link
+            href="/catalogs/new"
+            className="inline-flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium px-4 py-2.5 rounded-lg shadow-sm transition-colors text-sm w-full sm:w-auto"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Buat Katalog Baru</span>
+          </Link>
+        </div>
       </div>
 
       {/* Pesan Kesalahan Unduh PDF */}
