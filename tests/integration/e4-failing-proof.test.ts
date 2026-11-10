@@ -12,12 +12,14 @@ describe('Audit Mandat: Pembuktian Kegagalan E4 (AUD-INT-001 Overbilling Faktur 
   const ctx: Ctx = {
     user: {
       id: 'admin_1',
-      username: 'superadmin',
+      name: 'Super Admin',
       role: Role.SUPERADMIN,
       businessId: 'biz_1',
-      mustChangePassword: false,
     },
+    role: Role.SUPERADMIN,
     businessId: 'biz_1',
+    sessionId: 'sess_1',
+    ip: '127.0.0.1',
   };
 
   it('MEMBUKTIKAN BUG AUD-INT-001: requestFinalOrder mengabaikan order.creditTotal sehingga jumlah invoice pelunasan overbilled', async () => {
@@ -81,7 +83,9 @@ describe('Audit Mandat: Pembuktian Kegagalan E4 (AUD-INT-001 Overbilling Faktur 
             return {
               id: 'inv_dp_1',
               type: InvoiceType.DP,
-              status: InvoiceStatus.PAID,
+              status: InvoiceStatus.APPROVED,
+              amount: 300000n,
+              paidAmount: 300000n,
             };
           }
           if (where?.status === InvoiceStatus.PENDING_APPROVAL) {
@@ -96,7 +100,7 @@ describe('Audit Mandat: Pembuktian Kegagalan E4 (AUD-INT-001 Overbilling Faktur 
           amount: createdInvoiceAmount,
         })),
         count: vi.fn(async () => 0),
-        create: vi.fn(async ({ data }) => {
+        create: vi.fn(async ({ data }: { data: any }) => {
           createdInvoiceAmount = data.amount;
           return { id: 'inv_final_1', ...data };
         }),
@@ -115,10 +119,8 @@ describe('Audit Mandat: Pembuktian Kegagalan E4 (AUD-INT-001 Overbilling Faktur 
     // Jalankan pembuatan invoice FINAL
     await requestFinalOrder(mockTx, ctx, 'ord_e4_test');
 
-    // Nilai tagihan riil yang dihitung oleh kode saat ini di src/lib/services/order.ts:1032
-    // const invoiceAmount = finalGrandTotal - order.dpAmount;
-    // = 1.000.000 - 300.000 = 700.000 (Overbilled Rp 200.000!)
-    console.log('HASIL PERHITUNGAN AKTUAL SISTEM:', createdInvoiceAmount?.toString());
+    const actualAmountStr = createdInvoiceAmount ? String(createdInvoiceAmount) : 'null';
+    console.log('HASIL PERHITUNGAN AKTUAL SISTEM:', actualAmountStr);
 
     // Ekspektasi Benar Sesuai BLUEPRINT Bagian 5 & Keputusan Pemilik:
     // Sisa tagihan pelunasan = grandTotal - DP - creditTotal = 500.000

@@ -267,7 +267,7 @@ describe('Audit Mandat: Eksekusi Nyata Alur E7 (Scheduled Jobs) dan E8 (Backup &
         FROM "DocumentCounter"
         WHERE "businessId" = '${bizId}' AND "scope" = 'INVOICE_DP' AND "scopeId" = '202611';
       `);
-      expect(dumpRes.rows[0].lastSeq).toBe(42);
+      expect((dumpRes.rows[0] as any).lastSeq).toBe(42);
 
       const restoredDb = new PGlite();
       const initSql = fs.readFileSync(initSqlPath, 'utf-8');
@@ -284,7 +284,7 @@ describe('Audit Mandat: Eksekusi Nyata Alur E7 (Scheduled Jobs) dan E8 (Backup &
         VALUES ('${custId}', '${bizId}', 'C-001', 'Pelanggan E8', 'DEAL', NOW());
       `);
 
-      const row = dumpRes.rows[0];
+      const row = dumpRes.rows[0] as any;
       await restoredDb.query(`
         INSERT INTO "DocumentCounter" ("id", "businessId", "scope", "scopeId", "lastSeq")
         VALUES ('${row.id}', '${row.businessId}', '${row.scope}', '${row.scopeId}', ${row.lastSeq});
