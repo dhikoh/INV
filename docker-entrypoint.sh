@@ -31,7 +31,11 @@ else
   # Service Web / API
   if [ -n "$DATABASE_URL" ] && [ "$SKIP_MIGRATIONS" != "true" ]; then
     echo "==> [OmniCat] Applying production database migrations (prisma migrate deploy)..."
-    npx prisma migrate deploy --schema=prisma/schema.prisma
+    if command -v prisma >/dev/null 2>&1; then
+      prisma migrate deploy --schema=prisma/schema.prisma
+    else
+      npx prisma migrate deploy --schema=prisma/schema.prisma
+    fi
     echo "==> [OmniCat] Database migrations applied successfully."
   fi
 

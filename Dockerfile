@@ -44,10 +44,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN npm install -g prisma@7.10.1 tsx@4.23.15
 
 # Create dedicated home directory and non-root user
-RUN mkdir -p /home/nextjs && \
+RUN mkdir -p /home/nextjs /pnpm && \
     addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 --home /home/nextjs --ingroup nodejs nextjs && \
-    chown -R nextjs:nodejs /home/nextjs
+    chown -R nextjs:nodejs /home/nextjs /pnpm
 
 # Create uploads directory and set permissions
 RUN mkdir -p /data/uploads && chown -R nextjs:nodejs /data && chmod -R 775 /data
