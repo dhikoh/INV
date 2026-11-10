@@ -48,4 +48,16 @@ Thumbs.db
 # Reference raw archives (optional)
 BENTOCAT-20261104T120040Z-1-001.zip
 
+# Sensitive operational documents & historical city data
+/BLITAR/
+/BOJONEGORO/
+/CILACAP/
+/LAMONGAN/
+/SEMARANG/
+/TIMIKA/
+/TUBAN/
+*.docx
+*.xlsx
+/tmp/
+
 *.tsbuildinfo
