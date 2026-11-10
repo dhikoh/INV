@@ -33,7 +33,7 @@
     "exceljs": "^4.4.0",
     "grammy": "^1.46.0",
     "lucide-react": "0.475.0",
-    "next": "15.3.9",
+    "next": "15.5.29",
     "pg": "8.23.1",
     "pg-boss": "^12.38.1",
     "pino": "9.6.0",
@@ -41,7 +41,7 @@
     "react": "19.0.0",
     "react-dom": "19.0.0",
     "sharp": "0.35.5",
-    "zod": "3.24.2"
+    "zod": "3.25.76"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.15",
@@ -53,7 +53,7 @@
     "@vitest/coverage-v8": "3.0.5",
     "autoprefixer": "10.4.20",
     "eslint": "9.20.1",
-    "eslint-config-next": "15.3.9",
+    "eslint-config-next": "15.5.29",
     "postcss": "8.5.32",
     "prettier": "3.5.1",
     "prisma": "7.10.1",
@@ -61,5 +61,8 @@
     "tsx": "4.23.15",
     "typescript": "5.7.3",
     "vitest": "3.0.5"
+  },
+  "overrides": {
+    "uuid": "^11.1.1"
   }
 }

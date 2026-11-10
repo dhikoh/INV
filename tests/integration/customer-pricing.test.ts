@@ -157,6 +157,17 @@ vi.mock('@/lib/db', () => {
           return true;
         });
       }),
+      findFirst: vi.fn(async ({ where }: { where: Record<string, unknown> }) => {
+        return (
+          customerMinPrices.find((m) => {
+            if (where.id && m.id !== where.id) return false;
+            if (where.businessId && m.businessId !== where.businessId) return false;
+            if (where.customerId && m.customerId !== where.customerId) return false;
+            if (where.productId && m.productId !== where.productId) return false;
+            return true;
+          }) || null
+        );
+      }),
       findUnique: vi.fn(async ({ where }: { where: { customerId_productId?: { customerId: string; productId: string } } }) => {
         if (where.customerId_productId) {
           const { customerId, productId } = where.customerId_productId;
@@ -192,12 +203,35 @@ vi.mock('@/lib/db', () => {
         };
         return customerMinPrices[idx];
       }),
+      updateMany: vi.fn(async ({ where, data }: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
+        let count = 0;
+        customerMinPrices.forEach((m) => {
+          if (where.id && m.id !== where.id) return;
+          if (where.businessId && m.businessId !== where.businessId) return;
+          if (data.minPrice !== undefined) m.minPrice = data.minPrice as bigint;
+          if (data.note !== undefined) m.note = data.note as string | null;
+          m.updatedAt = new Date();
+          count++;
+        });
+        return { count };
+      }),
       delete: vi.fn(async ({ where }: { where: { id: string } }) => {
         const idx = customerMinPrices.findIndex((m) => m.id === where.id);
         if (idx !== -1) {
           customerMinPrices.splice(idx, 1);
         }
         return { id: where.id };
+      }),
+      deleteMany: vi.fn(async ({ where }: { where: Record<string, unknown> }) => {
+        let count = 0;
+        for (let i = customerMinPrices.length - 1; i >= 0; i--) {
+          const m = customerMinPrices[i];
+          if (where.id && m.id !== where.id) continue;
+          if (where.businessId && m.businessId !== where.businessId) continue;
+          customerMinPrices.splice(i, 1);
+          count++;
+        }
+        return { count };
       }),
     },
     customerPromo: {

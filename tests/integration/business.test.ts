@@ -503,6 +503,12 @@ describe('Integrasi Pengaturan Usaha, Rekening Bank, Berkas & Audit (T1.3)', () 
 
   describe('Aturan Rekening Bank: Satu Rekening Default per Usaha', () => {
     beforeEach(() => {
+      vi.spyOn(contextModule, 'requireContext').mockResolvedValue({
+        ...superAdminCtx,
+        businessId: 'biz_bank_test',
+        session: { ...superAdminCtx.session, activeBusinessId: 'biz_bank_test' },
+      } as any);
+
       businesses.push({
         id: 'biz_bank_test',
         code: 'BNK',
