@@ -1,0 +1,15 @@
+# Matriks M7: Dokumen ke Kode (Documentation-to-Code Discrepancy Matrix)
+
+Daftar seluruh ketidakcocokan, kontradiksi, klaim keliru, dan desinkronisasi antara dokumentasi resmi (`BLUEPRINT.md`, ADR, Laporan Audit Sebelumnya) dengan kode implementasi aktual di repositori.
+
+| No | Dokumen Sumber | Bagian / Klaim Dokumen | Realitas Kode Aktual | Dampak & Kategori | Status Temuan |
+|---|---|---|---|---|---|
+| 1 | `BLUEPRINT.md` Seksi 9.1 | Pre-deploy Coolify menjalankan `pnpm prisma migrate deploy` | `docker-entrypoint.sh` baris 7 menjalankan `npx prisma db push ...` | Kritis: 8 CHECK constraints, 2 indeks unik, dan 2 trigger DB tidak terpasang di produksi. | **AUD-SPEC-006 (S1)** |
+| 2 | `BLUEPRINT.md` Seksi 9.1 | Seed Super Admin wajib password dari env min 12 char, `mustChangePassword = true`, menolak berjalan jika admin sudah ada | `prisma/seed.ts` memiliki fallback hardcoded `bismillahbento`, `mustChangePassword: false`, dan menimpa (*overwrite*) password admin yang sudah ada setiap restart | Kritis: Keamanan & kebocoran password default. | **AUD-SEC-001 (S1)** |
+| 3 | `BLUEPRINT.md` Seksi 7 & 8.1; `CHANGELOG.md` | Tombol bot Telegram "Tolak" dan "Buka" mengarahkan ke Mini App `/tg/approvals/:id?reject=1` dan `/tg/payments` | Rute `/tg/approvals/[id]` dan `/tg/payments` **tidak ada** di Next.js App Router (HTTP 404 Not Found) | Tinggi: Alur tolak faktur via bot Telegram Mini App putus. | **AUD-GAP-001 (S1/S2)** |
+| 4 | `BLUEPRINT.md` Seksi 2 | Tabel versi dependensi inti diklaim dikunci persis tanpa rentang (`^` atau `~`) | `package.json` baris 33, 34, 38, 40 memakai `^` untuk `exceljs`, `grammy`, `pg-boss`, dan `puppeteer-core` | Rendah: Risiko build tidak deterministik. | **AUD-DOC-002 (S4)** |
+| 5 | `BLUEPRINT.md` Seksi 9.5 | "Menjalankan 68 test files Vitest" | Aktual vitest menjalankan **72 test files** (34 unit + 38 integrasi) | Rendah: Dokumentasi tertinggal dari kode. | **AUD-DOC-002 (S4)** |
+| 6 | `BLUEPRINT.md` Baris 455-460, 480 | Tautan rujukan ADR dan Open Questions memakai skema `file:///D:/Data%20BentoCat/...` | Tautan absolut lokal Windows, rusak bila dibuka di mesin/lingkungan lain | Rendah: Tidak portabel. | **AUD-DOC-002 (S4)** |
+| 7 | `LAPORAN-02` Seksi T6 | Merujuk rute penyajian berkas `src/app/api/v1/files/[...path]/route.ts` | Rute nyata di kode adalah `src/app/api/v1/files/[businessId]/[kind]/[filename]/route.ts` | Rendah: Kesalahan kutip path laporan lama. | **AUD-DOC-002 (S4)** |
+| 8 | Berbagai Dokumen | Nama produk bercampur antara OmniCat, BentoCat, dan dhikoh-inv | Kontainer Docker dinamai `omnicat_postgres_dev`, skrip backup memakai `db_bentocat_*`, seed memakai unit usaha BentoCat Mandiri | Rendah: Inkonsistensi penamaan identitas produk. | **AUD-DOC-002 (S4)** |
+| 9 | `REGISTER.md` (Laporan 01) | AUD-TEST-001 ditutup dengan menyesuaikan tes mock di `seed.test.ts` agar cocok dengan seed kode | Seharusnya kode seed yang diperbaiki agar sesuai spesifikasi (env password min 12 char, tanpa fallback plaintext) | Sedang: Penutupan temuan semu (menyesuaikan tes ke bug). | **AUD-SEC-001 (S1)** |
