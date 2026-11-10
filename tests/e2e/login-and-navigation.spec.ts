@@ -39,8 +39,8 @@ test.describe('E2E Audit: Login & Halaman Publik', () => {
     await expect(page).toHaveURL(/\/login/);
   });
 
-  test('verifikasi rute mati Telegram Mini App mengembalikan 404', async ({ page }) => {
+  test('verifikasi rute Telegram Mini App berhasil dibuka dengan status 200 (AUD-GAP-001)', async ({ page }) => {
     const response = await page.goto('/tg/approvals/inv_dummy_123');
-    expect(response?.status()).toBe(404);
+    expect(response?.status()).toBe(200);
   });
 });

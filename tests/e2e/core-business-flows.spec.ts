@@ -46,8 +46,9 @@ test.describe('E2E Audit: Alur Bisnis Inti, Approval UI & Status Lingkungan (E3,
     expect(body.error?.code).toBe('INVALID_DOWNLOAD_TOKEN');
   });
 
-  test('Telegram Mini App Approvals: /tg/approvals/:id mengembalikan 404 (AUD-GAP-001 terbukti di browser)', async ({ page }) => {
+  test('Telegram Mini App Approvals: /tg/approvals/:id berhasil merender halaman persetujuan (AUD-GAP-001 teratasi)', async ({ page }) => {
     const response = await page.goto('/tg/approvals/inv_audit_proof');
-    expect(response?.status()).toBe(404);
+    expect(response?.status()).toBe(200);
+    await expect(page.locator('body')).toBeVisible();
   });
 });
