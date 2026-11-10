@@ -19,6 +19,7 @@ import {
   Upload,
   Layers,
   Loader2,
+  Link as LinkIcon,
 } from 'lucide-react';
 import { Skeleton, EmptyState, ErrorState } from '@/components/ui/States';
 import { MoneyInput } from '@/components/ui/MoneyInput';
@@ -218,6 +219,7 @@ export default function ProductsPage() {
   // Upload foto di Edit Modal
   const [uploadingImages, setUploadingImages] = useState(false);
   const [imageError, setImageError] = useState<string | null>(null);
+  const [imageUrlInput, setImageUrlInput] = useState('');
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Soft Delete Dialog
@@ -542,6 +544,47 @@ export default function ProductsPage() {
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
+    }
+  };
+
+  // Upload foto produk dari URL
+  const handleUploadImageFromUrl = async () => {
+    if (!editingProduct || !imageUrlInput.trim()) return;
+    setImageError(null);
+
+    const currentCount = editingProduct.images?.length || 0;
+    if (currentCount >= 8) {
+      setImageError('Total foto tidak boleh melebihi batas maksimal 8.');
+      return;
+    }
+
+    try {
+      setUploadingImages(true);
+      const res = await fetch(`/api/v1/products/${editingProduct.id}/images/from-url`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: imageUrlInput.trim() }),
+      });
+
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        throw new Error(json.error?.message || 'Gagal mengambil foto dari URL');
+      }
+
+      setImageUrlInput('');
+      // Refresh detail produk
+      const freshRes = await fetch(`/api/v1/products/${editingProduct.id}`);
+      if (freshRes.ok) {
+        const freshJson = await freshRes.json();
+        if (freshJson.ok && freshJson.data) {
+          setEditingProduct(freshJson.data);
+        }
+      }
+      loadProducts();
+    } catch (err: unknown) {
+      setImageError(err instanceof Error ? err.message : 'Gagal mengambil foto dari URL');
+    } finally {
+      setUploadingImages(false);
     }
   };
 
@@ -1574,6 +1617,28 @@ export default function ProductsPage() {
                       </div>
                     )}
                   </div>
+
+                  {(editingProduct?.images?.length || 0) < 8 && (
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-2">
+                      <input
+                        type="url"
+                        value={imageUrlInput}
+                        onChange={(e) => setImageUrlInput(e.target.value)}
+                        placeholder="Atau tempel URL gambar (https://...)"
+                        className="flex-1 text-xs border border-slate-300 rounded-lg px-2.5 py-1.5 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+                        disabled={uploadingImages}
+                      />
+                      <button
+                        type="button"
+                        onClick={handleUploadImageFromUrl}
+                        disabled={uploadingImages || !imageUrlInput.trim()}
+                        className="px-3 py-1.5 bg-slate-800 hover:bg-slate-900 disabled:opacity-50 text-white text-xs font-semibold rounded-lg flex items-center justify-center gap-1.5 transition-colors shadow-sm shrink-0"
+                      >
+                        <LinkIcon className="w-3.5 h-3.5" />
+                        <span>{uploadingImages ? 'Mengambil...' : 'Ambil dari URL'}</span>
+                      </button>
+                    </div>
+                  )}
 
                   {imageError && (
                     <p className="text-xs text-red-600 font-medium">{imageError}</p>

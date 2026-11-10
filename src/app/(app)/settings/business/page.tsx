@@ -15,9 +15,11 @@ import {
   Percent,
   X,
   CheckCircle2,
+  Link as LinkIcon,
 } from 'lucide-react';
 import Image from 'next/image';
 import { Skeleton, EmptyState, ErrorState } from '@/components/ui/States';
+import DataTransferCard from './DataTransferCard';
 
 interface BankAccount {
   id: string;
@@ -76,6 +78,7 @@ export default function BusinessSettingsPage() {
   // Logo upload state
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [logoError, setLogoError] = useState<string | null>(null);
+  const [logoUrlInput, setLogoUrlInput] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Bank account modal / form
@@ -260,6 +263,34 @@ export default function BusinessSettingsPage() {
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
+    }
+  };
+
+  // Ambil Logo dari URL
+  const handleLogoFromUrl = async () => {
+    if (!selectedId || !logoUrlInput.trim()) return;
+
+    try {
+      setUploadingLogo(true);
+      setLogoError(null);
+
+      const res = await fetch(`/api/v1/businesses/${selectedId}/logo/from-url`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: logoUrlInput.trim() }),
+      });
+
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        throw new Error(json.error?.message || 'Gagal mengambil logo dari URL');
+      }
+
+      setLogoUrlInput('');
+      await loadBusinessDetail(selectedId);
+    } catch (err: unknown) {
+      setLogoError(err instanceof Error ? err.message : 'Gagal mengambil logo dari URL');
+    } finally {
+      setUploadingLogo(false);
     }
   };
 
@@ -773,6 +804,25 @@ export default function BusinessSettingsPage() {
                     {uploadingLogo ? 'Mengunggah...' : 'Pilih Logo Baru'}
                   </label>
                 </div>
+                <div className="pt-2 border-t border-slate-100 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                  <input
+                    type="url"
+                    value={logoUrlInput}
+                    onChange={(e) => setLogoUrlInput(e.target.value)}
+                    placeholder="Atau tempel URL gambar (https://...)"
+                    className="flex-1 text-xs border border-slate-300 rounded-lg px-3 py-2 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+                    disabled={uploadingLogo}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleLogoFromUrl}
+                    disabled={uploadingLogo || !logoUrlInput.trim()}
+                    className="px-3 py-2 bg-slate-800 hover:bg-slate-900 disabled:opacity-50 text-white text-xs font-semibold rounded-lg flex items-center justify-center gap-1.5 transition-colors shadow-sm shrink-0"
+                  >
+                    <LinkIcon className="w-3.5 h-3.5" />
+                    <span>{uploadingLogo ? 'Mengambil...' : 'Ambil dari URL'}</span>
+                  </button>
+                </div>
                 <p className="text-xs text-slate-500">
                   Format gambar yang didukung: PNG, JPEG, WebP. Maksimal 10 MB.
                   Diproses otomatis menjadi WebP tajam dan aman.
@@ -1218,6 +1268,14 @@ export default function BusinessSettingsPage() {
             </div>
           )}
         </section>
+      )}
+
+      {/* Portabilitas Data: Ekspor & Impor ZIP */}
+      {business && (
+        <DataTransferCard
+          businessId={business.id}
+          businessCode={business.code}
+        />
       )}
 
       {/* Modal Tambah Rekening Bank */}

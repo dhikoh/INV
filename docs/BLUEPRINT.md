@@ -208,6 +208,8 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
 | `GET/POST` | `/api/v1/businesses/:id/bank-accounts` | Super Admin    | CRUD rekening bank unit usaha                 |
 | `GET/PATCH/DELETE` | `/api/v1/bank-accounts/:id` | Super Admin       | Detail, set default, dan soft delete rekening |
 | `POST`     | `/api/v1/businesses/:id/logo`  | Super Admin        | Unggah logo usaha (multipart/form-data)       |
+| `POST`     | `/api/v1/businesses/:id/logo/from-url` | Super Admin | Unggah logo usaha dari URL eksternal HTTPS (proteksi SSRF) |
+| `GET`      | `/api/v1/businesses/:id/export` | Super Admin       | Ekspor satu usaha menjadi arsip ZIP portabel (ndjson + uploads) |
 | `GET`      | `/api/v1/files/:businessId/:kind/:filename` | Authenticated | Penyajian berkas aman & terisolasi       |
 | `GET/POST` | `/api/v1/users`                | Super Admin        | CRUD akun staf sales                          |
 | `GET/PATCH/DELETE` | `/api/v1/users/:id`        | Super Admin        | Detail, ubah data, soft delete user           |
@@ -221,6 +223,7 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
 | `GET/POST` | `/api/v1/products`             | Super Admin, Sales | Master produk (DTO disaring per role)         |
 | `GET/PATCH/DELETE` | `/api/v1/products/:id` | Super Admin, Sales | Detail (Sales), rev/priceReason/soft delete   |
 | `POST`     | `/api/v1/products/:id/images`  | Super Admin        | Unggah foto produk (maksimal 8, WebP 1600px)  |
+| `POST`     | `/api/v1/products/:id/images/from-url` | Super Admin | Unggah foto produk dari URL eksternal HTTPS (proteksi SSRF) |
 | `PATCH/DELETE` | `/api/v1/products/:id/images/:imageId` | Super Admin | Atur foto utama/urutan, hapus foto         |
 | `GET`      | `/api/v1/products/:id/price-history` | Super Admin  | Riwayat perubahan harga produk                |
 | `GET`      | `/api/v1/price-list`           | Super Admin, Sales | Daftar harga resmi (katalog & paten), evaluasi floorPrice efektif, 11 kunci DTO |
@@ -322,6 +325,8 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
 | `GET`      | `/api/v1/reports/receivables-aging` | Super Admin    | Laporan umur piutang 5 bucket, pengecualian order batal & invoice lunas |
 | `GET`      | `/api/v1/reports/crm`          | Super Admin, Sales | Laporan aktivitas & pipeline CRM (agregat untuk SA, scoping sales ID untuk Sales) |
 | `GET`      | `/api/v1/reports/export`       | Super Admin, Sales | Ekspor laporan XLSX & PDF dengan perlindungan formula injection (=, +, -, @) |
+| `GET`      | `/api/v1/data-transfer/export` | Super Admin        | Ekspor seluruh sistem (semua usaha) menjadi arsip ZIP portabel (ndjson + uploads) |
+| `POST`     | `/api/v1/data-transfer/import` | Super Admin        | Impor data satu unit usaha dari berkas ZIP portabel (multipart, dry-run & eksekusi) |
 | `GET`      | `/api/v1/audit-logs`           | Super Admin        | Daftar log mutasi sistem append-only dengan filter aksi, entitas, tanggal, dan aktor |
 
 ### Antarmuka Pengguna (UI Routes)
@@ -452,6 +457,23 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
 - `pnpm test:e2e`: Menjalankan 35 skenario pengujian Playwright E2E testing (alur order, invoice, theme preview, PWA).
 - `pnpm build`: Memastikan Next.js App Router standalone build sukses (83 rute statis & dinamis).
 
+### 6. Ekspor & Impor Data Portabel (ADR 0008)
+
+- **Cakupan & Format Berkas**: Arsip ZIP mandiri (`fflate`) memuat metadata `manifest.json`, seluruh tabel data dalam format `data/<Model>.ndjson`, dan seluruh berkas fisik di `uploads/<businessId>/<kind>/<filename>`.
+- **Mode Ekspor**:
+  - *Per Usaha*: `GET /api/v1/businesses/:id/export` (mengemas satu unit usaha beserta seluruh riwayatnya).
+  - *Seluruh Sistem*: `GET /api/v1/data-transfer/export` (mengemas seluruh unit usaha dan data global).
+  - Opsi `?tanpaBerkas=1` untuk ekspor cepat tanpa folder uploads fisik.
+- **Mode Impor**:
+  - *Per Usaha*: Melalui UI `/settings/business` atau `POST /api/v1/data-transfer/import` dengan fitur **Periksa Dulu** (simulasi transaksi dry-run penuh tanpa menulis ke database/disk).
+  - *Seluruh Sistem*: Melalui CLI terminal server `pnpm tsx scripts/import-json.ts <berkas.zip>` pada database kosong.
+- **Keamanan & Konsistensi**:
+  - Pembacaan snapshot data dalam transaksi berisolasi `RepeatableRead`.
+  - Serialisasi lossless `BigInt` dan `Date` (`toJsonLine`).
+  - Proteksi Zip-Bomb (rasio maksimal 5x `TRANSFER_MAX_MB`) dan Zip-Slip.
+  - Verifikasi keutuhan nomor counter urutan dokumen (`DocumentCounter`).
+  - Staging uploads atomik sebelum pemindahan berkas akhir.
+
 ---
 
 ## 10. Keputusan teknis (ADR)
@@ -463,6 +485,7 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
 5. [ADR 0005: Kebijakan Migrasi Skema Database Entrypoint dan Sanitasi Seed](adr/0005-database-migration-entrypoint-and-seed.md) - Penggunaan prisma migrate deploy di entrypoint, fail-fast, dan isolasi worker.
 6. [ADR 0006: Harga Paten, Katalog Terintegrasi Multi-Usaha, dan Isolasi Database Lapis PostgreSQL](adr/0006-harga-paten-dan-katalog-terintegrasi.md) - Implementasi Addendum v2, trigger DB `catalogitem_same_business_trg`, dan DTO price list 11 kunci.
 7. [ADR 0007: Inisialisasi Akun Super Admin dan Kebijakan Rotasi Kredensial](adr/0007-superadmin-seed-and-credential-rotation.md) - Penegakan password env >= 12 karakter, pencegahan overwrite, mustChangePassword: true, dan sanitasi log.
+8. [ADR 0008: Ekspor & Impor Data Portabel (JSON dalam ZIP)](adr/0008-export-import-json.md) - Format portabel ndjson + uploads, snapshot RepeatableRead, dry-run simulation, dan mitigasi zip-bomb/zip-slip.
 
 ---
 

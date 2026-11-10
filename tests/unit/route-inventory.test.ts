@@ -22,11 +22,13 @@ describe('Tes Inventaris Rute API v1 & Konsistensi Dokumen Blueprint (Seksi 17.4
   const apiV1Dir = path.resolve(__dirname, '../../src/app/api/v1');
   const blueprintPath = path.resolve(__dirname, '../../docs/BLUEPRINT.md');
 
-  // Rute khusus yang mengembalikan respons binary (PDF/gambar/Excel) atau alur otentikasi login publik
+  // Rute khusus yang mengembalikan respons binary (PDF/gambar/Excel/ZIP) atau alur otentikasi login publik
   const ALLOWED_NON_WITH_API_ROUTES = new Set([
     'auth/login/route.ts',
+    'businesses/[id]/export/route.ts',
     'businesses/[id]/invoice-preview/route.ts',
     'catalogs/[id]/pdf/route.ts',
+    'data-transfer/export/route.ts',
     'dl/[token]/route.ts',
     'files/[businessId]/[kind]/[filename]/route.ts',
     'invoices/[id]/pdf/route.ts',

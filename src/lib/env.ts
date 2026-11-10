@@ -8,6 +8,7 @@ export const envSchema = z.object({
   SESSION_TTL_DAYS: z.coerce.number().int().positive().default(7),
   UPLOAD_DIR: z.string().default('/data/uploads'),
   MAX_UPLOAD_MB: z.coerce.number().int().positive().default(5),
+  TRANSFER_MAX_MB: z.coerce.number().int().positive().default(200),
   TELEGRAM_BOT_TOKEN: z.string().optional().default(''),
   TELEGRAM_WEBHOOK_SECRET: z.string().optional().default(''),
   TELEGRAM_BOT_USERNAME: z.string().optional().default(''),

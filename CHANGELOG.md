@@ -6,6 +6,26 @@ dan proyek ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Added
+
+- **Fitur Ekspor & Impor Data Portabel (ADR 0008)**:
+  - Modul serialisasi lossless BigInt & Date (`src/lib/transfer/serialize.ts`).
+  - Registry 36 model database dengan urutan topologis relasi DAG (`src/lib/transfer/registry.ts`).
+  - Layanan ekspor snapshot transaksi RepeatableRead (`src/lib/transfer/export.ts`) format ZIP berbasis fflate (ndjson, uploads, manifest).
+  - Layanan impor portabel dengan proteksi Zip-Bomb, Zip-Slip, SHA-256, simulasi dry-run penuh, dan verifikasi counter dokumen (`src/lib/transfer/import.ts`).
+  - Skrip CLI impor `scripts/import-json.ts` dengan opsi `--dry-run`, `--ganti-superadmin-seed`, `--pulihkan-berkas`, dan `--yes`.
+  - Endpoint ekspor satu unit usaha `GET /api/v1/businesses/:id/export` (khusus Super Admin).
+  - Endpoint ekspor seluruh sistem `GET /api/v1/data-transfer/export` (khusus Super Admin).
+  - Endpoint impor satu unit usaha `POST /api/v1/data-transfer/import` (khusus Super Admin).
+  - Kartu antarmuka transfer data `DataTransferCard` pada menu Pengaturan Usaha (`/settings/business`) dengan fitur ekspor dan inspeksi dry-run.
+  - **Fase 5: Ambil Gambar dari URL (SSRF Guard & Egress)**:
+    - Modul pengunduhan aman `src/lib/files/remoteImage.ts` dengan perlindungan SSRF: mitigasi DNS Rebinding pada socket TLS, pemblokiran rentang IP terlarang IPv4/IPv6 via `isForbiddenIp`, batas streaming 5 MB, batas redirect 3 kali, dan validasi magic bytes (hanya JPEG, PNG, WebP).
+    - Endpoint ambil logo usaha dari URL: `POST /api/v1/businesses/:id/logo/from-url`.
+    - Endpoint ambil foto produk dari URL: `POST /api/v1/products/:id/images/from-url`.
+    - Integrasi input URL gambar pada antarmuka Pengaturan Usaha (Logo) dan Modal Edit Produk (Foto Produk).
+  - Konfigurasi batas ukuran transfer `TRANSFER_MAX_MB=200` pada `src/lib/env.ts` dan `.env.example`.
+  - Dokumen arsitektur `docs/adr/0008-export-import-json.md` dan panduan migrasi operasional `docs/PINDAH-SERVER.md`.
+
 ## [1.1.0] - 2026-11-10
 
 ### Added
