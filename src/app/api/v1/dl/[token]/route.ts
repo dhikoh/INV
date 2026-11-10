@@ -48,7 +48,11 @@ export async function GET(
     // 3. Evaluasi hak akses dan sajikan dokumen sesuai tipe
     if (payload.type === 'INVOICE_PDF') {
       const invoice = await prisma.invoice.findFirst({
-        where: { id: payload.id, deletedAt: null },
+        where: {
+          id: payload.id,
+          ...(user.businessId ? { businessId: user.businessId } : {}),
+          deletedAt: null,
+        },
         include: {
           business: {
             select: {
@@ -75,7 +79,7 @@ export async function GET(
       }
 
       const order = await prisma.order.findFirst({
-        where: { id: invoice.orderId, deletedAt: null },
+        where: { id: invoice.orderId, businessId: invoice.businessId, deletedAt: null },
         select: {
           id: true,
           orderNo: true,
@@ -195,7 +199,11 @@ export async function GET(
 
     if (payload.type === 'DELIVERY_NOTE_PDF') {
       const order = await prisma.order.findFirst({
-        where: { id: payload.id, deletedAt: null },
+        where: {
+          id: payload.id,
+          ...(user.businessId ? { businessId: user.businessId } : {}),
+          deletedAt: null,
+        },
         include: {
           customer: true,
           business: true,
@@ -223,10 +231,15 @@ export async function GET(
 
       const [shipment, invoices] = await Promise.all([
         prisma.shipment.findFirst({
-          where: { orderId: order.id },
+          where: { orderId: order.id, businessId: order.businessId },
         }),
         prisma.invoice.findMany({
-          where: { orderId: order.id, status: InvoiceStatus.APPROVED, deletedAt: null },
+          where: {
+            orderId: order.id,
+            businessId: order.businessId,
+            status: InvoiceStatus.APPROVED,
+            deletedAt: null,
+          },
           orderBy: { createdAt: 'desc' },
         }),
       ]);

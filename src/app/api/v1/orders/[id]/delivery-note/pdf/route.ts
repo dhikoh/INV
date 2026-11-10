@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import React from 'react';
 import { prisma } from '@/lib/db';
-import { requireContext } from '@/lib/auth/context';
+import { requireContext, requireBusiness } from '@/lib/auth/context';
 import { toErrorResponse } from '@/lib/api/withApi';
 import { DomainError } from '@/lib/domain/money';
 import { Role, InvoiceStatus, ShipStatus } from '@prisma/client';
@@ -15,6 +15,7 @@ export async function GET(
 ): Promise<NextResponse> {
   try {
     const ctx = await requireContext(req, [Role.SUPERADMIN, Role.SALES]);
+    const businessId = requireBusiness(ctx);
     const { id } = await route.params;
 
     if (!id) {
@@ -22,7 +23,7 @@ export async function GET(
     }
 
     const order = await prisma.order.findFirst({
-      where: { id, deletedAt: null },
+      where: { id, businessId, deletedAt: null },
       include: {
         customer: true,
         business: true,
@@ -36,10 +37,6 @@ export async function GET(
       throw new DomainError('NOT_FOUND', 'Pesanan tidak ditemukan', 404);
     }
 
-    if (order.businessId !== ctx.businessId) {
-      throw new DomainError('FORBIDDEN', 'Akses ditolak', 403);
-    }
-
     if (ctx.user.role === Role.SALES && order.salesId !== ctx.user.id) {
       throw new DomainError(
         'FORBIDDEN',
@@ -50,10 +47,10 @@ export async function GET(
 
     const [shipment, invoices] = await Promise.all([
       prisma.shipment.findFirst({
-        where: { orderId: order.id },
+        where: { orderId: order.id, businessId },
       }),
       prisma.invoice.findMany({
-        where: { orderId: order.id, status: InvoiceStatus.APPROVED, deletedAt: null },
+        where: { orderId: order.id, businessId, status: InvoiceStatus.APPROVED, deletedAt: null },
         orderBy: { createdAt: 'desc' },
       }),
     ]);

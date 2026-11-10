@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import React from 'react';
 import { prisma } from '@/lib/db';
-import { requireContext } from '@/lib/auth/context';
+import { requireContext, requireBusiness } from '@/lib/auth/context';
 import { toErrorResponse } from '@/lib/api/withApi';
 import { DomainError } from '@/lib/domain/money';
 import { Role, InvoiceStatus } from '@prisma/client';
@@ -16,6 +16,7 @@ export async function GET(
 ): Promise<NextResponse> {
   try {
     const ctx = await requireContext(req, [Role.SUPERADMIN, Role.SALES]);
+    const businessId = requireBusiness(ctx);
     const { id } = await route.params;
 
     if (!id) {
@@ -25,7 +26,7 @@ export async function GET(
     const preview = req.nextUrl.searchParams.get('preview') === '1';
 
     const invoice = await prisma.invoice.findFirst({
-      where: { id, deletedAt: null },
+      where: { id, businessId, deletedAt: null },
       include: {
         business: {
           select: {
@@ -46,12 +47,8 @@ export async function GET(
       throw new DomainError('INVOICE_NOT_FOUND', 'Invoice tidak ditemukan', 404);
     }
 
-    if (invoice.businessId !== ctx.businessId) {
-      throw new DomainError('FORBIDDEN', 'Akses ditolak', 403);
-    }
-
     const order = await prisma.order.findFirst({
-      where: { id: invoice.orderId, deletedAt: null },
+      where: { id: invoice.orderId, businessId, deletedAt: null },
       select: {
         id: true,
         orderNo: true,

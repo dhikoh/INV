@@ -38,19 +38,15 @@ export const POST = withApi(
     // 1. Validasi hak akses dan status dokumen (persis seperti endpoint unduh PDF langsung)
     if (body.type === 'INVOICE_PDF') {
       const invoice = await prisma.invoice.findFirst({
-        where: { id: body.id, deletedAt: null },
+        where: { id: body.id, businessId, deletedAt: null },
       });
 
       if (!invoice) {
         throw new DomainError('INVOICE_NOT_FOUND', 'Invoice tidak ditemukan', 404);
       }
 
-      if (invoice.businessId !== businessId) {
-        throw new DomainError('FORBIDDEN', 'Akses ditolak', 403);
-      }
-
       const order = await prisma.order.findFirst({
-        where: { id: invoice.orderId, deletedAt: null },
+        where: { id: invoice.orderId, businessId, deletedAt: null },
       });
 
       if (!order) {
@@ -76,15 +72,11 @@ export const POST = withApi(
       }
     } else if (body.type === 'DELIVERY_NOTE_PDF') {
       const order = await prisma.order.findFirst({
-        where: { id: body.id, deletedAt: null },
+        where: { id: body.id, businessId, deletedAt: null },
       });
 
       if (!order) {
         throw new DomainError('NOT_FOUND', 'Pesanan tidak ditemukan', 404);
-      }
-
-      if (order.businessId !== businessId) {
-        throw new DomainError('FORBIDDEN', 'Akses ditolak', 403);
       }
 
       if (ctx.user.role === Role.SALES && order.salesId !== ctx.user.id) {
@@ -96,19 +88,15 @@ export const POST = withApi(
       }
     } else if (body.type === 'CREDIT_NOTE_PDF') {
       const cn = await prisma.creditNote.findFirst({
-        where: { id: body.id, voidedAt: null },
+        where: { id: body.id, businessId, voidedAt: null },
       });
 
       if (!cn) {
         throw new DomainError('NOT_FOUND', 'Nota kredit tidak ditemukan', 404);
       }
 
-      if (cn.businessId !== businessId) {
-        throw new DomainError('FORBIDDEN', 'Akses ditolak', 403);
-      }
-
       const order = await prisma.order.findFirst({
-        where: { id: cn.orderId, deletedAt: null },
+        where: { id: cn.orderId, businessId, deletedAt: null },
       });
 
       if (ctx.user.role === Role.SALES && order?.salesId !== ctx.user.id) {
@@ -116,15 +104,11 @@ export const POST = withApi(
       }
     } else if (body.type === 'CATALOG_PDF') {
       const catalog = await prisma.catalog.findFirst({
-        where: { id: body.id },
+        where: { id: body.id, businessId, deletedAt: null },
       });
 
       if (!catalog) {
         throw new DomainError('NOT_FOUND', 'Katalog tidak ditemukan', 404);
-      }
-
-      if (catalog.businessId !== businessId) {
-        throw new DomainError('FORBIDDEN', 'Akses ditolak', 403);
       }
     }
 

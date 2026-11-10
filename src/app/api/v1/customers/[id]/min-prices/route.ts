@@ -138,12 +138,11 @@ export const PUT = withApi(
 
     // 4. Jalankan upsert dan pencatatan PriceHistory dalam transaksi
     const result = await prisma.$transaction(async (tx) => {
-      const existing = await tx.customerMinPrice.findUnique({
+      const existing = await tx.customerMinPrice.findFirst({
         where: {
-          customerId_productId: {
-            customerId: customer.id,
-            productId: product.id,
-          },
+          businessId,
+          customerId: customer.id,
+          productId: product.id,
         },
       });
 
@@ -152,13 +151,21 @@ export const PUT = withApi(
 
       let record;
       if (existing) {
-        record = await tx.customerMinPrice.update({
-          where: { id: existing.id },
+        await tx.customerMinPrice.updateMany({
+          where: { id: existing.id, businessId },
           data: {
             minPrice: newMinPriceBigInt,
             note: body.note ?? null,
           },
         });
+        record = {
+          id: existing.id,
+          customerId: customer.id,
+          productId: product.id,
+          minPrice: newMinPriceBigInt,
+          note: body.note ?? null,
+          updatedAt: new Date(),
+        };
       } else {
         record = await tx.customerMinPrice.create({
           data: {
@@ -246,12 +253,11 @@ export const DELETE = withApi(
       throw new DomainError('NOT_FOUND', 'Produk tidak ditemukan', 404);
     }
 
-    const existing = await prisma.customerMinPrice.findUnique({
+    const existing = await prisma.customerMinPrice.findFirst({
       where: {
-        customerId_productId: {
-          customerId: customer.id,
-          productId: product.id,
-        },
+        businessId,
+        customerId: customer.id,
+        productId: product.id,
       },
     });
 
@@ -264,8 +270,8 @@ export const DELETE = withApi(
     }
 
     await prisma.$transaction(async (tx) => {
-      await tx.customerMinPrice.delete({
-        where: { id: existing.id },
+      await tx.customerMinPrice.deleteMany({
+        where: { id: existing.id, businessId },
       });
 
       // Catat ke PriceHistory kembalinya floor ke harga default produk

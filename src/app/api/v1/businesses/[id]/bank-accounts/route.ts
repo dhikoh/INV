@@ -3,6 +3,8 @@ import { withApi } from '@/lib/api/withApi';
 import { prisma } from '@/lib/db';
 import { DomainError } from '@/lib/domain/money';
 import { audit } from '@/lib/audit/audit';
+import { requireBusiness } from '@/lib/auth/context';
+import { Role } from '@prisma/client';
 
 const BankAccountCreateSchema = z
   .object({
@@ -23,10 +25,19 @@ const BankAccountCreateSchema = z
 
 export const GET = withApi(
   {
-    roles: ['SUPERADMIN'],
+    roles: [Role.SUPERADMIN],
   },
-  async ({ params }) => {
+  async ({ ctx, params }) => {
+    const sessionBusinessId = requireBusiness(ctx);
     const businessId = params.id;
+
+    if (businessId !== sessionBusinessId) {
+      throw new DomainError(
+        'FORBIDDEN',
+        'Tidak memiliki akses ke rekening unit usaha lain',
+        403
+      );
+    }
 
     const list = await prisma.bankAccount.findMany({
       where: {
@@ -46,11 +57,20 @@ export const GET = withApi(
 
 export const POST = withApi(
   {
-    roles: ['SUPERADMIN'],
+    roles: [Role.SUPERADMIN],
     body: BankAccountCreateSchema,
   },
   async ({ ctx, params, body }) => {
+    const sessionBusinessId = requireBusiness(ctx);
     const businessId = params.id;
+
+    if (businessId !== sessionBusinessId) {
+      throw new DomainError(
+        'FORBIDDEN',
+        'Tidak memiliki akses ke rekening unit usaha lain',
+        403
+      );
+    }
 
     const business = await prisma.business.findFirst({
       where: { id: businessId, deletedAt: null },

@@ -246,12 +246,13 @@ export const DELETE = withApi(
     body: OrderDeleteSchema,
   },
   async ({ ctx, params, body }) => {
-    requireBusiness(ctx);
+    const businessId = requireBusiness(ctx);
     const { id } = params;
 
     const existing = await prisma.order.findFirst({
       where: {
         id,
+        businessId,
         deletedAt: null,
       },
     });

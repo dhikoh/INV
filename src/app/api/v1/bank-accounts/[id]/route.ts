@@ -3,6 +3,7 @@ import { withApi } from '@/lib/api/withApi';
 import { prisma } from '@/lib/db';
 import { DomainError } from '@/lib/domain/money';
 import { audit } from '@/lib/audit/audit';
+import { requireBusiness } from '@/lib/auth/context';
 import { Role } from '@prisma/client';
 
 const BankAccountUpdateSchema = z
@@ -28,7 +29,8 @@ export const GET = withApi(
   {
     roles: [Role.SUPERADMIN],
   },
-  async ({ params }) => {
+  async ({ ctx, params }) => {
+    const businessId = requireBusiness(ctx);
     const id = params?.id;
     if (!id) {
       throw new DomainError('BAD_REQUEST', 'ID rekening bank wajib diisi', 400);
@@ -37,6 +39,7 @@ export const GET = withApi(
     const account = await prisma.bankAccount.findFirst({
       where: {
         id,
+        businessId,
         deletedAt: null,
       },
     });
@@ -57,6 +60,7 @@ export const PATCH = withApi(
     body: BankAccountUpdateSchema,
   },
   async ({ ctx, params, body }) => {
+    const businessId = requireBusiness(ctx);
     const id = params?.id;
     if (!id) {
       throw new DomainError('BAD_REQUEST', 'ID rekening bank wajib diisi', 400);
@@ -65,6 +69,7 @@ export const PATCH = withApi(
     const existing = await prisma.bankAccount.findFirst({
       where: {
         id,
+        businessId,
         deletedAt: null,
       },
     });
@@ -78,7 +83,7 @@ export const PATCH = withApi(
       if (body.isDefault === true) {
         await tx.bankAccount.updateMany({
           where: {
-            businessId: existing.businessId,
+            businessId,
             id: { not: existing.id },
             isDefault: true,
             deletedAt: null,
@@ -101,7 +106,7 @@ export const PATCH = withApi(
         action: 'BANK_ACCOUNT_UPDATE',
         entityType: 'BankAccount',
         entityId: account.id,
-        businessId: existing.businessId,
+        businessId,
         summary: `Perbarui rekening bank ${account.bankName} - ${account.accountNumber}`,
         before: existing,
         after: account,
@@ -121,6 +126,7 @@ export const DELETE = withApi(
     roles: [Role.SUPERADMIN],
   },
   async ({ ctx, params }) => {
+    const businessId = requireBusiness(ctx);
     const id = params?.id;
     if (!id) {
       throw new DomainError('BAD_REQUEST', 'ID rekening bank wajib diisi', 400);
@@ -129,6 +135,7 @@ export const DELETE = withApi(
     const existing = await prisma.bankAccount.findFirst({
       where: {
         id,
+        businessId,
         deletedAt: null,
       },
     });
@@ -150,7 +157,7 @@ export const DELETE = withApi(
         action: 'BANK_ACCOUNT_DELETE',
         entityType: 'BankAccount',
         entityId: existing.id,
-        businessId: existing.businessId,
+        businessId,
         summary: `Hapus rekening bank ${existing.bankName} - ${existing.accountNumber}`,
         before: existing,
       });

@@ -40,8 +40,8 @@ export const GET = withApi(
     const results: PendingPaymentQueueItem[] = [];
 
     for (const p of pendingPayments) {
-      const order = await prisma.order.findUnique({
-        where: { id: p.orderId },
+      const order = await prisma.order.findFirst({
+        where: { id: p.orderId, businessId, deletedAt: null },
         select: {
           orderNo: true,
           salesId: true,
@@ -53,14 +53,14 @@ export const GET = withApi(
       let salesName = '-';
 
       if (order) {
-        const cust = await prisma.customer.findUnique({
-          where: { id: order.customerId },
+        const cust = await prisma.customer.findFirst({
+          where: { id: order.customerId, businessId, deletedAt: null },
           select: { name: true },
         });
         if (cust) customerName = cust.name;
 
-        const sales = await prisma.user.findUnique({
-          where: { id: order.salesId },
+        const sales = await prisma.user.findFirst({
+          where: { id: order.salesId, deletedAt: null },
           select: { name: true },
         });
         if (sales) salesName = sales.name;
