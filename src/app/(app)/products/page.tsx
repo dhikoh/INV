@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { useRouter } from 'next/navigation';
 import {
   Package,
   Plus,
@@ -16,12 +17,15 @@ import {
   Image as ImageIcon,
   Star,
   Upload,
+  Layers,
+  Loader2,
 } from 'lucide-react';
 import { Skeleton, EmptyState, ErrorState } from '@/components/ui/States';
 import { MoneyInput } from '@/components/ui/MoneyInput';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { ConfirmTypeDialog } from '@/components/ui/ConfirmTypeDialog';
 import { formatRupiah } from '@/lib/domain/money';
+import { PatenPrice } from '@/components/ui/PatenPrice';
 
 interface CategoryItem {
   id: string;
@@ -69,6 +73,8 @@ interface ProductDetailItem extends ProductListItem {
 }
 
 export default function ProductsPage() {
+  const router = useRouter();
+
   // User & role
   const [userRole, setUserRole] = useState<'SUPERADMIN' | 'SALES' | null>(null);
   const [activeBusinessName, setActiveBusinessName] = useState<string>('');
@@ -96,6 +102,71 @@ export default function ProductsPage() {
   // Notifications
   const [feedbackSuccess, setFeedbackSuccess] = useState<string | null>(null);
   const [feedbackError, setFeedbackError] = useState<string | null>(null);
+
+  // Modal Buat Katalog dari Produk Aktif (Addendum v2)
+  const [showFromProductsModal, setShowFromProductsModal] = useState(false);
+  const [fromProductsTitle, setFromProductsTitle] = useState('');
+  const [fromProductsCustomerId, setFromProductsCustomerId] = useState('');
+  const [fromProductsCategoryId, setFromProductsCategoryId] = useState('');
+  const [creatingCatalog, setCreatingCatalog] = useState(false);
+  const [fromProductsError, setFromProductsError] = useState<string | null>(null);
+  const [customersList, setCustomersList] = useState<Array<{ id: string; name: string; code: string }>>([]);
+
+  const openFromProductsModal = async () => {
+    setShowFromProductsModal(true);
+    setFromProductsError(null);
+    setFromProductsTitle(
+      `Katalog Penawaran ${activeBusinessName || ''} - ${new Date().toLocaleDateString('id-ID')}`.trim()
+    );
+    if (customersList.length === 0) {
+      try {
+        const cRes = await fetch('/api/v1/customers?limit=100');
+        if (cRes.ok) {
+          const cJson = await cRes.json();
+          if (cJson.ok && Array.isArray(cJson.data)) {
+            setCustomersList(cJson.data);
+          }
+        }
+      } catch {
+        // Abaikan
+      }
+    }
+  };
+
+  const handleCreateFromProducts = async () => {
+    if (!fromProductsTitle.trim()) {
+      setFromProductsError('Judul katalog wajib diisi.');
+      return;
+    }
+    setCreatingCatalog(true);
+    setFromProductsError(null);
+    try {
+      const res = await fetch('/api/v1/catalogs/from-products', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Origin: window.location.origin,
+        },
+        body: JSON.stringify({
+          title: fromProductsTitle.trim(),
+          customerId: fromProductsCustomerId || undefined,
+          categoryId: fromProductsCategoryId || undefined,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setFromProductsError(json?.error?.message || 'Gagal membuat katalog.');
+        return;
+      }
+      setShowFromProductsModal(false);
+      setFromProductsTitle('');
+      router.push(`/catalogs/${json.data.id}`);
+    } catch {
+      setFromProductsError('Terjadi kesalahan jaringan.');
+    } finally {
+      setCreatingCatalog(false);
+    }
+  };
 
   // Modal Tambah Produk
   const [showAddModal, setShowAddModal] = useState(false);
@@ -585,21 +656,34 @@ export default function ProductsPage() {
           <p className="text-sm text-slate-500 mt-1">
             {isSuperAdmin
               ? 'Kelola master produk, pantau HPP modal, margin keuntungan, dan riwayat revisi harga.'
-              : 'Daftar produk dengan harga dasar, harga minimal, dan ketersediaan stok.'}
+              : 'Daftar produk dengan harga katalog, harga paten (batas minimal penawaran), dan ketersediaan stok.'}
           </p>
         </div>
 
-        {/* Tombol Tambah Produk (Hanya Super Admin) */}
-        {isSuperAdmin && (
+        {/* Tombol Aksi Header */}
+        <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={() => setShowAddModal(true)}
-            className="min-h-[44px] px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg text-sm transition-colors flex items-center justify-center gap-2 shadow-sm shrink-0"
+            onClick={openFromProductsModal}
+            className="min-h-[44px] px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg text-sm transition-colors flex items-center justify-center gap-2 shadow-sm shrink-0"
+            title="Buat katalog baru otomatis dari seluruh produk aktif"
           >
-            <Plus className="w-5 h-5" />
-            <span>Tambah Produk</span>
+            <Layers className="w-4 h-4" />
+            <span>Buat Katalog</span>
           </button>
-        )}
+
+          {/* Tombol Tambah Produk (Hanya Super Admin) */}
+          {isSuperAdmin && (
+            <button
+              type="button"
+              onClick={() => setShowAddModal(true)}
+              className="min-h-[44px] px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg text-sm transition-colors flex items-center justify-center gap-2 shadow-sm shrink-0"
+            >
+              <Plus className="w-5 h-5" />
+              <span>Tambah Produk</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Banner Feedback */}
@@ -749,10 +833,10 @@ export default function ProductsPage() {
                     ) : (
                       <>
                         <th scope="col" className="px-4 py-3 text-right">
-                          Harga Dasar
+                          Harga Katalog
                         </th>
                         <th scope="col" className="px-4 py-3 text-right">
-                          Harga Minimal
+                          Harga Paten
                         </th>
                         <th scope="col" className="px-4 py-3 text-right">
                           Tersedia
@@ -859,14 +943,14 @@ export default function ProductsPage() {
                           </>
                         ) : (
                           <>
-                            {/* Harga Dasar (Sales) */}
+                            {/* Harga Katalog (Sales) */}
                             <td className="px-4 py-3 text-right font-mono font-semibold text-slate-900">
                               {formatRupiah(p.basePrice)}
                             </td>
 
-                            {/* Harga Minimal (Sales) */}
-                            <td className="px-4 py-3 text-right font-mono text-xs text-slate-700">
-                              {formatRupiah(p.minPrice)}
+                            {/* Harga Paten (Sales) */}
+                            <td className="px-4 py-3 text-right font-mono text-xs">
+                              <PatenPrice value={p.minPrice} showPrefix={false} />
                             </td>
 
                             {/* Stok Tersedia (Sales) */}
@@ -1004,16 +1088,14 @@ export default function ProductsPage() {
                   ) : (
                     <div className="grid grid-cols-2 gap-2 p-2.5 bg-slate-50 rounded-lg text-xs">
                       <div>
-                        <span className="text-slate-400 block">Harga Dasar:</span>
+                        <span className="text-slate-400 block">Harga Katalog:</span>
                         <span className="font-mono font-bold text-slate-900">
                           {formatRupiah(p.basePrice)}
                         </span>
                       </div>
                       <div>
-                        <span className="text-slate-400 block">Harga Minimal:</span>
-                        <span className="font-mono text-slate-700">
-                          {formatRupiah(p.minPrice)}
-                        </span>
+                        <span className="text-slate-400 block">Harga Paten:</span>
+                        <PatenPrice value={p.minPrice} showPrefix={false} />
                       </div>
                       <div className="col-span-2 pt-1 border-t border-slate-200 flex justify-between items-center">
                         <span className="text-slate-500">Stok Tersedia:</span>
@@ -1228,6 +1310,18 @@ export default function ProductsPage() {
                       ).toFixed(1)}
                       %)
                     </span>
+                  </div>
+                )}
+
+                {/* Peringatan Kerahasiaan HPP bila minPrice <= costPrice */}
+                {newProduct.costPrice > 0 && newProduct.minPrice <= newProduct.costPrice && (
+                  <div className="p-3 bg-amber-50 border border-amber-300 rounded-lg text-amber-900 text-xs flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-semibold block">Peringatan Kerahasiaan HPP:</span>
+                      Harga paten ({formatRupiah(newProduct.minPrice)}) sama dengan atau lebih rendah dari HPP modal ({formatRupiah(newProduct.costPrice)}).
+                      Staf Sales dapat melihat harga paten ini, sehingga berisiko menebak modal HPP produk.
+                    </div>
                   </div>
                 )}
               </div>
@@ -1591,6 +1685,18 @@ export default function ProductsPage() {
                     />
                   </div>
 
+                  {/* Peringatan Kerahasiaan HPP bila minPrice <= costPrice */}
+                  {editForm.costPrice > 0 && editForm.minPrice <= editForm.costPrice && (
+                    <div className="p-3 bg-amber-50 border border-amber-300 rounded-lg text-amber-900 text-xs flex items-start gap-2">
+                      <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                      <div>
+                        <span className="font-semibold block">Peringatan Kerahasiaan HPP:</span>
+                        Harga paten ({formatRupiah(editForm.minPrice)}) sama dengan atau lebih rendah dari HPP modal ({formatRupiah(editForm.costPrice)}).
+                        Staf Sales dapat melihat harga paten ini, sehingga berisiko menebak modal HPP produk.
+                      </div>
+                    </div>
+                  )}
+
                   {/* Input Alasan Perubahan Harga (Wajib diisi jika harga berubah) */}
                   {isPriceChanged && (
                     <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg space-y-1.5 animate-in fade-in">
@@ -1709,6 +1815,118 @@ export default function ProductsPage() {
                 </div>
               </form>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Modal Buat Katalog dari Daftar Produk Aktif (Addendum v2) */}
+      {showFromProductsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white w-full max-w-md rounded-2xl shadow-xl border border-slate-200 overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Layers className="w-5 h-5 text-emerald-600" />
+                <h3 className="font-bold text-slate-900 text-base">
+                  Buat Katalog Baru
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowFromProductsModal(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4 overflow-y-auto">
+              {fromProductsError && (
+                <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-xs flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{fromProductsError}</span>
+                </div>
+              )}
+
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">
+                  Judul Katalog <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={fromProductsTitle}
+                  onChange={(e) => setFromProductsTitle(e.target.value)}
+                  placeholder="Misal: Katalog Penawaran Grosir..."
+                  className="w-full min-h-[44px] px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-900"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">
+                  Sasaran Pelanggan (Opsional)
+                </label>
+                <select
+                  value={fromProductsCustomerId}
+                  onChange={(e) => setFromProductsCustomerId(e.target.value)}
+                  className="w-full min-h-[44px] px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-900"
+                >
+                  <option value="">-- Katalog Terbuka / Semua Pelanggan --</option>
+                  {customersList.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      [{c.code}] {c.name}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[11px] text-slate-500 mt-1">
+                  Jika dipilih, harga paten khusus pelanggan akan otomatis diterapkan.
+                </p>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">
+                  Filter Kategori (Opsional)
+                </label>
+                <select
+                  value={fromProductsCategoryId}
+                  onChange={(e) => setFromProductsCategoryId(e.target.value)}
+                  className="w-full min-h-[44px] px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-900"
+                >
+                  <option value="">-- Semua Kategori Produk Aktif --</option>
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="p-3 bg-emerald-50 rounded-lg border border-emerald-200 text-emerald-900 text-xs">
+                Sistem akan menyalin seluruh produk aktif yang sesuai ke dalam katalog baru dengan harga awal otomatis disetel ke harga paten atau dasar.
+              </div>
+            </div>
+
+            <div className="px-5 py-3.5 bg-slate-50 border-t border-slate-200 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowFromProductsModal(false)}
+                className="px-4 py-2 text-xs font-medium text-slate-700 hover:bg-slate-200 rounded-lg"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleCreateFromProducts}
+                disabled={creatingCatalog || !fromProductsTitle.trim()}
+                className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg disabled:opacity-50"
+              >
+                {creatingCatalog ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Layers className="w-4 h-4" />
+                )}
+                <span>Buat Katalog Sekarang</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

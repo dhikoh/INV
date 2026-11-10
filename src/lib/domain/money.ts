@@ -19,10 +19,10 @@ export function isDomainError(e: unknown): e is DomainError {
     e instanceof DomainError ||
     (typeof e === 'object' &&
       e !== null &&
-      (('name' in e && (e as any).name === 'DomainError') ||
+      (('name' in e && (e as Record<string, unknown>).name === 'DomainError') ||
         ('code' in e &&
           'status' in e &&
-          typeof (e as any).status === 'number' &&
+          typeof (e as Record<string, unknown>).status === 'number' &&
           'message' in e)))
   );
 }

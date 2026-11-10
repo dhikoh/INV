@@ -22,6 +22,7 @@ import {
 import { MoneyInput } from '@/components/ui/MoneyInput';
 import { PercentInput } from '@/components/ui/PercentInput';
 import { formatRupiah } from '@/lib/domain/money';
+import { PatenPrice } from '@/components/ui/PatenPrice';
 
 export interface CustomerOption {
   id: string;
@@ -749,7 +750,7 @@ export function OrderForm({
                             <option value="">-- Pilih Produk --</option>
                             {products.map((p) => (
                               <option key={p.id} value={p.id}>
-                                [{p.sku}] {p.name} - Rp {formatRupiah(p.basePrice)} / {p.unit}
+                                [{p.sku}] {p.name} - Katalog: {formatRupiah(p.basePrice)}, Paten: {formatRupiah(p.minPrice)} / {p.unit}
                               </option>
                             ))}
                           </select>
@@ -910,13 +911,8 @@ export function OrderForm({
                       <div className="pt-2 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between text-xs gap-2">
                         <div className="flex items-center gap-1.5 text-slate-500">
                           <HelpCircle className="w-3.5 h-3.5 text-slate-400" />
-                          <span>
-                            Harga minimal efektif:{' '}
-                            <strong className="text-slate-700">
-                              Rp {formatRupiah(floorPrice || 0)}
-                            </strong>{' '}
-                            / unit
-                          </span>
+                          <PatenPrice value={floorPrice || 0} />
+                          <span className="text-slate-400">/ unit</span>
                         </div>
 
                         {previewLine && (

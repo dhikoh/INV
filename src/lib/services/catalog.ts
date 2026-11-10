@@ -4,12 +4,16 @@ import sharp from 'sharp';
 import { prisma } from '@/lib/db';
 import { Role, InvoiceTheme, Prisma } from '@prisma/client';
 import { Ctx, requireBusiness } from '@/lib/auth/context';
-import { DomainError } from '@/lib/domain/money';
-import { baseFloor } from '@/lib/domain/pricing';
+import { DomainError, fromDb, toDb } from '@/lib/domain/money';
+import { baseFloor, effectiveFloor, initialPrice } from '@/lib/domain/pricing';
 import { getLogoDataUri } from '@/lib/pdf/logo';
 import { renderReactToHtml, renderHtmlToPdf } from '@/lib/pdf/engine';
 import { CatalogDocument, CatalogPdfItem, CatalogPdfData } from '@/lib/pdf/CatalogDocument';
 import { env } from '@/lib/env';
+import { customerScope } from './scopes';
+import {
+  CatalogFromProductsInput,
+} from '../validation/priceList';
 export type TxClient = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
 
 export interface CatalogItemInput {
@@ -321,6 +325,28 @@ export async function getCatalogById(ctx: Ctx, id: string) {
     };
   });
 
+  // Status sinkronisasi (Addendum v2 13.7 & 14.5)
+  const catalogProductIds = catalog.items.map((i) => i.productId);
+  const newProductsCount =
+    typeof prisma.product.count === 'function'
+      ? await prisma.product.count({
+          where: {
+            businessId,
+            isActive: true,
+            deletedAt: null,
+            id: { notIn: catalogProductIds },
+          },
+        })
+      : 0;
+
+  let inactiveCount = 0;
+  for (const item of catalog.items) {
+    const prod = productMap.get(item.productId);
+    if (!prod || prod.deletedAt !== null) {
+      inactiveCount++;
+    }
+  }
+
   return {
     id: catalog.id,
     title: catalog.title,
@@ -331,10 +357,41 @@ export async function getCatalogById(ctx: Ctx, id: string) {
     ownerName: owner?.name || 'Sales',
     hasStaleItems,
     staleItems,
+    sync: {
+      newProducts: newProductsCount,
+      belowFloor: staleItems.length,
+      inactive: inactiveCount,
+    },
     items,
     createdAt: catalog.createdAt.toISOString(),
     updatedAt: catalog.updatedAt.toISOString(),
   };
+}
+
+/**
+ * Memuat produk aktif dan memverifikasi kepemilikan tenant (Addendum v2 14.5).
+ */
+export async function loadActiveProducts(
+  tx: TxClient,
+  businessId: string,
+  ids: string[]
+) {
+  const rows = await tx.product.findMany({
+    where: { businessId, id: { in: ids }, deletedAt: null },
+  });
+  if (rows.length !== new Set(ids).size) {
+    throw new DomainError('NOT_FOUND', 'Data tidak ditemukan', 404);
+  }
+  const inactive = rows.filter((r) => !r.isActive);
+  if (inactive.length) {
+    throw new DomainError(
+      'PRODUCT_INACTIVE',
+      'Ada produk yang tidak aktif',
+      422,
+      inactive.map((r) => ({ productId: r.id, name: r.name }))
+    );
+  }
+  return rows;
 }
 
 /**
@@ -348,30 +405,22 @@ export async function validateCatalogItems(
 ): Promise<void> {
   if (items.length === 0) return;
 
+  if (items.length > 300) {
+    throw new DomainError(
+      'CATALOG_ITEM_LIMIT',
+      'Katalog maksimal 300 produk. Pilih kategori atau produk tertentu.',
+      422
+    );
+  }
+
   const productIds = items.map((i) => i.productId);
   const uniqueProductIds = new Set(productIds);
   if (uniqueProductIds.size !== productIds.length) {
     throw new DomainError('DUPLICATE_PRODUCT', 'Satu produk hanya boleh dimasukkan satu kali per katalog', 422);
   }
 
-  // Hanya produk aktif yang bisa dimasukkan
-  const products = await tx.product.findMany({
-    where: {
-      id: { in: productIds },
-      businessId,
-      deletedAt: null,
-    },
-    select: {
-      id: true,
-      name: true,
-      minPrice: true,
-    },
-  });
-
-  if (products.length !== productIds.length) {
-    throw new DomainError('PRODUCT_NOT_FOUND', 'Satu atau lebih produk tidak ditemukan atau tidak aktif', 404);
-  }
-
+  // Hanya produk aktif dan milik usaha sesi yang bisa dimasukkan
+  const products = await loadActiveProducts(tx, businessId, productIds);
   const productMap = new Map(products.map((p) => [p.id, p]));
 
   // Muat customer min price bila customer terhubung
@@ -650,6 +699,221 @@ export async function deleteCatalog(ctx: Ctx, id: string) {
   });
 
   return { success: true };
+}
+
+/**
+ * 8. Membuat katalog langsung dari daftar produk usaha dalam satu transaksi (Addendum v2 14.5).
+ */
+export async function createFromProducts(
+  ctx: Ctx,
+  businessId: string,
+  input: CatalogFromProductsInput
+): Promise<string> {
+  return prisma.$transaction(async (tx) => {
+    let customerId: string | null = null;
+    let customerMins = new Map<string, number>();
+
+    if (input.customerId) {
+      const c = await tx.customer.findFirst({
+        where: { id: input.customerId, ...customerScope(ctx, businessId) },
+        select: { id: true },
+      });
+      if (!c) {
+        throw new DomainError('NOT_FOUND', 'Data tidak ditemukan', 404);
+      }
+      customerId = c.id;
+
+      const mins = await tx.customerMinPrice.findMany({
+        where: { businessId, customerId },
+      });
+      customerMins = new Map(mins.map((m) => [m.productId, fromDb(m.minPrice)]));
+    }
+
+    const products = input.productIds
+      ? await loadActiveProducts(tx, businessId, input.productIds)
+      : await tx.product.findMany({
+          where: {
+            businessId,
+            isActive: true,
+            deletedAt: null,
+            ...(input.categoryId ? { categoryId: input.categoryId } : {}),
+          },
+          orderBy: { name: 'asc' },
+          take: 301,
+        });
+
+    if (products.length === 0) {
+      throw new DomainError(
+        'VALIDATION_ERROR',
+        'Tidak ada produk aktif untuk dimasukkan',
+        422
+      );
+    }
+    if (products.length > 300) {
+      throw new DomainError(
+        'CATALOG_ITEM_LIMIT',
+        'Katalog maksimal 300 produk. Pilih kategori atau produk tertentu.',
+        422
+      );
+    }
+
+    const catalog = await tx.catalog.create({
+      data: {
+        businessId,
+        ownerId: ctx.user.id,
+        customerId,
+        title: input.title,
+        note: input.note ?? null,
+      },
+    });
+
+    await tx.catalogItem.createMany({
+      data: products.map((p, i) => {
+        const floor = effectiveFloor(
+          fromDb(p.minPrice),
+          customerMins.get(p.id) ?? null
+        ).value;
+        const initial = initialPrice(fromDb(p.basePrice), floor);
+        return {
+          catalogId: catalog.id,
+          productId: p.id,
+          sortOrder: i,
+          price: toDb(initial),
+        };
+      }),
+    });
+
+    await tx.auditLog.create({
+      data: {
+        businessId,
+        actorId: ctx.user.id,
+        actorRole: ctx.user.role,
+        action: 'CATALOG_CREATE_FROM_PRODUCTS',
+        entityType: 'Catalog',
+        entityId: catalog.id,
+        summary: `Katalog "${catalog.title}" dibuat otomatis dari ${products.length} produk usaha`,
+      },
+    });
+
+    return catalog.id;
+  });
+}
+
+/**
+ * 9. Menyinkronkan katalog: tambah produk baru dan/atau menaikkan harga ke batas paten (Addendum v2 14.5).
+ */
+export async function syncCatalog(
+  ctx: Ctx,
+  businessId: string,
+  id: string,
+  input: { addNewProducts?: boolean; raiseToFloor?: boolean }
+): Promise<{ added: number; raised: number; skippedInactive: number }> {
+  return prisma.$transaction(async (tx) => {
+    const catalog = await tx.catalog.findFirst({
+      where: {
+        id,
+        businessId,
+        deletedAt: null,
+        ...(ctx.role === 'SALES' ? { ownerId: ctx.user.id } : {}),
+      },
+      include: { items: true },
+    });
+    if (!catalog) {
+      throw new DomainError('NOT_FOUND', 'Katalog tidak ditemukan', 404);
+    }
+
+    const customerMins = new Map<string, number>();
+    if (catalog.customerId) {
+      const mins = await tx.customerMinPrice.findMany({
+        where: { businessId, customerId: catalog.customerId },
+      });
+      for (const m of mins) {
+        customerMins.set(m.productId, fromDb(m.minPrice));
+      }
+    }
+
+    const floorOf = (p: { id: string; minPrice: bigint }) =>
+      effectiveFloor(fromDb(p.minPrice), customerMins.get(p.id) ?? null).value;
+
+    let added = 0;
+    let raised = 0;
+    let skippedInactive = 0;
+
+    if (input.addNewProducts) {
+      const have = catalog.items.map((i) => i.productId);
+      const fresh = await tx.product.findMany({
+        where: {
+          businessId,
+          isActive: true,
+          deletedAt: null,
+          id: { notIn: have },
+        },
+        orderBy: { name: 'asc' },
+      });
+
+      if (have.length + fresh.length > 300) {
+        throw new DomainError(
+          'CATALOG_ITEM_LIMIT',
+          'Katalog maksimal 300 produk. Hapus beberapa item dulu.',
+          422
+        );
+      }
+
+      if (fresh.length > 0) {
+        const res = await tx.catalogItem.createMany({
+          data: fresh.map((p, i) => ({
+            catalogId: catalog.id,
+            productId: p.id,
+            sortOrder: have.length + i,
+            price: toDb(initialPrice(fromDb(p.basePrice), floorOf(p))),
+          })),
+          skipDuplicates: true,
+        });
+        added = res.count;
+      }
+    }
+
+    if (input.raiseToFloor) {
+      const products = await tx.product.findMany({
+        where: {
+          businessId,
+          id: { in: catalog.items.map((i) => i.productId) },
+          deletedAt: null,
+        },
+      });
+      const byId = new Map(products.map((p) => [p.id, p]));
+
+      for (const item of catalog.items) {
+        const p = byId.get(item.productId);
+        if (!p || !p.isActive) {
+          skippedInactive++;
+          continue;
+        }
+        const floor = floorOf(p);
+        if (fromDb(item.price) < floor) {
+          await tx.catalogItem.update({
+            where: { id: item.id },
+            data: { price: toDb(floor) },
+          });
+          raised++;
+        }
+      }
+    }
+
+    await tx.auditLog.create({
+      data: {
+        businessId,
+        actorId: ctx.user.id,
+        actorRole: ctx.user.role,
+        action: 'CATALOG_SYNC',
+        entityType: 'Catalog',
+        entityId: catalog.id,
+        summary: `Katalog "${catalog.title}" disinkronkan: ${added} produk baru, ${raised} dinaikkan ke paten, ${skippedInactive} nonaktif dilewati`,
+      },
+    });
+
+    return { added, raised, skippedInactive };
+  });
 }
 
 /**

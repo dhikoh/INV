@@ -5,10 +5,12 @@ import {
   isBelowFloor,
   isPromoActive,
   promoPerUnit,
+  effectiveFloor,
+  initialPrice,
   PromoRule,
 } from '@/lib/domain/pricing';
 
-describe('Domain: pricing.ts (7.2, 17.2)', () => {
+describe('Domain: pricing.ts (7.2, 17.2, Addendum v2 14.4)', () => {
   it('harga minimal customer menimpa harga minimal produk', () => {
     expect(baseFloor(15000, 12000)).toBe(12000);
     expect(baseFloor(15000, null)).toBe(15000);
@@ -70,5 +72,25 @@ describe('Domain: pricing.ts (7.2, 17.2)', () => {
     };
     expect(promoPerUnit(bigPromo, 100000)).toBe(100000);
     expect(lineFloor(100000, bigPromo)).toBe(0);
+  });
+
+  describe('Addendum v2 14.4: effectiveFloor & initialPrice', () => {
+    it('effectiveFloor(100, 120) memberi { value: 120, source: "CUSTOMER" }', () => {
+      expect(effectiveFloor(100, 120)).toEqual({ value: 120, source: 'CUSTOMER' });
+    });
+
+    it('effectiveFloor(100, null) memberi { value: 100, source: "PRODUCT" }', () => {
+      expect(effectiveFloor(100, null)).toEqual({ value: 100, source: 'PRODUCT' });
+    });
+
+    it('effectiveFloor(100, 80) memberi { value: 80, source: "CUSTOMER" }', () => {
+      expect(effectiveFloor(100, 80)).toEqual({ value: 80, source: 'CUSTOMER' });
+    });
+
+    it('initialPrice: yang lebih besar dari basePrice dan floorPrice', () => {
+      expect(initialPrice(150, 130)).toBe(150);
+      expect(initialPrice(100, 120)).toBe(120);
+      expect(initialPrice(100, 100)).toBe(100);
+    });
   });
 });

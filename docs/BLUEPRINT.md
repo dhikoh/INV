@@ -124,6 +124,9 @@ Daftar tabel inti:
 | Kelola akun Sales, target, dan skema komisi            | Ya                                 | Tidak                                             |
 | Kelola vendor (pemasok & ekspedisi)                    | Ya                                 | Tidak                                             |
 | Lihat produk                                           | Semua, lengkap dengan HPP & margin | Produk aktif, tanpa HPP, ada harga minimal & stok |
+| Lihat daftar harga resmi & harga paten (/price-list)   | Ya (semua customer floor)          | Ya (hanya customer sendiri, tanpa HPP)            |
+| Buat katalog dari produk aktif (/from-products)        | Ya                                 | Ya (hanya produk aktif usaha)                     |
+| Sinkronkan katalog ke harga paten (/sync)              | Ya                                 | Ya (katalog milik sendiri)                        |
 | Ubah harga master produk & riwayat HPP                 | Ya                                 | Tidak                                             |
 | Ajukan order baru                                      | Ya                                 | Ya (hanya untuk customernya sendiri)              |
 | Ajukan harga di bawah minimal                          | -                                  | Ya (wajib sertakan alasan pengajuan)              |
@@ -220,6 +223,7 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
 | `POST`     | `/api/v1/products/:id/images`  | Super Admin        | Unggah foto produk (maksimal 8, WebP 1600px)  |
 | `PATCH/DELETE` | `/api/v1/products/:id/images/:imageId` | Super Admin | Atur foto utama/urutan, hapus foto         |
 | `GET`      | `/api/v1/products/:id/price-history` | Super Admin  | Riwayat perubahan harga produk                |
+| `GET`      | `/api/v1/price-list`           | Super Admin, Sales | Daftar harga resmi (katalog & paten), evaluasi floorPrice efektif, 11 kunci DTO |
 | `GET/POST` | `/api/v1/vendors`              | Super Admin        | Master vendor & ekspedisi (SUPPLIER/TRANSPORT) |
 | `GET/PATCH/DELETE` | `/api/v1/vendors/:id`  | Super Admin        | Detail, perbarui, soft delete vendor           |
 | `GET`      | `/api/v1/updates`              | Super Admin, Sales | Daftar catatan rilis (SA draft & terbit, Sales terbit saja) |
@@ -299,9 +303,11 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
 | `GET`      | `/api/v1/receivables`          | Super Admin, Sales | Daftar umur piutang (5 aging bucket), ringkasan overdue, Zero-Leakage  |
 | `GET`      | `/api/v1/catalog-presets`      | Super Admin, Sales | Daftar preset judul katalog harga ('Grosir', 'Distributor Tunggal', 'Ecer') |
 | `GET/POST` | `/api/v1/catalogs`             | Super Admin, Sales | Daftar katalog (isolasi Sales) & buat katalog baru (validasi floor PRICE_BELOW_MIN) |
+| `POST`     | `/api/v1/catalogs/from-products` | Super Admin, Sales | Buat katalog baru otomatis dari daftar produk aktif usaha dalam 1 transaksi |
 | `GET/PATCH/DELETE` | `/api/v1/catalogs/:id` | Super Admin, Sales | Detail katalog (evaluasi stale), update metadata, & soft delete katalog |
 | `PUT`      | `/api/v1/catalogs/:id/items`   | Super Admin, Sales | Ganti seluruh item katalog dengan validasi floor price |
 | `POST`     | `/api/v1/catalogs/:id/adjust-min` | Super Admin, Sales | Sesuaikan seluruh item stale ke harga minimal terbaru |
+| `POST`     | `/api/v1/catalogs/:id/sync`    | Super Admin, Sales | Sinkronkan katalog (tambah produk baru & naikkan harga di bawah paten) |
 | `GET`      | `/api/v1/catalogs/:id/pdf`     | Super Admin, Sales | Unduh berkas PDF katalog resmi (tolak 422 CATALOG_STALE jika stale, Zero-Leakage) |
 | `GET`      | `/api/v1/dashboard`            | Super Admin, Sales | Ringkasan operasional & keuangan (DTO per role, metrik SA, fokus hari ini sales, Zero-Leakage) |
 | `GET`      | `/api/v1/reports/margin`       | Super Admin        | Laporan margin & profit (groupBy=order,product,sales,business, baris kerugian pembatalan Seksi 9.2, Zero-Leakage) |
@@ -451,6 +457,7 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
 3. [ADR 0003: Konfigurasi Datasource Prisma 7 dan Driver Adapter PostgreSQL](file:///D:/Data%20BentoCat/docs/adr/0003-prisma-7-config.md) - Penyesuaian konfigurasi prisma.config.ts, @prisma/adapter-pg, dan pglite.
 4. [ADR 0004: Arsitektur Worker pg-boss dan Bot grammY](file:///D:/Data%20BentoCat/docs/adr/0004-pg-boss-grammy.md) - Pemisahan proses background worker dan integrasi grammY + pg-boss v12.
 5. [ADR 0005: Adopsi ExcelJS untuk Ekspor Laporan Tabular dan Mitigasi Formula Injection](file:///D:/Data%20BentoCat/docs/adr/0005-exceljs-export.md) - Penggunaan exceljs v4.4.0 dan perlindungan sel berawalan =, +, -, @ (Seksi 16.4).
+6. [ADR 0006: Harga Paten, Katalog Terintegrasi Multi-Usaha, dan Isolasi Database Lapis PostgreSQL](file:///D:/Data%20BentoCat/docs/adr/0006-harga-paten-dan-katalog-terintegrasi.md) - Implementasi Addendum v2, trigger DB `catalogitem_same_business_trg`, dan DTO price list 11 kunci.
 
 ---
 

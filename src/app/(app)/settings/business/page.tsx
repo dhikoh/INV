@@ -301,7 +301,7 @@ export default function BusinessSettingsPage() {
   // Jadikan Default Rekening Bank
   const handleSetDefaultBank = async (bankId: string) => {
     try {
-      const res = await fetch(`/api/v1/bank-accounts/${bankId}`, {
+      await fetch(`/api/v1/bank-accounts/${bankId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ isDefault: true }),
@@ -316,7 +316,7 @@ export default function BusinessSettingsPage() {
   const handleDeleteBank = async (bankId: string) => {
     if (!confirm('Apakah Anda yakin ingin menghapus rekening ini?')) return;
     try {
-      const res = await fetch(`/api/v1/bank-accounts/${bankId}`, {
+      await fetch(`/api/v1/bank-accounts/${bankId}`, {
         method: 'DELETE',
       });
       await loadBusinessDetail(selectedId);

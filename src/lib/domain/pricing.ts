@@ -38,6 +38,29 @@ export const baseFloor = (
   customerMin: Rupiah | null
 ): Rupiah => customerMin ?? productMin;
 
+export type FloorSource = 'CUSTOMER' | 'PRODUCT';
+
+/**
+ * Harga paten efektif per produk dan (opsional) customer (Addendum v2 14.4).
+ * Tanpa promo: promo hanya berlaku di baris order (Seksi 7.2).
+ */
+export function effectiveFloor(
+  productMin: Rupiah,
+  customerMin: Rupiah | null
+): { value: Rupiah; source: FloorSource } {
+  return {
+    value: baseFloor(productMin, customerMin),
+    source: customerMin !== null ? 'CUSTOMER' : 'PRODUCT',
+  };
+}
+
+/**
+ * Harga awal baris order dan item katalog (D-6):
+ * Yang lebih besar dari harga katalog (basePrice) dan harga paten (floor).
+ */
+export const initialPrice = (basePrice: Rupiah, floor: Rupiah): Rupiah =>
+  basePrice >= floor ? basePrice : floor;
+
 export function lineFloor(base: Rupiah, promo: PromoRule | null): Rupiah {
   return promo ? Math.max(0, base - promoPerUnit(promo, base)) : base;
 }

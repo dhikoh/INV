@@ -6,6 +6,33 @@ dan proyek ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-10
+
+### Added
+
+- **Fitur Harga Paten & Katalog Terintegrasi Multi-Usaha (Addendum v2)**:
+  - **Isolasi Database Lapis PostgreSQL (`prisma/migrations/20261110000003_catalog_same_business_guard`)**:
+    - Trigger `catalogitem_same_business_trg` dan fungsi `catalogitem_same_business()` pada PostgreSQL yang memblokir penambahan produk lintas unit usaha pada katalog dengan kode error PostgreSQL `23514` (`check_violation`).
+    - Suite tes integrasi `tests/integration/catalog-isolation.test.ts` memvalidasi pencegahan cross-tenant pada level database.
+  - **Logika Domain Harga Paten (`src/lib/domain/pricing.ts`)**:
+    - Fungsi `effectiveFloor(productMin, customerMin)` untuk mengevaluasi harga paten efektif per customer dan sumber penentunya (`PRODUCT` vs `CUSTOMER`).
+    - Fungsi `initialPrice(basePrice, floorPrice)` untuk menghitung harga awal rekomendasi $\max(\text{basePrice}, \text{floorPrice})$.
+  - **Endpoint Daftar Harga Resmi & Kerahasiaan Margin (`GET /api/v1/price-list`)**:
+    - Validasi query ketat (`PriceListQuery.strict()`) dengan filter pencarian, kategori, customer scope, dan paginasi.
+    - DTO whitelist persis 11 kunci (`PriceListItemDto`) yang menjamin tidak ada kebocoran HPP (`costPrice`), margin, maupun stok riil ke staf sales (Zero-Leakage).
+  - **Pembuatan dan Sinkronisasi Katalog Otomatis**:
+    - `POST /api/v1/catalogs/from-products`: Pembuatan katalog baru dalam 1 transaksi atomik dari seluruh produk aktif unit usaha dengan batas maksimal 300 item (`CATALOG_ITEM_LIMIT`).
+    - `POST /api/v1/catalogs/:id/sync`: Sinkronisasi selektif produk baru (`addNewProducts`) dan penyesuaian harga item ke harga paten terbaru (`raiseToFloor`).
+  - **Antarmuka Pengguna & Komponen Harga Paten**:
+    - Komponen UI `PatenPrice` dengan badge visual pembeda sumber floor (Paten Usaha vs Paten Khusus Pelanggan).
+    - Integrasi daftar harga pada `/products` dengan label resmi "Harga Katalog" dan "Harga Paten".
+    - Tombol pembuatan katalog instan "Buat katalog dari daftar ini" pada halaman produk.
+    - Peringatan margin pada formulir produk Super Admin bila harga paten sama atau di bawah HPP (`minPrice <= costPrice`).
+    - Penayangan harga paten pada formulir pesanan (`OrderForm`) dan detail katalog (`/catalogs/[id]`) dengan aksi sinkronisasi otomatis.
+  - **Arsitektur & Dokumentasi**:
+    - ADR 0006: Harga Paten, Katalog Terintegrasi Multi-Usaha, dan Isolasi Database Lapis PostgreSQL.
+    - Pembaruan spesifikasi dan tabel rute pada `docs/BLUEPRINT.md`.
+
 ## [1.0.0] - 2026-11-09
 
 ### Added

@@ -20,6 +20,8 @@ import {
 import { Skeleton } from '@/components/ui/States';
 import { MoneyInput } from '@/components/ui/MoneyInput';
 import { formatRupiah } from '@/lib/domain/money';
+import { PatenPrice } from '@/components/ui/PatenPrice';
+import { FloorSource } from '@/lib/domain/pricing';
 import { useIsOnline } from '@/components/pwa/OfflineBanner';
 
 interface CustomerSummary {
@@ -40,6 +42,9 @@ interface CatalogDetailItem {
   isStale: boolean;
   isDeleted: boolean;
   imagePath: string | null;
+  floorSource?: FloorSource;
+  catalogPrice?: number;
+  patenPrice?: number;
 }
 
 interface CatalogDetail {
@@ -56,6 +61,11 @@ interface CatalogDetail {
   items: CatalogDetailItem[];
   createdAt: string;
   updatedAt: string;
+  sync?: {
+    newProducts: number;
+    belowFloor: number;
+    inactive: number;
+  };
 }
 
 export default function CatalogDetailPage() {
@@ -80,6 +90,12 @@ export default function CatalogDetailPage() {
   const [deleting, setDeleting] = useState(false);
   const [offlineSaved, setOfflineSaved] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Sync state (Addendum v2)
+  const [syncing, setSyncing] = useState(false);
+  const [showSyncModal, setShowSyncModal] = useState(false);
+  const [syncAddNew, setSyncAddNew] = useState(true);
+  const [syncRaiseFloor, setSyncRaiseFloor] = useState(true);
 
   const fetchCatalog = useCallback(async () => {
     if (!catalogId) return;
@@ -211,6 +227,43 @@ export default function CatalogDetailPage() {
     }
   };
 
+  // Sinkronkan katalog (POST /sync - Addendum v2)
+  const handleSync = async () => {
+    if (!catalog) return;
+    if (!syncAddNew && !syncRaiseFloor) {
+      showToast('Pilih minimal satu opsi sinkronisasi.');
+      return;
+    }
+    setSyncing(true);
+    try {
+      const res = await fetch(`/api/v1/catalogs/${catalog.id}/sync`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Origin: window.location.origin,
+        },
+        body: JSON.stringify({
+          addNewProducts: syncAddNew,
+          raiseToFloor: syncRaiseFloor,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        showToast(json?.error?.message || 'Gagal menyinkronkan katalog.');
+        return;
+      }
+      setShowSyncModal(false);
+      showToast(
+        `Sinkronisasi selesai: ${json.data.added} produk baru ditambahkan, ${json.data.updated} harga diperbarui.`
+      );
+      fetchCatalog();
+    } catch {
+      showToast('Terjadi kesalahan jaringan.');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   // Simpan perubahan harga item (PUT /items)
   const handleSaveItems = async () => {
     if (!catalog) return;
@@ -220,7 +273,7 @@ export default function CatalogDetailPage() {
       const currentVal = editablePrices.get(item.productId) ?? item.price;
       if (currentVal < item.floorPrice) {
         showToast(
-          `Harga untuk "${item.name}" tidak boleh di bawah harga minimal (${formatRupiah(
+          `Harga untuk "${item.name}" tidak boleh di bawah harga paten (${formatRupiah(
             item.floorPrice
           )}).`
         );
@@ -401,6 +454,21 @@ export default function CatalogDetailPage() {
 
           <button
             type="button"
+            onClick={() => setShowSyncModal(true)}
+            disabled={syncing || !isOnline}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium text-indigo-800 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg transition-colors"
+            title="Sinkronkan produk baru dan sesuaikan harga ke harga paten"
+          >
+            {syncing ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <RefreshCw className="w-3.5 h-3.5" />
+            )}
+            <span>Sinkronkan</span>
+          </button>
+
+          <button
+            type="button"
             onClick={handleDownloadPdf}
             disabled={downloadingPdf}
             className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition-colors"
@@ -433,6 +501,45 @@ export default function CatalogDetailPage() {
               Katalog ini dibuka dari penyimpanan offline perangkat Anda. Perubahan harga dinonaktifkan hingga koneksi internet kembali pulih.
             </p>
           </div>
+        </div>
+      )}
+
+      {/* Banner Sinkronisasi Otomatis (Addendum v2) */}
+      {catalog.sync && (catalog.sync.newProducts > 0 || catalog.sync.belowFloor > 0) && (
+        <div className="p-4 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-950 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
+          <div className="flex items-start gap-3">
+            <RefreshCw className="w-5 h-5 text-indigo-600 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-bold text-sm text-indigo-950">
+                Pembaruan Tersedia untuk Katalog Ini
+              </p>
+              <div className="text-xs text-indigo-800 mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5">
+                {catalog.sync.newProducts > 0 && (
+                  <span>
+                    • Ada <strong>{catalog.sync.newProducts}</strong> produk aktif baru belum masuk katalog.
+                  </span>
+                )}
+                {catalog.sync.belowFloor > 0 && (
+                  <span>
+                    • Ada <strong>{catalog.sync.belowFloor}</strong> produk dengan harga di bawah paten terkini.
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowSyncModal(true)}
+            disabled={syncing || !isOnline}
+            className="inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg shadow-sm transition-colors shrink-0 disabled:opacity-50"
+          >
+            {syncing ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <RefreshCw className="w-3.5 h-3.5" />
+            )}
+            <span>Sinkronkan Sekarang</span>
+          </button>
         </div>
       )}
 
@@ -586,13 +693,14 @@ export default function CatalogDetailPage() {
                     <h4 className="text-sm font-semibold text-slate-900 leading-snug">
                       {item.name}
                     </h4>
-                    <div className="text-xs text-slate-500 flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
+                    <div className="text-xs text-slate-500 flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5 items-center">
                       <span>SKU: {item.sku}</span>
                       <span>Satuan: {item.unit}</span>
+                      <PatenPrice value={item.floorPrice} source={item.floorSource} />
                       {isItemStale && (
                         <span className="text-amber-700 font-semibold flex items-center gap-1">
                           <AlertTriangle className="w-3 h-3" />
-                          Harga minimal terkini: {formatRupiah(item.floorPrice)}
+                          Di bawah harga paten!
                         </span>
                       )}
                     </div>
@@ -647,6 +755,92 @@ export default function CatalogDetailPage() {
           <span>Hapus Katalog Ini</span>
         </button>
       </div>
+
+      {/* Modal Sinkronisasi Katalog (Addendum v2) */}
+      {showSyncModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white w-full max-w-md rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
+            <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <RefreshCw className="w-5 h-5 text-indigo-600" />
+                <h3 className="font-bold text-slate-900 text-base">
+                  Sinkronkan Katalog
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowSyncModal(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4 text-sm text-slate-700">
+              <p className="text-xs text-slate-500">
+                Pilih operasi sinkronisasi yang ingin dijalankan pada katalog ini:
+              </p>
+
+              <label className="flex items-start gap-3 p-3 rounded-lg border border-slate-200 hover:bg-slate-50 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={syncAddNew}
+                  onChange={(e) => setSyncAddNew(e.target.checked)}
+                  className="mt-1 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                />
+                <div>
+                  <span className="font-semibold block text-slate-900">
+                    Tambahkan Produk Aktif Baru
+                  </span>
+                  <span className="text-xs text-slate-500">
+                    Menyalin produk master aktif yang belum ada di katalog ini. Produk yang sudah ada tidak akan diduplikasi.
+                  </span>
+                </div>
+              </label>
+
+              <label className="flex items-start gap-3 p-3 rounded-lg border border-slate-200 hover:bg-slate-50 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={syncRaiseFloor}
+                  onChange={(e) => setSyncRaiseFloor(e.target.checked)}
+                  className="mt-1 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                />
+                <div>
+                  <span className="font-semibold block text-slate-900">
+                    Naikkan Harga di Bawah Paten
+                  </span>
+                  <span className="text-xs text-slate-500">
+                    Menyesuaikan harga item yang berada di bawah harga paten terbaru. Harga produk lain yang sudah di atas paten tidak akan diubah.
+                  </span>
+                </div>
+              </label>
+            </div>
+
+            <div className="px-5 py-3.5 bg-slate-50 border-t border-slate-200 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowSyncModal(false)}
+                className="px-4 py-2 text-xs font-medium text-slate-700 hover:bg-slate-200 rounded-lg"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleSync}
+                disabled={syncing || (!syncAddNew && !syncRaiseFloor)}
+                className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg disabled:opacity-50"
+              >
+                {syncing ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="w-4 h-4" />
+                )}
+                <span>Jalankan Sinkronisasi</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
