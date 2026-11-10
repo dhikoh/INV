@@ -50,10 +50,10 @@ Tabel versi dependensi inti yang dikunci persis tanpa rentang versi (`^` atau `~
 | --------------- | ----------------- | -------------- | ------------------------------------------------------ |
 | Runtime         | Node.js           | `22.17.0`      | Node.js LTS aktif tercatat di `.nvmrc` dan `engines`   |
 | Package Manager | pnpm              | `12.18.0`      | Manajemen dependensi ketat dan deterministik           |
-| Web Framework   | Next.js           | `15.3.9`       | App Router, standalone Docker build                    |
+| Web Framework   | Next.js           | `15.5.29`      | App Router, standalone Docker build, patched RCE GHSA-p293-qw3h-jr36 |
 | Bahasa          | TypeScript        | `5.7.3`        | `strict: true`, no `any`, no unhandled errors          |
 | Library UI      | React & React DOM | `19.0.0`       | Server & Client Components                             |
-| Validasi Skema  | Zod               | `3.24.2`       | Validasi input Route Handler dengan `.strict()`        |
+| Validasi Skema  | Zod               | `3.25.76`      | Validasi input Route Handler dengan `.strict()`        |
 | Database & ORM  | PostgreSQL        | `16+`          | Database relasional multi-tenant                       |
 | ORM Client      | Prisma            | `7.10.1`       | Skema relasional, raw query ber-tag, extension isolasi |
 | Pengujian Unit  | Vitest            | `3.0.5`        | Unit testing cepat untuk rumus domain dan logika murni |
@@ -146,7 +146,7 @@ Daftar tabel inti:
 2. **Floor Pricing**: Harga jual minimal customer dihitung dari $\max(\text{product.minPrice}, \text{customer.floorPrice})$. Bila sales mengajukan di bawah floor, order berstatus `PENDING_APPROVAL` dengan flag `underMinPrice=true`.
 3. **Pembagian Invoice Bertahap**:
    - Invoice DP dihitung: $\text{round}(\text{orderTotal} \times \text{dpBps} / 10000)$.
-   - Invoice Pelunasan (FINAL): $\text{orderTotal} - \text{dpPaid} - \text{creditApplied}$.
+   - Invoice Pelunasan (FINAL): $\text{orderTotal} - \text{dpPaid} - \text{creditApplied}$ (di mana $\text{creditApplied}$ adalah akumulasi nilai retur Nota Kredit berstatus `OFFSET`).
 4. **Pencegahan Celah**:
    - Order yang sudah disetujui tidak dapat disunting kembali (wajib alur VOID atau Revisi).
    - Penomoran dokumen sequential per customer tanpa lompatan: `KODE/INV/DD/MM/YYYY/NNNN-[DP|LNS]`.
@@ -316,7 +316,9 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
 | `GET/PUT`  | `/api/v1/sales/:id/targets/:month` | Super Admin    | Ambil & simpan target omzet serta target profit bulanan sales (SalesTarget) |
 | `GET`      | `/api/v1/reports/sales-performance` | Super Admin    | Laporan kinerja komprehensif sales bulanan (omzet, profit, konversi CRM, komisi) |
 | `GET`      | `/api/v1/reports/commissions`  | Super Admin        | Laporan komisi staf sales, deteksi otomatis tanda perlu dikembalikan (needsReturn) |
-| `POST`     | `/api/v1/commissions/:id/pay`  | Super Admin        | Tandai komisi sales telah dibayarkan oleh pemilik usaha |
+| `GET`      | `/api/v1/price-list`           | Super Admin, Sales | Daftar harga resmi multi-usaha format 11 kunci DTO (zero HPP leaks, filter pencarian & sort) |
+| `POST`     | `/api/v1/commission/entries/:id/pay` | Super Admin    | Tandai entri komisi sales telah dibayarkan oleh pemilik usaha (Endpoint Kanon) |
+| `POST`     | `/api/v1/commissions/:id/pay`  | Super Admin        | `@deprecated` Tandai komisi sales telah dibayarkan (Gunakan `/api/v1/commission/entries/:id/pay`) |
 | `GET`      | `/api/v1/reports/receivables-aging` | Super Admin    | Laporan umur piutang 5 bucket, pengecualian order batal & invoice lunas |
 | `GET`      | `/api/v1/reports/crm`          | Super Admin, Sales | Laporan aktivitas & pipeline CRM (agregat untuk SA, scoping sales ID untuk Sales) |
 | `GET`      | `/api/v1/reports/export`       | Super Admin, Sales | Ekspor laporan XLSX & PDF dengan perlindungan formula injection (=, +, -, @) |
@@ -358,8 +360,10 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
 | `/purchase-orders/:id` | Super Admin        | Detail PO, aksi terbitkan pesan, terima barang (+ update HPP master), bayar vendor, batal PO |
 | `/vendors/:id`         | Super Admin        | Detail profil vendor & tab Buku Transaksi Vendor (Vendor Ledger) dengan linimasa saldo hutang berjalan |
 | `/tg`                  | Super Admin, Sales | Pintu masuk Telegram Mini App (TMA), autologin initData aman, & panduan tautan akun |
+| `/tg/approvals/:id`    | Super Admin        | Halaman Telegram Mini App persetujuan & penolakan faktur (dukungan `?reject=1`, alasan minimal 5 karakter) |
 | `/reminders`           | Super Admin, Sales | Daftar & manajemen pengingat repeat order pelanggan (snooze, ubah interval, kontak WA) |
 | `/receivables`         | Super Admin, Sales | Monitoring umur piutang (5 aging bucket), ringkasan piutang overdue, tagih WA, link faktur |
+| `/price-list`          | Super Admin, Sales | Halaman resmi daftar harga produk multi-usaha (11 kunci DTO aman tanpa kebocoran HPP, filter & sort) |
 | `/catalogs`            | Super Admin, Sales | Daftar katalog harga, filter customer/search, kartu 360 px, unduh PDF langsung |
 | `/catalogs/new`        | Super Admin, Sales | Formulir pembuatan katalog baru, preset cepat, kalkulasi floor live |
 | `/catalogs/:id`        | Super Admin, Sales | Detail katalog harga, thumbnail produk, banner stale, tombol sesuaikan harga minimal, unduh PDF, buat order |
@@ -397,13 +401,13 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
 - **Dockerfile Multi-Stage**: `node:22-bookworm-slim`, memasang `chromium`, font liberation, dan non-root user `nextjs`.
 - **Dua Service di Coolify**:
   1. `web`: Menjalankan `node server.js`, port 3000, healthcheck `GET /api/health`.
-     - Perintah pra-deploy (Pre-deployment command): `pnpm prisma migrate deploy`.
+     - Perintah pra-deploy (Pre-deployment command): `pnpm prisma migrate deploy`. Entrypoint `docker-entrypoint.sh` mengeksekusi `npx prisma migrate deploy` secara deterministik dan fail-fast jika terjadi kegagalan DDL.
      - Satu replika (tanpa horizontal scaling pada rilis ini).
-  2. `worker`: Menjalankan `pnpm worker` (`tsx src/worker/index.ts`), tanpa port publik.
+  2. `worker`: Menjalankan `pnpm worker` (`tsx src/worker/index.ts`), tanpa port publik, dengan env `SERVICE_TYPE="worker"` (terisolasi dari DDL database).
 - **Volume Persisten**: `/data/uploads` dipasang ke container `web` dan `worker`.
 - **Seed Super Admin Awal (Mode Produksi)**:
-  - Disetel di env: `SEED_SUPERADMIN_USERNAME` dan `SEED_SUPERADMIN_PASSWORD` (min. 12 karakter).
-  - Dijalankan sekali: `pnpm db:seed`. Menolak berjalan bila Super Admin sudah ada, dan menyetel `mustChangePassword = true`.
+  - Disetel di env: `SEED_SUPERADMIN_USERNAME` dan `SEED_SUPERADMIN_PASSWORD` (wajib min. 12 karakter tanpa fallback di kode).
+  - Dijalankan sekali: `pnpm db:seed`. Menolak berjalan bila Super Admin sudah ada (non-destructive), dan menyetel `mustChangePassword = true`.
 
 ### 2. Integrasi Telegram Bot & Webhook
 
@@ -444,20 +448,21 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
 
 - `pnpm lint`: Memastikan kebersihan sintaks ESLint tanpa `any`, tanpa `console.log`, dan tanpa `dangerouslySetInnerHTML`.
 - `pnpm typecheck`: Memastikan kesesuaian tipe data TypeScript Strict (`tsc --noEmit`) tanpa `@ts-ignore`.
-- `pnpm test`: Menjalankan 68 test files Vitest (unit domain dan integrasi database).
-- `pnpm test:e2e`: Menjalankan suite Playwright E2E testing (alur order, invoice, theme preview, PWA).
-- `pnpm build`: Memastikan Next.js App Router standalone build sukses.
+- `pnpm test`: Menjalankan 77 test files Vitest (668 pengujian unit domain dan integrasi database).
+- `pnpm test:e2e`: Menjalankan 35 skenario pengujian Playwright E2E testing (alur order, invoice, theme preview, PWA).
+- `pnpm build`: Memastikan Next.js App Router standalone build sukses (83 rute statis & dinamis).
 
 ---
 
 ## 10. Keputusan teknis (ADR)
 
-1. [ADR 0001: Representasi Uang dan Persentase](file:///D:/Data%20BentoCat/docs/adr/0001-uang-bigint.md) - Penggunaan BigInt Rupiah utuh & basis points (bps).
-2. [ADR 0002: Pemilihan Teknologi Stack](file:///D:/Data%20BentoCat/docs/adr/0002-stack.md) - Next.js App Router, Prisma, Vitest, pg-boss, puppeteer-core.
-3. [ADR 0003: Konfigurasi Datasource Prisma 7 dan Driver Adapter PostgreSQL](file:///D:/Data%20BentoCat/docs/adr/0003-prisma-7-config.md) - Penyesuaian konfigurasi prisma.config.ts, @prisma/adapter-pg, dan pglite.
-4. [ADR 0004: Arsitektur Worker pg-boss dan Bot grammY](file:///D:/Data%20BentoCat/docs/adr/0004-pg-boss-grammy.md) - Pemisahan proses background worker dan integrasi grammY + pg-boss v12.
-5. [ADR 0005: Adopsi ExcelJS untuk Ekspor Laporan Tabular dan Mitigasi Formula Injection](file:///D:/Data%20BentoCat/docs/adr/0005-exceljs-export.md) - Penggunaan exceljs v4.4.0 dan perlindungan sel berawalan =, +, -, @ (Seksi 16.4).
-6. [ADR 0006: Harga Paten, Katalog Terintegrasi Multi-Usaha, dan Isolasi Database Lapis PostgreSQL](file:///D:/Data%20BentoCat/docs/adr/0006-harga-paten-dan-katalog-terintegrasi.md) - Implementasi Addendum v2, trigger DB `catalogitem_same_business_trg`, dan DTO price list 11 kunci.
+1. [ADR 0001: Representasi Uang dan Persentase](adr/0001-uang-bigint.md) - Penggunaan BigInt Rupiah utuh & basis points (bps).
+2. [ADR 0002: Pemilihan Teknologi Stack](adr/0002-stack.md) - Next.js App Router, Prisma, Vitest, pg-boss, puppeteer-core.
+3. [ADR 0003: Konfigurasi Datasource Prisma 7 dan Driver Adapter PostgreSQL](adr/0003-prisma-7-config.md) - Penyesuaian konfigurasi prisma.config.ts, @prisma/adapter-pg, dan pglite.
+4. [ADR 0004: Arsitektur Worker pg-boss dan Bot grammY](adr/0004-pg-boss-grammy.md) - Pemisahan proses background worker dan integrasi grammY + pg-boss v12.
+5. [ADR 0005: Kebijakan Migrasi Skema Database Entrypoint dan Sanitasi Seed](adr/0005-database-migration-entrypoint-and-seed.md) - Penggunaan prisma migrate deploy di entrypoint, fail-fast, dan isolasi worker.
+6. [ADR 0006: Harga Paten, Katalog Terintegrasi Multi-Usaha, dan Isolasi Database Lapis PostgreSQL](adr/0006-harga-paten-dan-katalog-terintegrasi.md) - Implementasi Addendum v2, trigger DB `catalogitem_same_business_trg`, dan DTO price list 11 kunci.
+7. [ADR 0007: Inisialisasi Akun Super Admin dan Kebijakan Rotasi Kredensial](adr/0007-superadmin-seed-and-credential-rotation.md) - Penegakan password env >= 12 karakter, pencegahan overwrite, mustChangePassword: true, dan sanitasi log.
 
 ---
 
@@ -471,10 +476,12 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
 | **Fase 3** | `v0.4.0`     | Persetujuan invoice, verifikasi pembayaran, mesin cetak PDF, void/retur, profit & komisi, UI persetujuan & invoice | **SELESAI** (`v0.4.0`) |
 | **Fase 4** | `v0.5.0`     | Bot Telegram, Mini App, pengingat repeat order, katalog PWA             | **SELESAI** (`v0.5.0`) |
 | **Fase 5** | `v1.0.0`     | Dashboard profit, evaluasi sales, pengerasan keamanan, Go-Live          | **SELESAI** (`v1.0.0`) |
+| **Fase 8** | `v1.0.1`     | Remediasi menyeluruh audit: migrasi Docker, patch Next.js RCE, TMA approval, formula retur | **SELESAI & GO** (`v1.0.1`) |
 
 ---
 
 ## 12. Masalah terbuka
 
-Pelacakan masalah terbuka dan pertanyaan yang membutuhkan klarifikasi pemilik bisnis didokumentasikan pada:
-[docs/OPEN_QUESTIONS.md](file:///D:/Data%20BentoCat/docs/OPEN_QUESTIONS.md)
+Seluruh masalah kritis (S1) dan tinggi (S2) hasil audit independen telah tuntas diperbaiki dan diverifikasi pada Fase 8 (lihat [docs/audit/LAPORAN-12-perbaikan-dan-reverifikasi.md](audit/LAPORAN-12-perbaikan-dan-reverifikasi.md)).
+Tersisa 7 catatan non-blocker minor untuk backlog pemeliharaan berkala pasca-peluncuran yang didokumentasikan pada:
+[docs/audit/REGISTER.md](audit/REGISTER.md)

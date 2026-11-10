@@ -82,3 +82,4 @@ Bagi lingkungan database yang sebelumnya sudah telanjur diinisialisasi menggunak
   - Status start-up kontainer deterministik: sukses atau berhenti jika migrasi gagal.
 - **Negatif**:
   - Tim pengembang lokal harus menjalankan `pnpm prisma migrate dev` saat menambah perubahan skema baru, bukan sekadar `db push`.
+
