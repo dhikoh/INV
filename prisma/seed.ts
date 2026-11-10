@@ -24,46 +24,42 @@ export interface SeedOptions {
 }
 
 export async function seedSuperAdmin(options?: SeedOptions) {
-  const username = options?.username ?? process.env.SEED_SUPERADMIN_USERNAME ?? 'superadmin';
-  const password = options?.password ?? process.env.SEED_SUPERADMIN_PASSWORD ?? 'bismillahbento';
+  const username = (options?.username ?? process.env.SEED_SUPERADMIN_USERNAME ?? 'superadmin').trim().toLowerCase();
+  const password = options?.password ?? process.env.SEED_SUPERADMIN_PASSWORD;
 
-  const passwordHash = await hashPassword(password, username);
+  if (!password) {
+    throw new Error('SEED_SUPERADMIN_PASSWORD wajib disetel di env atau options tanpa fallback di kode');
+  }
+
+  if (password.length < 12) {
+    throw new Error('Password Super Admin minimal 12 karakter untuk keamanan produksi');
+  }
 
   const existingSuperAdmin = await prisma.user.findFirst({
     where: { role: Role.SUPERADMIN, deletedAt: null },
   });
 
   if (existingSuperAdmin) {
-    const updated = await prisma.user.update({
-      where: { id: existingSuperAdmin.id },
-      data: {
-        passwordHash,
-        isActive: true,
-        mustChangePassword: false,
-      },
-    });
-    logger.info(
-      { userId: updated.id, username: updated.username },
-      'Super Admin diperbarui dengan password bismillahbento.'
-    );
-    return updated;
+    throw new Error('Seed ditolak: Akun Super Admin sudah terdaftar di database.');
   }
+
+  const passwordHash = await hashPassword(password, username);
 
   const superAdmin = await prisma.user.create({
     data: {
-      username: username.trim().toLowerCase(),
+      username,
       passwordHash,
       name: 'Super Admin',
       role: Role.SUPERADMIN,
       businessId: null,
       isActive: true,
-      mustChangePassword: false,
+      mustChangePassword: true,
     },
   });
 
   logger.info(
     { userId: superAdmin.id, username: superAdmin.username },
-    'Super Admin berhasil dibuat (password: bismillahbento).'
+    'Super Admin berhasil dibuat dengan aman.'
   );
 
   return superAdmin;
@@ -963,7 +959,11 @@ export async function seedBentoCatData(superAdmin: { id: string }) {
 
 export async function runAllSeed() {
   const superAdmin = await seedSuperAdmin();
-  await seedBentoCatData(superAdmin);
+  if (process.env.NODE_ENV !== 'production' && process.env.SEED_DEMO_DATA === 'true') {
+    await seedBentoCatData(superAdmin);
+  } else {
+    logger.info('Melewati seed data demo BentoCat (hanya dijalankan bila NODE_ENV !== production dan SEED_DEMO_DATA=true).');
+  }
 }
 
 if (

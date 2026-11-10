@@ -13,68 +13,74 @@ vi.mock('@/lib/db', () => ({
   },
 }));
 
-describe('Prisma Seed Super Admin (T1.2 & Seksi 16.1)', () => {
+describe('Prisma Seed Super Admin (AUD-SEC-001 & BLUEPRINT Bagian 9)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    delete process.env.SEED_SUPERADMIN_USERNAME;
+    delete process.env.SEED_SUPERADMIN_PASSWORD;
   });
 
-  it('memperbarui akun bila sudah ada akun Super Admin di database', async () => {
+  it('menolak berjalan bila password kurang dari 12 karakter atau tidak disetel di env (tanpa fallback di kode)', async () => {
+    // Password terlalu pendek (<12 karakter)
+    await expect(
+      seedSuperAdmin({
+        username: 'superadmin',
+        password: 'pendek',
+      })
+    ).rejects.toThrowError(/minimal 12 karakter/);
+
+    // Password kosong tanpa env
+    await expect(
+      seedSuperAdmin({
+        username: 'superadmin',
+      })
+    ).rejects.toThrowError(/SEED_SUPERADMIN_PASSWORD wajib disetel/);
+  });
+
+  it('menolak menimpa akun bila Super Admin sudah ada di database', async () => {
     vi.mocked(prisma.user.findFirst).mockResolvedValueOnce({
       id: 'existing_admin_1',
-      username: 'owner',
+      username: 'superadmin',
       role: Role.SUPERADMIN,
     } as never);
-    vi.mocked(prisma.user.update).mockResolvedValueOnce({
-      id: 'existing_admin_1',
-      username: 'owner',
-      name: 'Super Admin',
-      role: Role.SUPERADMIN,
-      isActive: true,
-      mustChangePassword: false,
-    } as never);
 
-    const user = await seedSuperAdmin({
-      username: 'owner',
-      password: 'PasswordSuper123!',
-    });
+    await expect(
+      seedSuperAdmin({
+        username: 'superadmin',
+        password: 'PasswordAmanSuperAdmin123!',
+      })
+    ).rejects.toThrowError(/Akun Super Admin sudah terdaftar/);
 
-    expect(user.id).toBe('existing_admin_1');
-    expect(prisma.user.update).toHaveBeenCalledWith({
-      where: { id: 'existing_admin_1' },
-      data: expect.objectContaining({
-        isActive: true,
-        mustChangePassword: false,
-        passwordHash: expect.stringContaining('$argon2id$'),
-      }),
-    });
+    // Pastikan tidak ada pemanggilan update untuk menimpa akun
+    expect(prisma.user.update).not.toHaveBeenCalled();
   });
 
-  it('berhasil melakukan seed Super Admin baru dengan password argon2id dan username huruf kecil', async () => {
+  it('berhasil membuat Super Admin baru dengan mustChangePassword: true dan password aman argon2id', async () => {
     vi.mocked(prisma.user.findFirst).mockResolvedValueOnce(null);
     vi.mocked(prisma.user.create).mockResolvedValueOnce({
       id: 'admin_new_id',
-      username: 'owner',
+      username: 'superadmin',
       name: 'Super Admin',
       role: Role.SUPERADMIN,
       businessId: null,
       isActive: true,
-      mustChangePassword: false,
+      mustChangePassword: true,
     } as never);
 
     const user = await seedSuperAdmin({
-      username: 'Owner',
-      password: 'PasswordSuper123!',
+      username: 'SuperAdmin',
+      password: 'PasswordAmanSuperAdmin123!',
     });
 
     expect(user.id).toBe('admin_new_id');
     expect(prisma.user.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
-        username: 'owner',
+        username: 'superadmin',
         name: 'Super Admin',
         role: Role.SUPERADMIN,
         businessId: null,
         isActive: true,
-        mustChangePassword: false,
+        mustChangePassword: true, // Sesuai BLUEPRINT Bagian 9
         passwordHash: expect.stringContaining('$argon2id$'),
       }),
     });
