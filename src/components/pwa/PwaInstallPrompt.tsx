@@ -13,13 +13,27 @@ interface BeforeInstallPromptEvent extends Event {
  * Menyesuaikan perilaku di Android (beforeinstallprompt) dan iOS Safari (petunjuk Share -> Tambah ke Layar Utama).
  * Disembunyikan otomatis jika sudah standalone atau di dalam Telegram Mini App.
  */
+let globalDeferredPrompt: BeforeInstallPromptEvent | null = null;
+
 export function PwaInstallPrompt() {
-  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
+  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(globalDeferredPrompt);
   const [isIos, setIsIos] = useState(false);
   const [isStandalone, setIsStandalone] = useState(false);
   const [isTelegram, setIsTelegram] = useState(false);
   const [showIosGuide, setShowIosGuide] = useState(false);
-  const [dismissed, setDismissed] = useState(false);
+  const [dismissed, setDismissed] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return sessionStorage.getItem('pwa_prompt_dismissed') === 'true';
+    }
+    return false;
+  });
+
+  const handleDismiss = () => {
+    setDismissed(true);
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('pwa_prompt_dismissed', 'true');
+    }
+  };
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -42,13 +56,21 @@ export function PwaInstallPrompt() {
     const iosDevice = /iphone|ipad|ipod/.test(userAgent);
     setIsIos(iosDevice && !standaloneCheck);
 
+    if (standaloneCheck || telegramCheck) return;
+
+    if (globalDeferredPrompt) {
+      setDeferredPrompt(globalDeferredPrompt);
+    }
+
     // 4. Tangkap event beforeinstallprompt untuk Android / Chromium
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
+      globalDeferredPrompt = e as BeforeInstallPromptEvent;
       setDeferredPrompt(e as BeforeInstallPromptEvent);
     };
 
     const handleAppInstalled = () => {
+      globalDeferredPrompt = null;
       setDeferredPrompt(null);
       setIsStandalone(true);
     };
@@ -97,7 +119,7 @@ export function PwaInstallPrompt() {
           </button>
           <button
             type="button"
-            onClick={() => setDismissed(true)}
+            onClick={handleDismiss}
             className="text-slate-400 hover:text-white p-1"
             title="Tutup"
           >
@@ -137,7 +159,7 @@ export function PwaInstallPrompt() {
           )}
           <button
             type="button"
-            onClick={() => setDismissed(true)}
+            onClick={handleDismiss}
             className="text-slate-400 hover:text-white p-1"
             title="Tutup"
           >

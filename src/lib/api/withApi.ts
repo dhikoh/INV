@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ZodError, ZodType } from 'zod';
 import { Prisma, Role } from '@prisma/client';
-import { DomainError, fromDb } from '../domain/money';
+import { DomainError, isDomainError, fromDb } from '../domain/money';
 import { requireContext, Ctx } from '../auth/context';
 import { assertSameOrigin } from '../auth/origin';
 import { clearSessionCookie } from '../auth/session';
@@ -54,7 +54,7 @@ export function toErrorResponse(e: unknown): NextResponse {
     );
   }
 
-  if (e instanceof DomainError) {
+  if (isDomainError(e)) {
     return NextResponse.json(
       {
         ok: false,
@@ -64,7 +64,7 @@ export function toErrorResponse(e: unknown): NextResponse {
           details: e.details ?? null,
         },
       },
-      { status: e.status }
+      { status: e.status ?? 422 }
     );
   }
 

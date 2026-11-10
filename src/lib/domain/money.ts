@@ -10,7 +10,21 @@ export class DomainError extends Error {
   ) {
     super(message);
     this.name = 'DomainError';
+    Object.setPrototypeOf(this, DomainError.prototype);
   }
+}
+
+export function isDomainError(e: unknown): e is DomainError {
+  return (
+    e instanceof DomainError ||
+    (typeof e === 'object' &&
+      e !== null &&
+      (('name' in e && (e as any).name === 'DomainError') ||
+        ('code' in e &&
+          'status' in e &&
+          typeof (e as any).status === 'number' &&
+          'message' in e)))
+  );
 }
 
 export function assertInt(n: number, label = 'nilai'): number {

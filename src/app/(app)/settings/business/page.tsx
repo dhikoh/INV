@@ -306,9 +306,7 @@ export default function BusinessSettingsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ isDefault: true }),
       });
-      if (res.ok) {
-        await loadBusinessDetail(selectedId);
-      }
+      await loadBusinessDetail(selectedId);
     } catch {
       // ignore
     }
@@ -321,9 +319,7 @@ export default function BusinessSettingsPage() {
       const res = await fetch(`/api/v1/bank-accounts/${bankId}`, {
         method: 'DELETE',
       });
-      if (res.ok) {
-        await loadBusinessDetail(selectedId);
-      }
+      await loadBusinessDetail(selectedId);
     } catch {
       // ignore
     }

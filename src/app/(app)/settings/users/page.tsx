@@ -796,6 +796,7 @@ export default function UsersManagementPage() {
                     type="password"
                     required
                     minLength={10}
+                    autoComplete="new-password"
                     placeholder="Minimal 10 karakter"
                     value={newUserData.password}
                     onChange={(e) =>
@@ -1038,6 +1039,7 @@ export default function UsersManagementPage() {
                   type="password"
                   required
                   minLength={10}
+                  autoComplete="new-password"
                   placeholder="Masukkan password baru (minimal 10 karakter)"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}

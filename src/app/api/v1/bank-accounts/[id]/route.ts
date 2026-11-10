@@ -3,6 +3,7 @@ import { withApi } from '@/lib/api/withApi';
 import { prisma } from '@/lib/db';
 import { DomainError } from '@/lib/domain/money';
 import { audit } from '@/lib/audit/audit';
+import { Role } from '@prisma/client';
 
 const BankAccountUpdateSchema = z
   .object({
@@ -25,12 +26,17 @@ const BankAccountUpdateSchema = z
 
 export const GET = withApi(
   {
-    roles: ['SUPERADMIN'],
+    roles: [Role.SUPERADMIN],
   },
   async ({ params }) => {
+    const id = params?.id;
+    if (!id) {
+      throw new DomainError('BAD_REQUEST', 'ID rekening bank wajib diisi', 400);
+    }
+
     const account = await prisma.bankAccount.findFirst({
       where: {
-        id: params.id,
+        id,
         deletedAt: null,
       },
     });
@@ -47,13 +53,18 @@ export const GET = withApi(
 
 export const PATCH = withApi(
   {
-    roles: ['SUPERADMIN'],
+    roles: [Role.SUPERADMIN],
     body: BankAccountUpdateSchema,
   },
   async ({ ctx, params, body }) => {
+    const id = params?.id;
+    if (!id) {
+      throw new DomainError('BAD_REQUEST', 'ID rekening bank wajib diisi', 400);
+    }
+
     const existing = await prisma.bankAccount.findFirst({
       where: {
-        id: params.id,
+        id,
         deletedAt: null,
       },
     });
@@ -107,12 +118,17 @@ export const PATCH = withApi(
 
 export const DELETE = withApi(
   {
-    roles: ['SUPERADMIN'],
+    roles: [Role.SUPERADMIN],
   },
   async ({ ctx, params }) => {
+    const id = params?.id;
+    if (!id) {
+      throw new DomainError('BAD_REQUEST', 'ID rekening bank wajib diisi', 400);
+    }
+
     const existing = await prisma.bankAccount.findFirst({
       where: {
-        id: params.id,
+        id,
         deletedAt: null,
       },
     });
