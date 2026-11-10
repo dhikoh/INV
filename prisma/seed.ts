@@ -958,11 +958,20 @@ export async function seedBentoCatData(superAdmin: { id: string }) {
 }
 
 export async function runAllSeed() {
-  const superAdmin = await seedSuperAdmin();
-  if (process.env.NODE_ENV !== 'production' && process.env.SEED_DEMO_DATA === 'true') {
-    await seedBentoCatData(superAdmin);
-  } else {
-    logger.info('Melewati seed data demo BentoCat (hanya dijalankan bila NODE_ENV !== production dan SEED_DEMO_DATA=true).');
+  try {
+    const superAdmin = await seedSuperAdmin();
+    if (process.env.NODE_ENV !== 'production' && process.env.SEED_DEMO_DATA === 'true') {
+      await seedBentoCatData(superAdmin);
+    } else {
+      logger.info('Melewati seed data demo BentoCat (hanya dijalankan bila NODE_ENV !== production dan SEED_DEMO_DATA=true).');
+    }
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes('Akun Super Admin sudah terdaftar')) {
+      logger.info('Akun Super Admin sudah ada di database, proses seed dilewati dengan aman.');
+      return;
+    }
+    throw err;
   }
 }
 

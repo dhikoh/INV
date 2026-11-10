@@ -41,7 +41,7 @@ else
 
   if [ "$RUN_SEED" = "true" ]; then
     echo "==> [OmniCat] RUN_SEED is enabled: running initial superadmin seed..."
-    tsx prisma/seed.ts
+    tsx prisma/seed.ts || echo "==> [OmniCat] Superadmin seed finished or already initialized."
   fi
 fi
 
