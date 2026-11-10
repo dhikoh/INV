@@ -1028,10 +1028,10 @@ export async function requestFinalOrder(
     });
   }
 
-  // Nilai invoice pelunasan: grandTotal - dpAmount
-  const invoiceAmount = finalGrandTotal - order.dpAmount;
+  // Nilai invoice pelunasan: grandTotal - dpAmount - creditTotal (BLUEPRINT Bagian 5)
+  const invoiceAmount = finalGrandTotal - order.dpAmount - order.creditTotal;
   if (invoiceAmount <= BigInt(0)) {
-    throw new DomainError('INVALID_STATE', 'Jumlah pelunasan tidak valid (sudah lunas oleh DP)', 409);
+    throw new DomainError('INVALID_STATE', 'Jumlah pelunasan tidak valid (sudah lunas oleh DP atau nota kredit)', 409);
   }
 
   // Tentukan versi invoice FINAL

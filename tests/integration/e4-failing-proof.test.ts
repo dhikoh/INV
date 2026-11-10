@@ -8,7 +8,7 @@ import {
 import { requestFinalOrder } from '@/lib/services/order';
 import type { Ctx } from '@/lib/auth/context';
 
-describe('Audit Mandat: Pembuktian Kegagalan E4 (AUD-INT-001 Overbilling Faktur Pelunasan)', () => {
+describe('Audit Mandat: Verifikasi Perbaikan E4 & Tabel Settlement (AUD-INT-001)', () => {
   const ctx: Ctx = {
     user: {
       id: 'admin_1',
@@ -22,7 +22,7 @@ describe('Audit Mandat: Pembuktian Kegagalan E4 (AUD-INT-001 Overbilling Faktur 
     ip: '127.0.0.1',
   };
 
-  it('MEMBUKTIKAN BUG AUD-INT-001: requestFinalOrder mengabaikan order.creditTotal sehingga jumlah invoice pelunasan overbilled', async () => {
+  it('LULUS VERIFIKASI AUD-INT-001: requestFinalOrder memotong order.creditTotal dari sisa invoice pelunasan (OFFSET)', async () => {
     // Skenario Pemilik:
     // Nilai pesanan: Rp 1.000.000
     // Pembayaran DP: Rp 300.000
@@ -119,12 +119,100 @@ describe('Audit Mandat: Pembuktian Kegagalan E4 (AUD-INT-001 Overbilling Faktur 
     // Jalankan pembuatan invoice FINAL
     await requestFinalOrder(mockTx, ctx, 'ord_e4_test');
 
-    const actualAmountStr = createdInvoiceAmount ? String(createdInvoiceAmount) : 'null';
-    console.log('HASIL PERHITUNGAN AKTUAL SISTEM:', actualAmountStr);
-
-    // Ekspektasi Benar Sesuai BLUEPRINT Bagian 5 & Keputusan Pemilik:
-    // Sisa tagihan pelunasan = grandTotal - DP - creditTotal = 500.000
-    // Test ini SENGAJA MENGUJI nilai yang benar (500.000n) dan HARUS GAGAL saat ini!
     expect(createdInvoiceAmount).toBe(500000n);
+  });
+
+  it('Verifikasi Settlement CUSTOMER_CREDIT: order.creditTotal tetap 0, invoice pelunasan tetap menagih selisih DP (Rp 700.000)', async () => {
+    // Skenario CUSTOMER_CREDIT:
+    // Retur dimasukkan ke deposit saldo kredit pelanggan untuk pesanan mendatang,
+    // sehingga pesanan aktif tetap harus dilunasi secara penuh (Rp 700.000).
+    const orderData = {
+      id: 'ord_e4_credit_test',
+      businessId: 'biz_1',
+      customerId: 'cust_1',
+      salesId: 'sales_1',
+      status: OrderStatus.IN_PROCESS,
+      grandTotal: 1000000n,
+      dpAmount: 300000n,
+      paidTotal: 300000n,
+      creditTotal: 0n, // Pada CUSTOMER_CREDIT, creditTotal order tidak dinaikkan
+      shippingCharge: 0n,
+      ppnEnabled: false,
+      ppnRateBps: 0,
+      dpBps: 3000,
+      deletedAt: null,
+      rev: 1,
+    };
+
+    let createdInvoiceAmount: bigint | null = null;
+
+    const mockTx: any = {
+      $queryRaw: vi.fn(async () => [{ id: 'ord_e4_credit_test' }]),
+      order: {
+        findFirst: vi.fn(async () => orderData),
+        findFirstOrThrow: vi.fn(async () => ({
+          ...orderData,
+          customer: { id: 'cust_1', name: 'Pelanggan 1' },
+          items: [],
+        })),
+        updateMany: vi.fn(async () => ({ count: 1 })),
+      },
+      orderItem: {
+        findMany: vi.fn(async () => [
+          {
+            id: 'item_1',
+            qty: 10,
+            unitPrice: 100000n,
+            discountBps: 0,
+            subtotal: 1000000n,
+            lineNet: 1000000n,
+            costPrice: 50000n,
+            sortOrder: 1,
+          },
+        ]),
+      },
+      orderCost: {
+        findMany: vi.fn(async () => []),
+      },
+      invoice: {
+        findFirst: vi.fn(async ({ where }: { where: any }) => {
+          if (where?.type === InvoiceType.DP) {
+            return {
+              id: 'inv_dp_1',
+              type: InvoiceType.DP,
+              status: InvoiceStatus.APPROVED,
+              amount: 300000n,
+              paidAmount: 300000n,
+            };
+          }
+          return null;
+        }),
+        findFirstOrThrow: vi.fn(async () => ({
+          id: 'inv_final_1',
+          type: InvoiceType.FINAL,
+          status: InvoiceStatus.PENDING_APPROVAL,
+          amount: createdInvoiceAmount,
+        })),
+        count: vi.fn(async () => 0),
+        create: vi.fn(async ({ data }: { data: any }) => {
+          createdInvoiceAmount = data.amount;
+          return { id: 'inv_final_1', ...data };
+        }),
+      },
+      user: {
+        findMany: vi.fn(async () => [{ id: 'admin_1' }]),
+      },
+      notification: {
+        create: vi.fn(async () => ({})),
+      },
+      auditLog: {
+        create: vi.fn(async () => ({})),
+      },
+    };
+
+    await requestFinalOrder(mockTx, ctx, 'ord_e4_credit_test');
+
+    // Pelunasan tetap Rp 700.000 karena kredit ditampung di customerCreditEntry
+    expect(createdInvoiceAmount).toBe(700000n);
   });
 });
