@@ -377,7 +377,8 @@ export async function importData(
       return report;
     }
 
-    const lines = contentStr.length === 0 ? [] : contentStr.split('\n');
+    const rawLines = contentStr.length === 0 ? [] : (contentStr.endsWith('\n') ? contentStr.slice(0, -1) : contentStr).split('\n');
+    const lines = rawLines;
     if (lines.length !== meta.rows) {
       errors.push(
         `Jumlah baris '${meta.file}' (${lines.length}) tidak sesuai dengan manifest (${meta.rows}).`
@@ -524,16 +525,27 @@ export async function importData(
       }
     }
 
-    // Periksa Shipment deliveryNo bentrok
+    // Periksa keunikan global Shipment.deliveryNo (Seksi OPEN_QUESTIONS #3)
     const shipmentRows = parsedTablesData['Shipment'] || [];
+    const seenDeliveryNos = new Set<string>();
     for (const s of shipmentRows) {
-      if (s.deliveryNo) {
+      if (s.deliveryNo && typeof s.deliveryNo === 'string') {
+        const trimmedNo = s.deliveryNo.trim();
+        if (seenDeliveryNos.has(trimmedNo)) {
+          errors.push(
+            `Nomor surat jalan '${trimmedNo}' duplikat di dalam berkas impor.`
+          );
+          return report;
+        }
+        seenDeliveryNos.add(trimmedNo);
+
         const existingShipment = await prisma.shipment.findFirst({
-          where: { deliveryNo: s.deliveryNo as string },
+          where: { deliveryNo: trimmedNo },
+          select: { id: true, businessId: true },
         });
         if (existingShipment) {
           errors.push(
-            `Nomor surat jalan '${s.deliveryNo}' sudah terpakai oleh unit usaha lain di target.`
+            `Nomor surat jalan '${trimmedNo}' sudah terpakai oleh unit usaha lain di target.`
           );
           return report;
         }

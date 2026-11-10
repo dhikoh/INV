@@ -5,10 +5,23 @@ import { zipSync, strToU8 } from 'fflate';
 import * as contextModule from '@/lib/auth/context';
 import { env } from '@/lib/env';
 import { POST as postImport } from '@/app/api/v1/data-transfer/import/route';
+import { importData } from '@/lib/transfer/import';
+import { prisma } from '@/lib/db';
+import { toJsonLine } from '@/lib/transfer/serialize';
+import crypto from 'node:crypto';
 
 describe('Unit Transfer: API Impor Mode Usaha & RBAC (Bagian 10 Butir F)', () => {
+  const dummyMigration = '20261110000003_catalog_same_business_guard';
+
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.spyOn(prisma, '$queryRaw').mockResolvedValue([
+      { migration_name: dummyMigration },
+    ] as any);
+    if (!prisma.shipment) {
+      (prisma as any).shipment = {};
+    }
+    prisma.shipment.findFirst = vi.fn().mockResolvedValue(null);
   });
 
   function createFormData(zipBuffer: Uint8Array): FormData {
@@ -106,5 +119,112 @@ describe('Unit Transfer: API Impor Mode Usaha & RBAC (Bagian 10 Butir F)', () =>
     const json = await res.json();
     expect(json.ok).toBe(false);
     expect(json.error.message).toContain('scripts/import-json.ts');
+  });
+
+  it('menolak impor mode usaha bila Shipment.deliveryNo sudah digunakan oleh unit usaha lain di database', async () => {
+    const shipmentData = toJsonLine({
+      id: 'shp_01',
+      businessId: 'biz_01',
+      orderId: 'ord_01',
+      deliveryNo: 'SJ-2026-0001',
+    }) + '\n';
+
+    const sha = crypto.createHash('sha256').update(shipmentData).digest('hex');
+
+    const manifest = {
+      format: 'omnicat-export',
+      formatVersion: 1,
+      appVersion: '1.0.0',
+      lastMigration: dummyMigration,
+      exportedAt: new Date().toISOString(),
+      exportedBy: 'tester',
+      scope: 'business',
+      businessIds: ['biz_01'],
+      businessCodes: ['TRB'],
+      options: { includeUploads: false },
+      tables: {
+        Shipment: { file: 'data/Shipment.ndjson', rows: 1, sha256: sha },
+      },
+      uploads: { fileCount: 0, totalBytes: 0, files: [], missing: [] },
+      containsSecrets: true,
+    };
+
+    const zip = zipSync({
+      'manifest.json': strToU8(JSON.stringify(manifest)),
+      'data/Shipment.ndjson': strToU8(shipmentData),
+    });
+
+    // Mock prisma bahwa deliveryNo sudah ada di database pada usaha lain
+    vi.spyOn(prisma.shipment, 'findFirst').mockResolvedValue({
+      id: 'shp_other',
+      businessId: 'biz_other',
+    } as any);
+
+    const report = await importData(zip, {
+      dryRun: true,
+      replaceSeedSuperadmin: false,
+      actor: null,
+      uploadDir: env.UPLOAD_DIR,
+    });
+
+    expect(report.ok).toBe(false);
+    expect(report.errors).toContain(
+      "Nomor surat jalan 'SJ-2026-0001' sudah terpakai oleh unit usaha lain di target."
+    );
+  });
+
+  it('menolak impor mode usaha bila Shipment.deliveryNo duplikat di dalam berkas impor', async () => {
+    const shipmentData =
+      toJsonLine({
+        id: 'shp_01',
+        businessId: 'biz_01',
+        orderId: 'ord_01',
+        deliveryNo: 'SJ-2026-DUP',
+      }) +
+      '\n' +
+      toJsonLine({
+        id: 'shp_02',
+        businessId: 'biz_01',
+        orderId: 'ord_02',
+        deliveryNo: 'SJ-2026-DUP',
+      }) +
+      '\n';
+
+    const sha = crypto.createHash('sha256').update(shipmentData).digest('hex');
+
+    const manifest = {
+      format: 'omnicat-export',
+      formatVersion: 1,
+      appVersion: '1.0.0',
+      lastMigration: dummyMigration,
+      exportedAt: new Date().toISOString(),
+      exportedBy: 'tester',
+      scope: 'business',
+      businessIds: ['biz_01'],
+      businessCodes: ['TRB'],
+      options: { includeUploads: false },
+      tables: {
+        Shipment: { file: 'data/Shipment.ndjson', rows: 2, sha256: sha },
+      },
+      uploads: { fileCount: 0, totalBytes: 0, files: [], missing: [] },
+      containsSecrets: true,
+    };
+
+    const zip = zipSync({
+      'manifest.json': strToU8(JSON.stringify(manifest)),
+      'data/Shipment.ndjson': strToU8(shipmentData),
+    });
+
+    const report = await importData(zip, {
+      dryRun: true,
+      replaceSeedSuperadmin: false,
+      actor: null,
+      uploadDir: env.UPLOAD_DIR,
+    });
+
+    expect(report.ok).toBe(false);
+    expect(report.errors).toContain(
+      "Nomor surat jalan 'SJ-2026-DUP' duplikat di dalam berkas impor."
+    );
   });
 });
