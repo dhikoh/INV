@@ -19,6 +19,7 @@ import {
   Settings,
   UserCog,
   ShieldCheck,
+  ShieldAlert,
   Bell,
   Receipt,
   Sparkles,
@@ -150,6 +151,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     }
   }, [pathname]);
 
+  // NAV-009: Jika user wajib ganti password dan tidak sedang di /profile, arahkan ke /profile
+  useEffect(() => {
+    if (user?.mustChangePassword && pathname !== '/profile') {
+      router.replace('/profile');
+    }
+  }, [user, pathname, router]);
+
   async function handleSwitchBusiness(businessId: string) {
     try {
       setSwitching(true);
@@ -166,7 +174,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         if (data.ok) {
           setActiveBusiness(data.data.business);
           setSwitcherOpen(false);
-          router.refresh();
+          if (typeof window !== 'undefined') {
+            window.location.reload();
+          } else {
+            router.refresh();
+          }
         }
       }
     } finally {
@@ -279,6 +291,25 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       hasUnread: unreadCount > 0,
     },
   ];
+
+  // NAV-006: Guard rute klien terpusat untuk membatasi akses Sales ke halaman khusus Super Admin
+  const SUPERADMIN_ONLY_PREFIXES = [
+    '/approvals',
+    '/stock',
+    '/purchase-orders',
+    '/payments',
+    '/audit',
+    '/sales',
+    '/vendors',
+    '/settings',
+    '/reports/margin',
+  ];
+
+  const isAccessRestricted =
+    !isSuperAdmin &&
+    SUPERADMIN_ONLY_PREFIXES.some(
+      (prefix) => pathname === prefix || pathname.startsWith(prefix + '/')
+    );
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col text-slate-900 pb-16 md:pb-0">
@@ -527,7 +558,25 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
         {/* Konten Halaman */}
         <main className="flex-1 p-4 md:p-6 max-w-7xl w-full mx-auto">
-          {children}
+          {isAccessRestricted ? (
+            <div className="max-w-md mx-auto mt-12 p-6 bg-white rounded-xl border border-red-200 shadow-sm text-center space-y-4">
+              <div className="w-12 h-12 rounded-full bg-red-100 text-red-600 mx-auto flex items-center justify-center">
+                <ShieldAlert className="w-6 h-6" />
+              </div>
+              <h3 className="text-lg font-bold text-slate-900">Akses Dibatasi</h3>
+              <p className="text-sm text-slate-600">
+                Halaman ini hanya dapat diakses oleh Super Administrator.
+              </p>
+              <Link
+                href="/dashboard"
+                className="inline-flex items-center justify-center min-h-[44px] px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold transition-colors"
+              >
+                Kembali ke Dashboard
+              </Link>
+            </div>
+          ) : (
+            children
+          )}
         </main>
       </div>
 

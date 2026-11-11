@@ -8,6 +8,12 @@ dan proyek ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- **Penguncian Keamanan Navigasi, Guard Rute Klien, & Sinkronisasi Multi-Tenant (NAV-003, NAV-006, NAV-009)**:
+  - Mengganti `router.refresh()` dengan `window.location.reload()` pada fungsi pengalih unit usaha (`handleSwitchBusiness`) di `src/components/AppShell.tsx` untuk menjamin seluruh komponen klien memuat ulang dataset usaha baru secara bersih tanpa kebocoran tampilan.
+  - Memasang guard rute klien terpusat (`SUPERADMIN_ONLY_PREFIXES`) di `AppShell.tsx` yang memblokir akses pengguna non-SuperAdmin ke rute `/approvals`, `/stock`, `/purchase-orders`, `/payments`, `/audit`, `/sales`, `/vendors`, `/settings`, dan `/reports/margin` dengan tampilan resmi "Akses Dibatasi", mencegah error merah 403 API.
+  - Memasang pengalihan paksa ke `/profile` bagi pengguna yang memiliki flag `mustChangePassword` aktif, memastikan kata sandi wajib diperbarui sebelum mengakses fitur lainnya.
+  - Menambahkan suite pengujian unit regresi di `tests/unit/appshell-security.test.ts` (3/3 passed).
+
 - **Perbaikan Keterbukaan Drawer Mobile Sales & Active State Navigasi (NAV-002, NAV-007, NAV-008, NAV-011)**:
   - Menghapus pembungkus peran `isSuperAdmin` pada drawer mobile di `src/components/AppShell.tsx` sehingga pengguna Sales pada perangkat seluler dapat membuka menu navigasi lengkap (Invoice, Piutang, Pelanggan, Daftar Harga, Laporan CRM, Pengingat, Pembaruan, Profil Saya).
   - Menambahkan menu resmi `Daftar Harga` (`/price-list`) ke `superAdminNav` agar Super Admin dapat menginspeksi daftar harga acuan resmi langsung dari menu utama.
