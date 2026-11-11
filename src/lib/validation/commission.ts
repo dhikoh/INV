@@ -11,6 +11,7 @@ export const CommissionTierItemSchema = z.object({
 });
 
 export const CommissionTiersUpdateSchema = z.object({
+  businessId: z.string().optional(),
   tiers: z.array(CommissionTierItemSchema),
 });
 

@@ -62,6 +62,13 @@ interface BusinessListItem {
   name: string;
 }
 
+interface CommissionTierItem {
+  id?: string;
+  businessId?: string;
+  minAchievementBps: number;
+  rateBps: number;
+}
+
 export default function BusinessSettingsPage() {
   const [businesses, setBusinesses] = useState<BusinessListItem[]>([]);
   const [selectedId, setSelectedId] = useState<string>('');
@@ -74,6 +81,13 @@ export default function BusinessSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  // Commission tiers state (NAV-005)
+  const [commissionTiers, setCommissionTiers] = useState<CommissionTierItem[]>([]);
+  const [loadingTiers, setLoadingTiers] = useState(false);
+  const [savingTiers, setSavingTiers] = useState(false);
+  const [tierSuccess, setTierSuccess] = useState(false);
+  const [tierError, setTierError] = useState<string | null>(null);
 
   // Logo upload state
   const [uploadingLogo, setUploadingLogo] = useState(false);
@@ -156,11 +170,94 @@ export default function BusinessSettingsPage() {
     }
   }, []);
 
+  // Muat tingkat komisi berjenjang (NAV-005)
+  const loadCommissionTiers = useCallback(async (bizId: string) => {
+    if (!bizId) return;
+    try {
+      setLoadingTiers(true);
+      setTierError(null);
+      const res = await fetch(`/api/v1/commission/tiers?businessId=${bizId}`);
+      if (res.ok) {
+        const json = await res.json();
+        if (json.ok && Array.isArray(json.data)) {
+          setCommissionTiers(json.data);
+        }
+      }
+    } catch {
+      // ignore
+    } finally {
+      setLoadingTiers(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (selectedId) {
       loadBusinessDetail(selectedId);
+      loadCommissionTiers(selectedId);
     }
-  }, [selectedId, loadBusinessDetail]);
+  }, [selectedId, loadBusinessDetail, loadCommissionTiers]);
+
+  // Operasi Tier Komisi
+  const handleAddTier = () => {
+    setCommissionTiers((prev) => [
+      ...prev,
+      { minAchievementBps: (prev.length + 1) * 10000, rateBps: 500 },
+    ]);
+  };
+
+  const handleRemoveTier = (index: number) => {
+    setCommissionTiers((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleUpdateTier = (
+    index: number,
+    field: 'minAchievementBps' | 'rateBps',
+    val: number
+  ) => {
+    setCommissionTiers((prev) => {
+      const copy = [...prev];
+      copy[index] = { ...copy[index], [field]: val };
+      return copy;
+    });
+  };
+
+  const handleSaveTiers = async () => {
+    if (!selectedId) return;
+    try {
+      setSavingTiers(true);
+      setTierError(null);
+      setTierSuccess(false);
+
+      const res = await fetch('/api/v1/commission/tiers', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          businessId: selectedId,
+          tiers: commissionTiers.map((t) => ({
+            minAchievementBps: Number(t.minAchievementBps),
+            rateBps: Number(t.rateBps),
+          })),
+        }),
+      });
+
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        throw new Error(json.error?.message || 'Gagal menyimpan tingkat komisi');
+      }
+
+      setTierSuccess(true);
+      if (Array.isArray(json.data)) {
+        setCommissionTiers(json.data);
+      }
+      setTimeout(() => setTierSuccess(false), 3000);
+    } catch (err: unknown) {
+      setTierError(
+        err instanceof Error ? err.message : 'Terjadi kesalahan saat menyimpan tingkat komisi'
+      );
+    } finally {
+      setSavingTiers(false);
+    }
+  };
 
   const handleInputChange = (
     field: keyof BusinessDetail,
@@ -1170,6 +1267,125 @@ export default function BusinessSettingsPage() {
                   </option>
                 </select>
               </div>
+            </div>
+
+            {/* Tingkat Komisi Berjenjang (Commission Tier - NAV-005) */}
+            <div className="pt-6 border-t border-slate-100 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">
+                    Tingkat Komisi Berjenjang (Commission Tier)
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Atur tarif insentif bertingkat berdasarkan persentase capaian target penjualan sales.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleAddTier}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors w-fit"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Tambah Tier</span>
+                </button>
+              </div>
+
+              {tierSuccess && (
+                <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-lg text-xs font-medium flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>Tingkat komisi berjenjang berhasil disimpan.</span>
+                </div>
+              )}
+
+              {tierError && (
+                <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-lg text-xs font-medium flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>{tierError}</span>
+                </div>
+              )}
+
+              {loadingTiers ? (
+                <div className="p-4 text-center text-xs text-slate-400">
+                  Memuat tingkat komisi...
+                </div>
+              ) : commissionTiers.length === 0 ? (
+                <div className="p-4 bg-slate-50 border border-dashed border-slate-200 rounded-lg text-center">
+                  <p className="text-xs text-slate-500">
+                    Belum ada tingkat komisi berjenjang. Komisi sales akan menggunakan tarif dasar default di atas.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="grid grid-cols-12 gap-2 text-xs font-bold text-slate-600 uppercase px-2">
+                    <div className="col-span-5">Capaian Target Minimal (%)</div>
+                    <div className="col-span-5">Tarif Komisi (%)</div>
+                    <div className="col-span-2 text-right">Aksi</div>
+                  </div>
+                  {commissionTiers.map((tier, idx) => (
+                    <div
+                      key={idx}
+                      className="grid grid-cols-12 gap-2 items-center bg-slate-50 p-2.5 rounded-lg border border-slate-200"
+                    >
+                      <div className="col-span-5 flex items-center gap-1.5">
+                        <input
+                          type="number"
+                          min="0"
+                          max="1000"
+                          value={tier.minAchievementBps / 100}
+                          onChange={(e) =>
+                            handleUpdateTier(
+                              idx,
+                              'minAchievementBps',
+                              Math.round(Number(e.target.value || 0) * 100)
+                            )
+                          }
+                          className="w-full h-9 px-2.5 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-900"
+                        />
+                        <span className="text-xs text-slate-500 font-semibold">%</span>
+                      </div>
+                      <div className="col-span-5 flex items-center gap-1.5">
+                        <input
+                          type="number"
+                          step="0.1"
+                          min="0"
+                          max="100"
+                          value={(tier.rateBps / 100).toFixed(1)}
+                          onChange={(e) =>
+                            handleUpdateTier(
+                              idx,
+                              'rateBps',
+                              Math.round(Number(e.target.value || 0) * 100)
+                            )
+                          }
+                          className="w-full h-9 px-2.5 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-900"
+                        />
+                        <span className="text-xs text-slate-500 font-semibold">%</span>
+                      </div>
+                      <div className="col-span-2 flex justify-end">
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveTier(idx)}
+                          className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors"
+                          title="Hapus Tier"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                  <div className="flex justify-end pt-2">
+                    <button
+                      type="button"
+                      onClick={handleSaveTiers}
+                      disabled={savingTiers}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-slate-800 hover:bg-slate-900 rounded-lg transition-colors disabled:opacity-50 shadow-sm"
+                    >
+                      <Save className="w-3.5 h-3.5" />
+                      <span>{savingTiers ? 'Menyimpan...' : 'Simpan Tingkat Komisi'}</span>
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </section>
 

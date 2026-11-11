@@ -8,6 +8,12 @@ dan proyek ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- **Integrasi Antarmuka Pengaturan Skema Komisi Berjenjang Sales (NAV-005)**:
+  - Mengintegrasikan endpoint backend `GET & PUT /api/v1/commission/tiers` ke antarmuka pengaturan unit usaha di `src/app/(app)/settings/business/page.tsx`.
+  - Menyediakan panel konfigurasi tingkat komisi progresif (*Commission Tiers*) di seksi Skema Komisi Sales, memungkinkan Super Admin menambah, mengedit persentase capaian target minimal (`minAchievementBps`) dan persentase tarif komisi (`rateBps`), serta menghapus baris tier.
+  - Memperbarui skema validasi `CommissionTiersUpdateSchema` dan endpoint `route.ts` agar mendukung target usaha spesifik (`businessId`) saat Super Admin mengonfigurasi unit usaha terpilih.
+  - Menambahkan suite pengujian unit di `tests/unit/commission-tiers-ui.test.ts` (1/1 passed).
+
 - **Penyediaan Halaman 404 Kustom & Global Error Boundary (NAV-010)**:
   - Menambahkan `src/app/not-found.tsx` bertema resmi OmniCat dengan tautan navigasi aman kembali ke Dashboard untuk menangani URL yang tidak ditemukan.
   - Menambahkan `src/app/error.tsx` sebagai React Error Boundary tingkat aplikasi dengan tombol muat ulang (`reset()`) dan tautan kembali ke Dashboard saat terjadi kendala runtime.

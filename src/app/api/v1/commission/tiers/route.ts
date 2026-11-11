@@ -21,8 +21,9 @@ export const GET = withApi(
   {
     roles: [Role.SUPERADMIN],
   },
-  async ({ ctx }) => {
-    const businessId = requireBusiness(ctx);
+  async ({ req, ctx }) => {
+    const queryBusinessId = req.nextUrl.searchParams.get('businessId');
+    const businessId = (ctx.role === Role.SUPERADMIN && queryBusinessId) ? queryBusinessId : requireBusiness(ctx);
 
     const data = await prisma.$transaction(async (tx) => {
       return getCommissionTiers(tx as unknown as TxClient, businessId);
@@ -48,11 +49,14 @@ export const PUT = withApi(
     roles: [Role.SUPERADMIN],
     body: CommissionTiersUpdateSchema,
   },
-  async ({ ctx, body }) => {
-    requireBusiness(ctx);
+  async ({ req, ctx, body }) => {
+    const targetBusinessId = (ctx.role === Role.SUPERADMIN && (body.businessId || req.nextUrl.searchParams.get('businessId'))) || undefined;
+    if (!targetBusinessId) {
+      requireBusiness(ctx);
+    }
 
     const data = await prisma.$transaction(async (tx) => {
-      return setCommissionTiers(tx as unknown as TxClient, ctx, body.tiers);
+      return setCommissionTiers(tx as unknown as TxClient, ctx, body.tiers, targetBusinessId);
     });
 
     return {

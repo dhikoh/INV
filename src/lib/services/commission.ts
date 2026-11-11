@@ -506,13 +506,14 @@ export async function getCommissionTiers(
 export async function setCommissionTiers(
   tx: TxClient,
   ctx: Ctx,
-  tiersInput: Array<{ minAchievementBps: number; rateBps: number }>
+  tiersInput: Array<{ minAchievementBps: number; rateBps: number }>,
+  targetBusinessId?: string
 ): Promise<CommissionTierDto[]> {
   if (ctx.user.role !== Role.SUPERADMIN) {
     throw new DomainError('FORBIDDEN', 'Hanya Super Admin yang dapat mengatur tingkat komisi', 403);
   }
 
-  const businessId = requireBusiness(ctx);
+  const businessId = targetBusinessId || requireBusiness(ctx);
 
   // Hapus tier lama dan buat tier baru
   await tx.commissionTier.deleteMany({
