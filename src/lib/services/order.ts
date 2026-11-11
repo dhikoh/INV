@@ -110,6 +110,7 @@ export async function buildOrderSnapshot(
       code: true,
       name: true,
       assignedSalesId: true,
+      tags: true,
     },
   });
 
@@ -119,6 +120,16 @@ export async function buildOrderSnapshot(
 
   if (ctx.user.role === 'SALES' && customer.assignedSalesId !== ctx.user.id) {
     throw new DomainError('CUSTOMER_NOT_FOUND', 'Pelanggan tidak ditemukan', 404);
+  }
+
+  if (customer.tags && customer.tags.includes('PENDING_VERIFIKASI_ADMIN')) {
+    if (ctx.user.role === 'SALES') {
+      throw new DomainError(
+        'FORBIDDEN',
+        'Pelanggan ini sedang menunggu verifikasi Admin terkait potensi duplikasi data. Pembuatan pesanan belum diizinkan.',
+        403
+      );
+    }
   }
 
   // 2. Tolak produk ganda: 422 DUPLICATE_PRODUCT

@@ -6,6 +6,11 @@ import { DomainError } from '@/lib/domain/money';
 import { requireBusiness } from '@/lib/auth/context';
 import { customerScope } from '@/lib/services/scopes';
 import { audit } from '@/lib/audit/audit';
+import {
+  checkCustomerCollision,
+  notifySuperAdminsCollision,
+  TAG_PENDING_VERIFIKASI_ADMIN,
+} from '@/lib/services/customerCollision';
 
 const CreateCustomerSchema = z
   .object({
@@ -188,7 +193,31 @@ export const POST = withApi(
       );
     }
 
-    // 3. Simpan data customer baru
+    // 3. Deteksi potensi tabrakan calon pelanggan antar-sales
+    const collision = await checkCustomerCollision(prisma, {
+      businessId,
+      name: body.name,
+      phone: body.phone,
+      address: body.address,
+      shippingAddress: body.shippingAddress,
+      billingAddress: body.billingAddress,
+    });
+
+    const isSales = ctx.role === Role.SALES;
+    const shouldFlag = isSales && collision.hasCollision;
+
+    let finalTags = body.tags ?? [];
+    let finalNotes = body.notes ?? null;
+
+    if (shouldFlag) {
+      if (!finalTags.includes(TAG_PENDING_VERIFIKASI_ADMIN)) {
+        finalTags = [...finalTags, TAG_PENDING_VERIFIKASI_ADMIN];
+      }
+      const collisionNote = `[PERINGATAN TABRAKAN] ${collision.reasonDescription}`;
+      finalNotes = finalNotes ? `${finalNotes}\n${collisionNote}` : collisionNote;
+    }
+
+    // 4. Simpan data customer baru
     const customer = await prisma.$transaction(async (tx) => {
       const created = await tx.customer.create({
         data: {
@@ -203,8 +232,8 @@ export const POST = withApi(
           npwp: body.npwp ?? null,
           assignedSalesId,
           pipelineStage: body.pipelineStage ?? PipelineStage.LEAD,
-          tags: body.tags ?? [],
-          notes: body.notes ?? null,
+          tags: finalTags,
+          notes: finalNotes,
           rev: 0,
         },
         include: {
@@ -223,12 +252,23 @@ export const POST = withApi(
         },
       });
 
+      if (shouldFlag) {
+        await notifySuperAdminsCollision(tx, {
+          businessId,
+          customer: created,
+          creatorSales: ctx.user,
+          collision,
+        });
+      }
+
       await audit(tx, ctx, {
-        action: 'CUSTOMER_CREATE',
+        action: shouldFlag ? 'CUSTOMER_COLLISION_FLAGGED' : 'CUSTOMER_CREATE',
         entityType: 'Customer',
         entityId: created.id,
         businessId,
-        summary: `Mendaftarkan pelanggan baru: [${created.code}] ${created.name}`,
+        summary: shouldFlag
+          ? `Mendaftarkan pelanggan berstatus PENDING_VERIFIKASI_ADMIN: [${created.code}] ${created.name} (${collision.reasonDescription})`
+          : `Mendaftarkan pelanggan baru: [${created.code}] ${created.name}`,
         after: created,
       });
 
@@ -238,6 +278,11 @@ export const POST = withApi(
     return {
       status: 201,
       data: customer,
+      meta: {
+        collisionFlagged: shouldFlag,
+        collisionReason: collision.hasCollision ? collision.reason : null,
+        collisionMessage: collision.hasCollision ? collision.reasonDescription : null,
+      },
     };
   }
 );

@@ -239,6 +239,7 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
 | `GET/POST` | `/api/v1/customers`            | Super Admin, Sales | CRUD pelanggan (Sales: customerScope & self-assign) |
 | `GET/PATCH/DELETE` | `/api/v1/customers/:id` | Super Admin, Sales | Detail, ubah (kunci kode), soft delete (cek order) |
 | `POST`     | `/api/v1/customers/:id/reassign` | Super Admin      | Alihkan pelanggan ke sales lain (+ opsi open orders) |
+| `POST`     | `/api/v1/customers/:id/verify` | Super Admin        | Selesaikan verifikasi tabrakan leads (APPROVE, REASSIGN, REJECT) |
 | `GET`      | `/api/v1/customers/:id/timeline` | Super Admin, Sales | Linimasa kronologis gabungan interaksi CRM dan order |
 | `GET/POST` | `/api/v1/customers/:id/interactions` | Super Admin, Sales | Catat interaksi CRM; otomatis buat CrmTask jika follow-up diisi |
 | `GET`      | `/api/v1/customers/:id/pricing` | Super Admin, Sales | Harga dasar, floor efektif, promo aktif per produk (costPrice dirahasiakan) |
