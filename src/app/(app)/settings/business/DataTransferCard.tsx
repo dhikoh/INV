@@ -16,8 +16,8 @@ import {
 import { ImportReport } from '@/lib/transfer/import';
 
 interface DataTransferCardProps {
-  businessId: string;
-  businessCode: string;
+  businessId?: string;
+  businessCode?: string;
 }
 
 export default function DataTransferCard({
@@ -205,14 +205,16 @@ export default function DataTransferCard({
             </div>
 
             <div className="flex flex-wrap items-center gap-3">
-              <button
-                type="button"
-                onClick={handleExportBusiness}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-colors shadow-sm"
-              >
-                <Building className="w-4 h-4 text-gray-500" />
-                Ekspor Usaha Ini ({businessCode})
-              </button>
+              {businessId && (
+                <button
+                  type="button"
+                  onClick={handleExportBusiness}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-colors shadow-sm"
+                >
+                  <Building className="w-4 h-4 text-gray-500" />
+                  Ekspor Usaha Ini ({businessCode || 'Usaha'})
+                </button>
+              )}
 
               <button
                 type="button"

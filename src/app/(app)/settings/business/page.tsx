@@ -584,10 +584,11 @@ export default function BusinessSettingsPage() {
       <div className="space-y-8 pb-12">
         <EmptyState
           title="Belum Ada Unit Usaha"
-          description="Buat unit usaha pertama Anda untuk mulai mengatur operasional dan rekening bank."
-          actionText="Tambah Usaha Baru"
+          description="Buat unit usaha pertama Anda untuk mulai mengatur operasional dan rekening bank, atau pulihkan unit usaha lengkap dari berkas transfer portabel (ZIP)."
+          actionText="Tambah Usaha Manual"
           onAction={() => setShowAddBiz(true)}
         />
+        <DataTransferCard />
         {renderAddBizModal()}
       </div>
     );
