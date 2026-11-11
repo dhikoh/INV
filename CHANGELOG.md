@@ -8,6 +8,11 @@ dan proyek ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- **Resolusi Duplikasi Rute Pembayaran Komisi & Kanonikalisasi Endpoint (NAV-012)**:
+  - Mengonfirmasi seluruh antarmuka pengguna (`orders/[id]` dan `sales/[id]`) telah bermigrasi 100% ke rute kanon `POST /api/v1/commission/entries/:id/pay`.
+  - Mengalihkan dan mendepresiasi secara eksplisit endpoint duplikat `POST /api/v1/commissions/:id/pay` dengan header HTTP `Deprecation` ke rute kanon guna menjaga backward compatibility pengujian warisan tanpa duplikasi logika.
+  - Menambahkan suite pengujian unit kanonisasi rute di `tests/unit/commission-route-canon.test.ts` (2/2 passed).
+
 - **Integrasi Antarmuka Pengaturan Skema Komisi Berjenjang Sales (NAV-005)**:
   - Mengintegrasikan endpoint backend `GET & PUT /api/v1/commission/tiers` ke antarmuka pengaturan unit usaha di `src/app/(app)/settings/business/page.tsx`.
   - Menyediakan panel konfigurasi tingkat komisi progresif (*Commission Tiers*) di seksi Skema Komisi Sales, memungkinkan Super Admin menambah, mengedit persentase capaian target minimal (`minAchievementBps`) dan persentase tarif komisi (`rateBps`), serta menghapus baris tier.

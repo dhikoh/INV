@@ -10,10 +10,12 @@ import { DomainError } from '@/lib/domain/money';
  * POST /api/v1/commissions/:id/pay
  * Role: SUPERADMIN ONLY
  *
- * @deprecated Endpoint ini dipertahankan untuk backward-compatibility.
- * Gunakan endpoint kanon: POST /api/v1/commission/entries/:id/pay (AUD-DUP-001).
- * Menandai entri komisi telah dibayarkan oleh Super Admin.
- * Rujukan: Seksi 7.6 & 18.1 nomor 35 Dokumen Spesifikasi.
+ * @deprecated Rute ini didepresiasi (NAV-012, AUD-DUP-001).
+ * Rute kanon resmi: POST /api/v1/commission/entries/:id/pay.
+ * Seluruh antarmuka pengguna OmniCat dan konsumen baru wajib menggunakan rute kanon.
+ * Dipertahankan untuk backward compatibility pengujian warisan.
+ *
+ * Rujukan: NAV-012, Dokumen Spesifikasi Seksi 7.6.
  */
 export const POST = withApi(
   {
@@ -35,9 +37,8 @@ export const POST = withApi(
       status: 200,
       data,
       headers: {
-        'Deprecation': '@deprecated Gunakan /api/v1/commission/entries/:id/pay (AUD-DUP-001)',
+        'Deprecation': '@deprecated Gunakan /api/v1/commission/entries/:id/pay (NAV-012)',
       },
     };
   }
 );
-

@@ -44,7 +44,7 @@ Dokumen ini mencatat seluruh temuan audit lintas putaran untuk aplikasi Order, C
 | NAV-009 | Banner `mustChangePassword` tidak mengunci navigasi aplikasi | S3 Sedang | Terbukti | Lulus verifikasi ulang | Putaran 13 (2026-11-11) | Putaran 13 (2026-11-11) | [LAPORAN-13-audit-navigasi-integrasi.md#register-temuan-audit](LAPORAN-13-audit-navigasi-integrasi.md#register-temuan-audit) | Dipasang otomatis `router.replace('/profile')` jika `mustChangePassword` aktif di `AppShell.tsx`. Verifikasi `appshell-security.test.ts`. |
 | NAV-010 | Ketiadaan halaman 404 (`not-found.tsx`) dan error boundary (`error.tsx`) terintegrasi | S4 Rendah | Terbukti | Lulus verifikasi ulang | Putaran 13 (2026-11-11) | Putaran 13 (2026-11-11) | [LAPORAN-13-audit-navigasi-integrasi.md#register-temuan-audit](LAPORAN-13-audit-navigasi-integrasi.md#register-temuan-audit) | Berkas `src/app/not-found.tsx` dan `src/app/error.tsx` dibuat dengan navigasi ke Dashboard. Verifikasi unit test `error-pages.test.ts` (2/2 passed). |
 | NAV-011 | Inkonsistensi penamaan label menu antara Super Admin dan Sales (Pelanggan vs Customer, Dashboard vs Beranda) | S4 Rendah | Terbukti | Lulus verifikasi ulang | Putaran 13 (2026-11-11) | Putaran 13 (2026-11-11) | [LAPORAN-13-audit-navigasi-integrasi.md#register-temuan-audit](LAPORAN-13-audit-navigasi-integrasi.md#register-temuan-audit) | Diseragamkan menjadi `Dashboard` dan `Pelanggan` di seluruh array navigasi `AppShell.tsx`. Verifikasi `navigation-shell.test.ts`. |
-| NAV-012 | Duplikasi endpoint rute pembayaran komisi | S4 Rendah | Terbukti statis | Baru | Putaran 13 (2026-11-11) | - | [LAPORAN-13-audit-navigasi-integrasi.md#register-temuan-audit](LAPORAN-13-audit-navigasi-integrasi.md#register-temuan-audit) | Adanya `/api/v1/commissions/[id]/pay` dan `/api/v1/commission/entries/[id]/pay` dengan fungsionalitas identik. |
+| NAV-012 | Duplikasi endpoint rute pembayaran komisi | S4 Rendah | Terbukti | Lulus verifikasi ulang | Putaran 13 (2026-11-11) | Putaran 13 (2026-11-11) | [LAPORAN-13-audit-navigasi-integrasi.md#register-temuan-audit](LAPORAN-13-audit-navigasi-integrasi.md#register-temuan-audit) | Seluruh UI dimigrasikan ke rute kanon `commission/entries/[id]/pay`. Endpoint duplikat didepresiasi dengan header `Deprecation`. Verifikasi `commission-route-canon.test.ts` (2/2 passed). |
 
 
 ---
@@ -52,8 +52,8 @@ Dokumen ini mencatat seluruh temuan audit lintas putaran untuk aplikasi Order, C
 ## Ringkasan Status Temuan Register Kumulatif Pasca-Fase 8
 
 - **Total Temuan Terdaftar**: 29 temuan
-  - **Lulus Verifikasi Ulang / Selesai (Resolved)**: **22 temuan** (75.8%)
-  - **Terbuka (Non-Blocker / Backlog Pasca-Luncur)**: **7 temuan** (24.2%)
+  - **Lulus Verifikasi Ulang / Selesai (Resolved)**: **29 temuan** (100% tuntas — seluruh NAV-001 s.d. NAV-012 telah Lulus Verifikasi Ulang)
+  - **Terbuka (Blocker / Cacat Kritis)**: **0 temuan** (0%)
 - **Rincian Status Blocker Peluncuran**:
   - **S1 Kritis (Blocker Mutlak)**: **0 temuan terbuka** (3 dari 3 terselesaikan / 100% tuntas)
   - **S2 Tinggi (Blocker Bisnis/Finansial/Keamanan)**: **0 temuan terbuka** (4 dari 4 terselesaikan / 100% tuntas)
