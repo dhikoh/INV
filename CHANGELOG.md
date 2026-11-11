@@ -8,6 +8,11 @@ dan proyek ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- **Perbaikan Path Gambar Item Katalog & Cache Offline PWA (NAV-001)**:
+  - Mengoreksi konstruksi URL gambar produk pada `src/app/(app)/catalogs/[id]/page.tsx` dari rute fiktif `/api/v1/uploads/${imagePath}` ke rute resmi file handler `/api/v1/files/${imagePath}`.
+  - Memastikan pengiriman daftar URL ke Service Worker (`SAVE_CATALOG`) menggunakan rute resmi sehingga cache offline PWA menyimpan aset gambar produk yang sah (200 OK).
+  - Menambahkan suite pengujian unit `tests/unit/catalog-images.test.ts` dan memperbarui mock kontrak di `tests/integration/pwa.test.ts`.
+
 - **Perbaikan Kontrak UI-API Bootstrap Formulir Order & Dropdown Pelanggan (T1)**:
   - Menyediakan helper defensif `unwrapList()` (`src/lib/api/client.ts`) untuk menangani format respons array langsung `data: T[]` maupun objek paginasi `data: { items: T[] }`.
   - Mengatasi masalah tombol "Tambah Produk" tidak bereaksi pada `OrderForm.tsx` dan dropdown pelanggan kosong akibat salah membaca `custJson.data.items` dan `prodJson.data.items`.

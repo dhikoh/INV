@@ -56,7 +56,7 @@ describe('T4.6: Integrasi PWA, Header SW, dan Proteksi Data Offline (Seksi 15.3 
       };
 
       // Sales A menyimpan katalog 1
-      simulateSaveCatalog('user_sales_a', ['/api/v1/catalogs/cat_1', '/api/v1/uploads/img1.jpg']);
+      simulateSaveCatalog('user_sales_a', ['/api/v1/catalogs/cat_1', '/api/v1/files/img1.jpg']);
       expect(mockCaches.has('catalog-user_sales_a')).toBe(true);
       expect(mockCaches.get('catalog-user_sales_a')?.has('/api/v1/catalogs/cat_1')).toBe(true);
       expect(mockCaches.has('catalog-user_sales_b')).toBe(false);

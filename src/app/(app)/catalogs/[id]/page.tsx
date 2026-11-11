@@ -353,7 +353,7 @@ export default function CatalogDetailPage() {
           `/api/v1/catalogs/${catalog.id}`,
           ...catalog.items
             .filter((it) => it.imagePath)
-            .map((it) => `/api/v1/uploads/${it.imagePath}`),
+            .map((it) => `/api/v1/files/${it.imagePath}`),
         ];
 
         navigator.serviceWorker.controller.postMessage({
@@ -678,7 +678,7 @@ export default function CatalogDetailPage() {
                     {item.imagePath ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
-                        src={`/api/v1/uploads/${item.imagePath}`}
+                        src={`/api/v1/files/${item.imagePath}`}
                         alt={item.name}
                         className="w-full h-full object-cover"
                       />
