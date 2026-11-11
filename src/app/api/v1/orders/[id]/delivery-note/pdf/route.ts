@@ -6,7 +6,7 @@ import { toErrorResponse } from '@/lib/api/withApi';
 import { DomainError } from '@/lib/domain/money';
 import { Role, InvoiceStatus, ShipStatus } from '@prisma/client';
 import { DeliveryNoteDocument, DeliveryNoteData } from '@/lib/pdf/DeliveryNoteDocument';
-import { renderReactToPdf } from '@/lib/pdf/engine';
+import { renderReactToPdf, renderReactToHtml } from '@/lib/pdf/engine';
 import { getLogoDataUri } from '@/lib/pdf/logo';
 
 export async function GET(
@@ -121,7 +121,53 @@ export async function GET(
       logoDataUri,
     });
 
-    const pdfBuffer = await renderReactToPdf(element);
+    const format = req.nextUrl.searchParams.get('format');
+
+    // Jika format=html diminta secara eksplisit, kembalikan dokumen cetak HTML
+    if (format === 'html' || format === 'print') {
+      const html = renderReactToHtml(element);
+      const printableHtml = html.replace(
+        '</body>',
+        `<script>window.addEventListener('DOMContentLoaded', () => { window.print(); });</script></body>`
+      );
+      return new NextResponse(printableHtml, {
+        status: 200,
+        headers: {
+          'Content-Type': 'text/html; charset=utf-8',
+          'Cache-Control': 'private, no-store',
+        },
+      });
+    }
+
+    let pdfBuffer: Buffer;
+    try {
+      pdfBuffer = await renderReactToPdf(element);
+    } catch (renderErr) {
+      // Fallback anggun: jika headless browser Chromium di server belum terkonfigurasi / spawn error,
+      // kembalikan tampilan dokumen HTML dengan auto-print agar pengguna tetap dapat mencetak surat jalan
+      const errMsg = renderErr instanceof Error ? renderErr.message : String(renderErr);
+      if (
+        errMsg.includes('Failed to launch the browser') ||
+        errMsg.includes('ENOENT') ||
+        errMsg.includes('chromium') ||
+        errMsg.includes('chrome') ||
+        errMsg.includes('spawn')
+      ) {
+        const html = renderReactToHtml(element);
+        const printableHtml = html.replace(
+          '</body>',
+          `<script>window.addEventListener('DOMContentLoaded', () => { window.print(); });</script></body>`
+        );
+        return new NextResponse(printableHtml, {
+          status: 200,
+          headers: {
+            'Content-Type': 'text/html; charset=utf-8',
+            'Cache-Control': 'private, no-store',
+          },
+        });
+      }
+      throw renderErr;
+    }
 
     const safeFilename = `${deliveryNo.replace(/[/\\?%*:|"<>]/g, '-')}.pdf`;
 

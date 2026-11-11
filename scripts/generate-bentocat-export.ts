@@ -989,7 +989,67 @@ async function main() {
       deletedAt: null,
     });
 
-    // 2. Invoice (FINAL & APPROVED)
+    // 2. Invoice (FINAL & APPROVED) dengan Snapshot Resmi Statis
+    const invoiceSnapshot = {
+      schemaVersion: 1,
+      number: raw.invoiceNo,
+      type: 'FINAL',
+      issueDate: raw.orderDate.toISOString(),
+      dueDate: dueDate.toISOString(),
+      theme: 'PROFESIONAL',
+      business: {
+        name: 'BentoCat Premium Cat Litter',
+        legalName: 'CV BentoCat Mandiri',
+        address: 'Jl. Dr. Soekandar Gg. 1 No. 5 Sananwetan, Blitar, Jawa Timur',
+        phone: '087777717300',
+        email: 'admin@modula.click',
+        npwp: '09.123.456.7-654.000',
+        logoPath: null,
+      },
+      customer: {
+        code: cust.code,
+        name: cust.name,
+        contactName: cust.contactName,
+        billingAddress: cust.billingAddress,
+        shippingAddress: cust.shippingAddress,
+        npwp: null,
+      },
+      items: orderItemsLocal.map((oit, idx) => ({
+        no: idx + 1,
+        name: oit.productName,
+        sku: oit.sku,
+        qty: oit.qty,
+        unit: oit.unit,
+        unitPrice: Number(oit.unitPrice),
+        lineDiscount: Number(oit.lineDiscount),
+        lineNet: Number(oit.lineNet),
+      })),
+      totals: {
+        subtotal: Number(subtotal),
+        discountTotal: 0,
+        shippingCharge: 0,
+        ppnEnabled: false,
+        ppnRateBps: 1100,
+        ppnAmount: 0,
+        grandTotal: Number(grandTotal),
+      },
+      billing: {
+        dpBps: 5000,
+        dpAmount: Number(dpAmount),
+        amountDue: Number(grandTotal),
+        dpInvoiceNumber: null,
+        dpPaid: Number(grandTotal),
+      },
+      banks: [
+        {
+          bankName: 'BCA',
+          accountNumber: '0901422817',
+          accountHolder: 'DHIKO HERLAMBANG',
+        },
+      ],
+      note: 'Terima kasih atas kemitraan dan kepercayaan Anda kepada BentoCat.',
+    };
+
     invoices.push({
       id: invoiceId,
       businessId,
@@ -1004,6 +1064,7 @@ async function main() {
       issueDate: raw.orderDate,
       dueDate,
       theme: 'PROFESIONAL',
+      snapshot: invoiceSnapshot,
       requestedById: diniaId,
       approvedById: diniaId,
       approvedAt: raw.orderDate,

@@ -27,6 +27,7 @@ dan proyek ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   - Penanganan error aman (*graceful error handling*) pada `POST /api/v1/data-transfer/import` yang mengembalikan kode 422 dengan pesan rincian terstruktur di UI alih-alih crash 500.
   - Sanitasi dinamis kolom skema (*schema drift guard*) berbasis Prisma DMMF: otomatis menyaring dan membuang (*strip*) field/properti asing sebelum `createMany`.
   - Penyelarasan generator transfer data BentoCat (`scripts/generate-bentocat-export.ts`) bebas dari field non-skema (`rev` di `Business`, `email` di `Customer`, dll.) serta kelengkapan `DocumentCounter` menyeluruh (`ORDER_SEQ`, `PO_SEQ`, `CREDIT_NOTE_SEQ`) dengan hasil validasi 100% lulus pada 35 model tabel.
+  - **Resiliensi Engine Dokumen & Cetak Faktur**: Penyempurnaan argumen Puppeteer container (`--disable-setuid-sandbox`, `--single-process`, `--no-zygote`), penambahan fallback pencetakan HTML interaktif (`?format=html`) pada rute PDF Invoice dan Surat Jalan agar pengguna tidak terhalang cetak dokumen, serta penyertaan snapshot faktur statis pada 20 transaksi riil BentoCat.
 
 - **Fitur Ekspor & Impor Data Portabel (ADR 0008)**:
   - Modul serialisasi lossless BigInt & Date (`src/lib/transfer/serialize.ts`).

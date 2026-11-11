@@ -102,7 +102,9 @@ export function findChromeExecutable(): string {
       '/usr/bin/chromium',
       '/usr/bin/chromium-browser',
       '/usr/bin/google-chrome',
-      '/usr/bin/google-chrome-stable'
+      '/usr/bin/google-chrome-stable',
+      '/snap/bin/chromium',
+      '/usr/local/bin/chromium'
     );
   }
 
@@ -136,8 +138,14 @@ export async function getBrowser(): Promise<Browser> {
       headless: true,
       args: [
         '--no-sandbox',
+        '--disable-setuid-sandbox',
         '--disable-dev-shm-usage',
         '--disable-gpu',
+        '--disable-software-rasterizer',
+        '--no-first-run',
+        '--no-zygote',
+        '--single-process',
+        '--disable-extensions',
         '--font-render-hinting=none',
       ],
     });

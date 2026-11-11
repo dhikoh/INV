@@ -7,7 +7,7 @@ import { DomainError } from '@/lib/domain/money';
 import { Role, InvoiceStatus } from '@prisma/client';
 import { buildInvoiceSnapshot, InvoiceSnapshot } from '@/lib/pdf/snapshot';
 import { InvoiceDocument } from '@/lib/pdf/InvoiceDocument';
-import { renderReactToPdf } from '@/lib/pdf/engine';
+import { renderReactToPdf, renderReactToHtml } from '@/lib/pdf/engine';
 import { getLogoDataUri } from '@/lib/pdf/logo';
 
 export async function GET(
@@ -166,7 +166,7 @@ export async function GET(
       logoDataUri,
     });
 
-    const pdfBuffer = await renderReactToPdf(element);
+    const format = req.nextUrl.searchParams.get('format');
 
     // Update counter cetak dan log audit jika cetak faktur resmi
     if (isNormalPrint) {
@@ -189,6 +189,52 @@ export async function GET(
           summary: `Invoice #${invoice.number} dicetak (Cetak ke-${(invoice.printedCount ?? 0) + 1})`,
         },
       });
+    }
+
+    // Jika parameter format=html diminta secara eksplisit, kirim halaman cetak HTML interaktif
+    if (format === 'html' || format === 'print') {
+      const html = renderReactToHtml(element);
+      const printableHtml = html.replace(
+        '</body>',
+        `<script>window.addEventListener('DOMContentLoaded', () => { window.print(); });</script></body>`
+      );
+      return new NextResponse(printableHtml, {
+        status: 200,
+        headers: {
+          'Content-Type': 'text/html; charset=utf-8',
+          'Cache-Control': 'private, no-store',
+        },
+      });
+    }
+
+    let pdfBuffer: Buffer;
+    try {
+      pdfBuffer = await renderReactToPdf(element);
+    } catch (renderErr) {
+      // Fallback anggun: jika headless browser Chromium di server belum terkonfigurasi / spawn error,
+      // kembalikan tampilan dokumen HTML dengan auto-print agar pengguna tetap dapat mencetak faktur
+      const errMsg = renderErr instanceof Error ? renderErr.message : String(renderErr);
+      if (
+        errMsg.includes('Failed to launch the browser') ||
+        errMsg.includes('ENOENT') ||
+        errMsg.includes('chromium') ||
+        errMsg.includes('chrome') ||
+        errMsg.includes('spawn')
+      ) {
+        const html = renderReactToHtml(element);
+        const printableHtml = html.replace(
+          '</body>',
+          `<script>window.addEventListener('DOMContentLoaded', () => { window.print(); });</script></body>`
+        );
+        return new NextResponse(printableHtml, {
+          status: 200,
+          headers: {
+            'Content-Type': 'text/html; charset=utf-8',
+            'Cache-Control': 'private, no-store',
+          },
+        });
+      }
+      throw renderErr;
     }
 
     const rawNumber = snapshot.number || (preview ? 'DRAFT-INVOICE' : 'INVOICE');
