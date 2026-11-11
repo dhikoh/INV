@@ -83,13 +83,35 @@ export const GET = withApi(
       ];
     }
 
+    const sortOrder = (query?.sortOrder || query?.sortDir || 'desc').toLowerCase() === 'asc' ? 'asc' : 'desc';
+    const sortBy = query?.sortBy || 'date';
+
+    let orderBy: Prisma.InvoiceOrderByWithRelationInput | Prisma.InvoiceOrderByWithRelationInput[] = [
+      { issueDate: sortOrder },
+      { createdAt: sortOrder },
+    ];
+
+    if (sortBy === 'date' || sortBy === 'issueDate') {
+      orderBy = [{ issueDate: sortOrder }, { createdAt: sortOrder }];
+    } else if (sortBy === 'dueDate') {
+      orderBy = [{ dueDate: sortOrder }, { createdAt: sortOrder }];
+    } else if (sortBy === 'amount') {
+      orderBy = [{ amount: sortOrder }, { createdAt: 'desc' }];
+    } else if (sortBy === 'number') {
+      orderBy = [{ number: sortOrder }, { createdAt: 'desc' }];
+    } else if (sortBy === 'status') {
+      orderBy = [{ status: sortOrder }, { createdAt: 'desc' }];
+    } else if (sortBy === 'createdAt') {
+      orderBy = { createdAt: sortOrder };
+    }
+
     const [total, invoices] = await Promise.all([
       prisma.invoice.count({ where }),
       prisma.invoice.findMany({
         where,
         skip,
         take: limit,
-        orderBy: { createdAt: 'desc' },
+        orderBy,
       }),
     ]);
 

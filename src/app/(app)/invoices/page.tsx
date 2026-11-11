@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { Skeleton, EmptyState, ErrorState } from '@/components/ui/States';
 import { StatusBadge } from '@/components/ui/StatusBadge';
+import { SortableHeader } from '@/components/ui/SortableHeader';
 import { formatRupiah } from '@/lib/domain/money';
 
 interface InvoiceListItem {
@@ -76,6 +77,21 @@ export default function InvoicesPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [page, setPage] = useState(1);
 
+  // Sorting
+  const [sortBy, setSortBy] = useState('date');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+
+  const handleSort = (field: string) => {
+    if (sortBy === field) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(field);
+      const defaultAsc = ['customer', 'number', 'dueDate'].includes(field);
+      setSortOrder(defaultAsc ? 'asc' : 'desc');
+    }
+    setPage(1);
+  };
+
   // Debounce search
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -96,6 +112,8 @@ export default function InvoicesPage() {
       if (statusFilter !== 'ALL') params.set('status', statusFilter);
       if (typeFilter !== 'ALL') params.set('type', typeFilter);
       if (searchQuery.trim()) params.set('search', searchQuery.trim());
+      params.set('sortBy', sortBy);
+      params.set('sortOrder', sortOrder);
 
       const res = await fetch(`/api/v1/invoices?${params.toString()}`);
       if (!res.ok) {
@@ -110,7 +128,7 @@ export default function InvoicesPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, statusFilter, typeFilter, searchQuery]);
+  }, [page, statusFilter, typeFilter, searchQuery, sortBy, sortOrder]);
 
   useEffect(() => {
     fetchInvoices();
@@ -173,7 +191,7 @@ export default function InvoicesPage() {
 
         {/* Baris Filter Dropdown & Search Input */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2 border-t border-slate-100">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Filter className="w-4 h-4 text-slate-400 shrink-0" />
             <select
               value={typeFilter}
@@ -186,6 +204,28 @@ export default function InvoicesPage() {
               <option value="ALL">Semua Tipe Faktur</option>
               <option value="DP">Uang Muka (DP)</option>
               <option value="FINAL">Pelunasan (FINAL)</option>
+            </select>
+
+            <select
+              value={`${sortBy}_${sortOrder}`}
+              onChange={(e) => {
+                const [f, o] = e.target.value.split('_') as [string, 'asc' | 'desc'];
+                setSortBy(f);
+                setSortOrder(o);
+                setPage(1);
+              }}
+              className="text-xs border border-slate-200 rounded-lg px-2.5 py-2 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[40px]"
+              title="Urutkan faktur"
+            >
+              <option value="date_desc">Tanggal Terbit: Terbaru</option>
+              <option value="date_asc">Tanggal Terbit: Terlama</option>
+              <option value="dueDate_asc">Jatuh Tempo: Paling Cepat</option>
+              <option value="dueDate_desc">Jatuh Tempo: Paling Lama</option>
+              <option value="amount_desc">Nominal: Terbesar</option>
+              <option value="amount_asc">Nominal: Terkecil</option>
+              <option value="number_asc">No. Faktur: A - Z</option>
+              <option value="number_desc">No. Faktur: Z - A</option>
+              <option value="status_asc">Status Faktur</option>
             </select>
           </div>
 
@@ -232,13 +272,43 @@ export default function InvoicesPage() {
               <table className="w-full text-left text-xs">
                 <thead className="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200 uppercase tracking-wider text-[11px]">
                   <tr>
-                    <th className="p-3">No. Faktur</th>
+                    <SortableHeader
+                      label="No. Faktur"
+                      field="number"
+                      currentSortBy={sortBy}
+                      currentSortOrder={sortOrder}
+                      onSort={handleSort}
+                      className="p-3"
+                    />
                     <th className="p-3">Pesanan</th>
                     <th className="p-3">Pelanggan</th>
                     <th className="p-3">Tipe</th>
-                    <th className="p-3 text-right">Nominal Tagihan</th>
-                    <th className="p-3 text-center">Status</th>
-                    <th className="p-3">Jatuh Tempo</th>
+                    <SortableHeader
+                      label="Nominal Tagihan"
+                      field="amount"
+                      currentSortBy={sortBy}
+                      currentSortOrder={sortOrder}
+                      onSort={handleSort}
+                      align="right"
+                      className="p-3"
+                    />
+                    <SortableHeader
+                      label="Status"
+                      field="status"
+                      currentSortBy={sortBy}
+                      currentSortOrder={sortOrder}
+                      onSort={handleSort}
+                      align="center"
+                      className="p-3"
+                    />
+                    <SortableHeader
+                      label="Jatuh Tempo"
+                      field="dueDate"
+                      currentSortBy={sortBy}
+                      currentSortOrder={sortOrder}
+                      onSort={handleSort}
+                      className="p-3"
+                    />
                     <th className="p-3 text-center">Aksi</th>
                   </tr>
                 </thead>

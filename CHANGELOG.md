@@ -18,6 +18,17 @@ dan proyek ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- **Fitur Pengurutan Interaktif Tabel & Bilah Filter (*Table Header & Quick Sort*) di Seluruh Modul Inti**:
+  - Menghadirkan komponen reusable `SortableHeader` (`src/components/ui/SortableHeader.tsx`) yang menyediakan indikator panah dinamis (Ascending, Descending, Netral) serta interaksi klik kolom yang responsif di seluruh layar tabel data.
+  - Menambahkan kendali pengurutan dua arah (*bidirectional sync*) antara *header* kolom tabel dan dropdown pengurutan cepat (*Quick Sort*) pada bilah filter di 6 modul utama:
+    - **Pesanan Penjualan (`/orders`)**: Pengurutan berdasarkan tanggal pesanan (`orderDate`), nama pelanggan (`customer`), grand total (`grandTotal`), nomor dokumen (`orderNo`), dan status pesanan (`status`).
+    - **Faktur Penjualan (`/invoices`)**: Pengurutan berdasarkan tanggal terbit (`issueDate`), jatuh tempo (`dueDate`), nomor faktur (`number`), nama pelanggan (`customer`), nominal (`amount`), dan status (`status`).
+    - **Buku Piutang Dagang (`/receivables`)**: Pengurutan berdasarkan tanggal jatuh tempo (`dueDate`), umur jatuh tempo (`daysOverdue`), sisa piutang (`remainingAmount`), nama pelanggan (`customer`), dan nomor faktur (`invoiceNumber`).
+    - **Purchase Order (`/purchase-orders`)**: Pengurutan berdasarkan tanggal PO (`orderDate`), nama vendor (`vendor`), total biaya (`total`), nomor PO (`poNo`), dan status (`status`).
+    - **Data Pelanggan (`/customers`)**: Pengurutan berdasarkan nama pelanggan (`name`), kode pelanggan (`code`), tanggal pendaftaran (`createdAt`), dan tahapan pipeline CRM (`pipelineStage`).
+    - **Katalog Produk & Harga (`/products`)**: Pengurutan berdasarkan nama produk (`name`), kode SKU (`sku`), stok tersedia (`stockQty`), dan harga dasar/katalog (`basePrice`).
+  - Pembaruan skema validasi Zod dan parameter query API backend (`sortBy` dan `sortOrder`/`sortDir`) untuk mendukung *multi-column sorting* yang aman dan optimal secara langsung di tingkat query PostgreSQL / Prisma.
+
 - **Fitur Timpa Data Unit Usaha (*Overwrite / Replace Mode*) pada Impor Data Usaha**:
   - Dukungan parameter `overwrite=1` pada endpoint `POST /api/v1/data-transfer/import` dan flag CLI `--overwrite` pada `scripts/import-json.ts`.
   - Pengecekan pra-impor cerdas (*overwrite-aware preflight*): jika unit usaha target sudah ada di sistem dan opsi timpa aktif, benturan ID/kode usaha, username pengguna, ID model data, dan nomor surat jalan milik unit usaha yang bersangkutan tidak memblokir impor, melainkan memberikan peringatan (*warning*) transparan.

@@ -78,13 +78,38 @@ export const GET = withApi(
     ];
   }
 
+  const sortByParam = url.searchParams.get('sortBy') || 'date';
+  const sortOrderParam =
+    (url.searchParams.get('sortOrder') || url.searchParams.get('sortDir') || 'desc').toLowerCase() === 'asc'
+      ? 'asc'
+      : 'desc';
+
+  let orderBy: Prisma.OrderOrderByWithRelationInput | Prisma.OrderOrderByWithRelationInput[] = [
+    { orderDate: sortOrderParam },
+    { createdAt: sortOrderParam },
+  ];
+
+  if (sortByParam === 'date' || sortByParam === 'orderDate') {
+    orderBy = [{ orderDate: sortOrderParam }, { createdAt: sortOrderParam }];
+  } else if (sortByParam === 'customer') {
+    orderBy = [{ customer: { name: sortOrderParam } }, { orderDate: 'desc' }];
+  } else if (sortByParam === 'total' || sortByParam === 'grandTotal') {
+    orderBy = [{ grandTotal: sortOrderParam }, { orderDate: 'desc' }];
+  } else if (sortByParam === 'number' || sortByParam === 'orderNo') {
+    orderBy = [{ orderNo: sortOrderParam }, { orderDate: 'desc' }];
+  } else if (sortByParam === 'status') {
+    orderBy = [{ status: sortOrderParam }, { orderDate: 'desc' }];
+  } else if (sortByParam === 'createdAt') {
+    orderBy = { createdAt: sortOrderParam };
+  }
+
   const [total, orders] = await Promise.all([
     prisma.order.count({ where }),
     prisma.order.findMany({
       where,
       skip,
       take: limit,
-      orderBy: { createdAt: 'desc' },
+      orderBy,
       include: {
         customer: {
           select: { id: true, code: true, name: true },

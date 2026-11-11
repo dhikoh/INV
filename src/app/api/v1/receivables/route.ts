@@ -21,6 +21,9 @@ const GetReceivablesQuerySchema = z.object({
   search: z.string().optional(),
   page: z.coerce.number().int().positive().default(1),
   limit: z.coerce.number().int().positive().default(50),
+  sortBy: z.enum(['dueDate', 'daysOverdue', 'remainingAmount', 'amount', 'customer', 'invoiceNumber']).optional(),
+  sortOrder: z.enum(['asc', 'desc']).optional(),
+  sortDir: z.enum(['asc', 'desc']).optional(),
 });
 
 /**
@@ -197,6 +200,29 @@ export const GET = withApi(
         .filter((i) => i.isOverdue)
         .reduce((sum, i) => sum + i.remainingAmount, 0n)
     );
+
+    const sortBy = query.sortBy || 'dueDate';
+    const sortOrder = (query.sortOrder || query.sortDir || 'asc').toLowerCase() === 'desc' ? 'desc' : 'asc';
+
+    filtered.sort((a, b) => {
+      let cmp = 0;
+      if (sortBy === 'dueDate') {
+        const timeA = a.dueDate ? new Date(a.dueDate).getTime() : Infinity;
+        const timeB = b.dueDate ? new Date(b.dueDate).getTime() : Infinity;
+        cmp = timeA - timeB;
+      } else if (sortBy === 'daysOverdue') {
+        cmp = a.daysOverdue - b.daysOverdue;
+      } else if (sortBy === 'remainingAmount') {
+        cmp = a.remainingAmount > b.remainingAmount ? 1 : a.remainingAmount < b.remainingAmount ? -1 : 0;
+      } else if (sortBy === 'amount') {
+        cmp = a.amount > b.amount ? 1 : a.amount < b.amount ? -1 : 0;
+      } else if (sortBy === 'customer') {
+        cmp = a.customer.name.localeCompare(b.customer.name, 'id');
+      } else if (sortBy === 'invoiceNumber') {
+        cmp = a.invoiceNumber.localeCompare(b.invoiceNumber, 'id');
+      }
+      return sortOrder === 'desc' ? -cmp : cmp;
+    });
 
     const offset = (page - 1) * limit;
     const paginated = filtered.slice(offset, offset + limit);

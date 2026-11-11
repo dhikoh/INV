@@ -1,14 +1,8 @@
 import fs from 'fs';
-import { createRequire } from 'module';
 import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import puppeteer, { Browser, Page, HTTPRequest } from 'puppeteer-core';
 import { DomainError } from '../domain/money';
-
-const require = createRequire(import.meta.url);
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { renderToStaticMarkup } = require('react-dom/server') as {
-  renderToStaticMarkup: (element: React.ReactElement) => string;
-};
 
 export class Semaphore {
   private current = 0;

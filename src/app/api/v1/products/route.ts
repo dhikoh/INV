@@ -68,6 +68,28 @@ export const GET = withApi(
       ];
     }
 
+    const sortByParam = searchParams.get('sortBy') || 'name';
+    const sortOrderParam =
+      (searchParams.get('sortOrder') || searchParams.get('sortDir') || 'asc').toLowerCase() === 'desc'
+        ? 'desc'
+        : 'asc';
+
+    let orderBy: Prisma.ProductOrderByWithRelationInput | Prisma.ProductOrderByWithRelationInput[] = [
+      { name: sortOrderParam },
+    ];
+
+    if (sortByParam === 'sku') {
+      orderBy = [{ sku: sortOrderParam }];
+    } else if (sortByParam === 'basePrice' || sortByParam === 'price') {
+      orderBy = [{ basePrice: sortOrderParam }];
+    } else if (sortByParam === 'stockQty' || sortByParam === 'stock') {
+      orderBy = [{ stockQty: sortOrderParam }];
+    } else if (sortByParam === 'createdAt') {
+      orderBy = [{ createdAt: sortOrderParam }];
+    } else {
+      orderBy = [{ name: sortOrderParam }];
+    }
+
     const products = await prisma.product.findMany({
       where,
       include: {
@@ -81,9 +103,7 @@ export const GET = withApi(
           orderBy: [{ isPrimary: 'desc' }, { sortOrder: 'asc' }],
         },
       },
-      orderBy: {
-        name: 'asc',
-      },
+      orderBy,
     });
 
     const data = products.map((p) => productDto(p, ctx.role));

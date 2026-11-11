@@ -27,6 +27,7 @@ import { StatusBadge } from '@/components/ui/StatusBadge';
 import { ConfirmTypeDialog } from '@/components/ui/ConfirmTypeDialog';
 import { formatRupiah } from '@/lib/domain/money';
 import { PatenPrice } from '@/components/ui/PatenPrice';
+import { SortableHeader } from '@/components/ui/SortableHeader';
 
 interface CategoryItem {
   id: string;
@@ -91,6 +92,17 @@ export default function ProductsPage() {
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
+  const [sortBy, setSortBy] = useState<string>('name');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+
+  const handleSort = (field: string) => {
+    if (sortBy === field) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(field);
+      setSortOrder('asc');
+    }
+  };
 
   // Debounce search query 300 ms
   useEffect(() => {
@@ -289,6 +301,8 @@ export default function ProductsPage() {
       } else if (selectedStatus === 'inactive') {
         params.set('active', 'false');
       }
+      params.set('sortBy', sortBy);
+      params.set('sortOrder', sortOrder);
 
       const res = await fetch(`/api/v1/products?${params.toString()}`);
       if (!res.ok) {
@@ -306,7 +320,7 @@ export default function ProductsPage() {
     } finally {
       setLoading(false);
     }
-  }, [debouncedSearch, selectedCategory, selectedStatus]);
+  }, [debouncedSearch, selectedCategory, selectedStatus, sortBy, sortOrder]);
 
   useEffect(() => {
     loadCategories();
@@ -764,7 +778,7 @@ export default function ProductsPage() {
 
       {/* Filter Bar */}
       <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {/* Pencarian (Debounce 300 ms) */}
           <div className="relative">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -807,6 +821,29 @@ export default function ProductsPage() {
               <option value="inactive">Nonaktif</option>
             </select>
           </div>
+
+          {/* Pengurutan Cepat */}
+          <div>
+            <select
+              aria-label="Urutkan Produk"
+              value={`${sortBy}-${sortOrder}`}
+              onChange={(e) => {
+                const [field, order] = e.target.value.split('-');
+                setSortBy(field);
+                setSortOrder(order as 'asc' | 'desc');
+              }}
+              className="w-full min-h-[44px] px-3 py-2 text-base md:text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-slate-900"
+            >
+              <option value="name-asc">Nama Produk (A - Z)</option>
+              <option value="name-desc">Nama Produk (Z - A)</option>
+              <option value="sku-asc">SKU (A - Z)</option>
+              <option value="sku-desc">SKU (Z - A)</option>
+              <option value="basePrice-asc">Harga (Termurah)</option>
+              <option value="basePrice-desc">Harga (Tertinggi)</option>
+              <option value="stockQty-desc">Stok (Terbanyak)</option>
+              <option value="stockQty-asc">Stok (Tersedikit)</option>
+            </select>
+          </div>
         </div>
       </div>
 
@@ -846,26 +883,44 @@ export default function ProductsPage() {
                     <th scope="col" className="px-4 py-3 w-14">
                       Foto
                     </th>
-                    <th scope="col" className="px-4 py-3">
-                      SKU
-                    </th>
-                    <th scope="col" className="px-4 py-3">
-                      Nama Produk
-                    </th>
+                    <SortableHeader
+                      label="SKU"
+                      field="sku"
+                      currentSortBy={sortBy}
+                      currentSortOrder={sortOrder}
+                      onSort={handleSort}
+                    />
+                    <SortableHeader
+                      label="Nama Produk"
+                      field="name"
+                      currentSortBy={sortBy}
+                      currentSortOrder={sortOrder}
+                      onSort={handleSort}
+                    />
                     <th scope="col" className="px-4 py-3">
                       Kategori
                     </th>
                     {isSuperAdmin ? (
                       <>
-                        <th scope="col" className="px-4 py-3 text-right">
-                          Stok
-                        </th>
+                        <SortableHeader
+                          label="Stok"
+                          field="stockQty"
+                          currentSortBy={sortBy}
+                          currentSortOrder={sortOrder}
+                          onSort={handleSort}
+                          align="right"
+                        />
                         <th scope="col" className="px-4 py-3 text-right">
                           HPP (Modal)
                         </th>
-                        <th scope="col" className="px-4 py-3 text-right">
-                          Harga Dasar
-                        </th>
+                        <SortableHeader
+                          label="Harga Dasar"
+                          field="basePrice"
+                          currentSortBy={sortBy}
+                          currentSortOrder={sortOrder}
+                          onSort={handleSort}
+                          align="right"
+                        />
                         <th scope="col" className="px-4 py-3 text-right">
                           Margin
                         </th>
@@ -875,15 +930,25 @@ export default function ProductsPage() {
                       </>
                     ) : (
                       <>
-                        <th scope="col" className="px-4 py-3 text-right">
-                          Harga Katalog
-                        </th>
+                        <SortableHeader
+                          label="Harga Katalog"
+                          field="basePrice"
+                          currentSortBy={sortBy}
+                          currentSortOrder={sortOrder}
+                          onSort={handleSort}
+                          align="right"
+                        />
                         <th scope="col" className="px-4 py-3 text-right">
                           Harga Paten
                         </th>
-                        <th scope="col" className="px-4 py-3 text-right">
-                          Tersedia
-                        </th>
+                        <SortableHeader
+                          label="Tersedia"
+                          field="stockQty"
+                          currentSortBy={sortBy}
+                          currentSortOrder={sortOrder}
+                          onSort={handleSort}
+                          align="right"
+                        />
                       </>
                     )}
                     <th scope="col" className="px-4 py-3 text-center">

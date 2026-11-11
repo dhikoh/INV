@@ -68,13 +68,38 @@ export const GET = withApi(
       ];
     }
 
+    const sortByParam = url.searchParams.get('sortBy') || 'date';
+    const sortOrderParam =
+      (url.searchParams.get('sortOrder') || url.searchParams.get('sortDir') || 'desc').toLowerCase() === 'asc'
+        ? 'asc'
+        : 'desc';
+
+    let orderBy: Prisma.PurchaseOrderOrderByWithRelationInput | Prisma.PurchaseOrderOrderByWithRelationInput[] = [
+      { orderDate: sortOrderParam },
+      { createdAt: sortOrderParam },
+    ];
+
+    if (sortByParam === 'date' || sortByParam === 'orderDate') {
+      orderBy = [{ orderDate: sortOrderParam }, { createdAt: sortOrderParam }];
+    } else if (sortByParam === 'vendor') {
+      orderBy = [{ vendor: { name: sortOrderParam } }, { orderDate: 'desc' }];
+    } else if (sortByParam === 'total' || sortByParam === 'totalCost') {
+      orderBy = [{ total: sortOrderParam }, { orderDate: 'desc' }];
+    } else if (sortByParam === 'number' || sortByParam === 'poNo') {
+      orderBy = [{ poNo: sortOrderParam }, { orderDate: 'desc' }];
+    } else if (sortByParam === 'status') {
+      orderBy = [{ status: sortOrderParam }, { orderDate: 'desc' }];
+    } else if (sortByParam === 'createdAt') {
+      orderBy = { createdAt: sortOrderParam };
+    }
+
     const [total, orders] = await Promise.all([
       prisma.purchaseOrder.count({ where }),
       prisma.purchaseOrder.findMany({
         where,
         skip,
         take: limit,
-        orderBy: { orderDate: 'desc' },
+        orderBy,
         include: {
           vendor: {
             select: { id: true, code: true, name: true, picName: true, phone: true, address: true },

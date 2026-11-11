@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { Skeleton, EmptyState, ErrorState } from '@/components/ui/States';
 import { StatusBadge } from '@/components/ui/StatusBadge';
+import { SortableHeader } from '@/components/ui/SortableHeader';
 import { formatRupiah } from '@/lib/domain/money';
 
 interface CustomerSummary {
@@ -89,6 +90,21 @@ export default function OrdersPage() {
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
 
+  // Sorting
+  const [sortBy, setSortBy] = useState('date');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+
+  const handleSort = (field: string) => {
+    if (sortBy === field) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(field);
+      const defaultAsc = ['customer', 'number'].includes(field);
+      setSortOrder(defaultAsc ? 'asc' : 'desc');
+    }
+    setPage(1);
+  };
+
   // Customers option for filter dropdown
   const [customerOptions, setCustomerOptions] = useState<CustomerSummary[]>([]);
 
@@ -146,6 +162,8 @@ export default function OrdersPage() {
       if (toDate) {
         params.set('to', toDate);
       }
+      params.set('sortBy', sortBy);
+      params.set('sortOrder', sortOrder);
 
       const res = await fetch(`/api/v1/orders?${params.toString()}`);
       if (!res.ok) {
@@ -164,7 +182,7 @@ export default function OrdersPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, limit, debouncedSearch, selectedStatus, selectedCustomerId, fromDate, toDate]);
+  }, [page, limit, debouncedSearch, selectedStatus, selectedCustomerId, fromDate, toDate, sortBy, sortOrder]);
 
   useEffect(() => {
     fetchOrders();
@@ -177,11 +195,13 @@ export default function OrdersPage() {
     setSelectedCustomerId('');
     setFromDate('');
     setToDate('');
+    setSortBy('date');
+    setSortOrder('desc');
     setPage(1);
   };
 
   const hasActiveFilters = Boolean(
-    debouncedSearch || selectedStatus || selectedCustomerId || fromDate || toDate
+    debouncedSearch || selectedStatus || selectedCustomerId || fromDate || toDate || sortBy !== 'date' || sortOrder !== 'desc'
   );
 
   return (
@@ -211,7 +231,7 @@ export default function OrdersPage() {
 
       {/* Bar Filter & Pencarian */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
           {/* Pencarian Teks */}
           <div className="relative sm:col-span-2 lg:col-span-1">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -290,6 +310,31 @@ export default function OrdersPage() {
               />
             </div>
           </div>
+
+          {/* Quick Sort Dropdown */}
+          <div>
+            <select
+              value={`${sortBy}_${sortOrder}`}
+              onChange={(e) => {
+                const [f, o] = e.target.value.split('_') as [string, 'asc' | 'desc'];
+                setSortBy(f);
+                setSortOrder(o);
+                setPage(1);
+              }}
+              className="w-full min-h-[44px] px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-base md:text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all"
+              title="Urutkan daftar pesanan"
+            >
+              <option value="date_desc">Tanggal: Terbaru</option>
+              <option value="date_asc">Tanggal: Terlama</option>
+              <option value="customer_asc">Pelanggan: A - Z</option>
+              <option value="customer_desc">Pelanggan: Z - A</option>
+              <option value="total_desc">Grand Total: Tertinggi</option>
+              <option value="total_asc">Grand Total: Terendah</option>
+              <option value="number_asc">No. Dokumen: A - Z</option>
+              <option value="number_desc">No. Dokumen: Z - A</option>
+              <option value="status_asc">Status Pesanan</option>
+            </select>
+          </div>
         </div>
 
         {/* Baris Status Filter Aktif */}
@@ -344,24 +389,46 @@ export default function OrdersPage() {
               <table className="w-full text-left text-sm text-slate-600">
                 <thead className="bg-slate-50 border-b border-slate-200 text-xs uppercase font-semibold text-slate-500">
                   <tr>
-                    <th scope="col" className="px-4 py-3.5">
-                      Nomor Dokumen
-                    </th>
-                    <th scope="col" className="px-4 py-3.5">
-                      Tanggal
-                    </th>
-                    <th scope="col" className="px-4 py-3.5">
-                      Pelanggan
-                    </th>
+                    <SortableHeader
+                      label="Nomor Dokumen"
+                      field="number"
+                      currentSortBy={sortBy}
+                      currentSortOrder={sortOrder}
+                      onSort={handleSort}
+                    />
+                    <SortableHeader
+                      label="Tanggal"
+                      field="date"
+                      currentSortBy={sortBy}
+                      currentSortOrder={sortOrder}
+                      onSort={handleSort}
+                    />
+                    <SortableHeader
+                      label="Pelanggan"
+                      field="customer"
+                      currentSortBy={sortBy}
+                      currentSortOrder={sortOrder}
+                      onSort={handleSort}
+                    />
                     <th scope="col" className="px-4 py-3.5 text-center">
                       Item
                     </th>
-                    <th scope="col" className="px-4 py-3.5 text-right">
-                      Grand Total
-                    </th>
-                    <th scope="col" className="px-4 py-3.5 text-center">
-                      Status
-                    </th>
+                    <SortableHeader
+                      label="Grand Total"
+                      field="total"
+                      currentSortBy={sortBy}
+                      currentSortOrder={sortOrder}
+                      onSort={handleSort}
+                      align="right"
+                    />
+                    <SortableHeader
+                      label="Status"
+                      field="status"
+                      currentSortBy={sortBy}
+                      currentSortOrder={sortOrder}
+                      onSort={handleSort}
+                      align="center"
+                    />
                     <th scope="col" className="px-4 py-3.5 text-right">
                       Aksi
                     </th>

@@ -21,6 +21,7 @@ import {
 import { Skeleton, EmptyState, ErrorState } from '@/components/ui/States';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { ConfirmTypeDialog } from '@/components/ui/ConfirmTypeDialog';
+import { SortableHeader } from '@/components/ui/SortableHeader';
 
 interface SalesUser {
   id: string;
@@ -67,6 +68,20 @@ export default function CustomersPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [stageFilter, setStageFilter] = useState<string>('');
   const [salesFilter, setSalesFilter] = useState<string>('');
+
+  // Sorting
+  const [sortBy, setSortBy] = useState('name');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+
+  const handleSort = (field: string) => {
+    if (sortBy === field) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(field);
+      const defaultAsc = ['name', 'code', 'pipelineStage'].includes(field);
+      setSortOrder(defaultAsc ? 'asc' : 'desc');
+    }
+  };
 
   // Modal Tambah / Edit
   const [modalOpen, setModalOpen] = useState(false);
@@ -134,6 +149,8 @@ export default function CustomersPage() {
       if (searchQuery.trim()) params.set('q', searchQuery.trim());
       if (stageFilter) params.set('stage', stageFilter);
       if (salesFilter) params.set('salesId', salesFilter);
+      params.set('sortBy', sortBy);
+      params.set('sortOrder', sortOrder);
 
       const custRes = await fetch(
         `/api/v1/customers?${params.toString()}`
@@ -164,7 +181,7 @@ export default function CustomersPage() {
     } finally {
       setLoading(false);
     }
-  }, [searchQuery, stageFilter, salesFilter]);
+  }, [searchQuery, stageFilter, salesFilter, sortBy, sortOrder]);
 
   // Debounced search
   useEffect(() => {
@@ -459,6 +476,25 @@ export default function CustomersPage() {
             ))}
           </select>
         )}
+
+        {/* Quick Sort Dropdown */}
+        <select
+          value={`${sortBy}_${sortOrder}`}
+          onChange={(e) => {
+            const [f, o] = e.target.value.split('_') as [string, 'asc' | 'desc'];
+            setSortBy(f);
+            setSortOrder(o);
+          }}
+          className="w-full sm:w-48 px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white min-h-[44px]"
+          title="Urutkan pelanggan"
+        >
+          <option value="name_asc">Nama: A - Z</option>
+          <option value="name_desc">Nama: Z - A</option>
+          <option value="code_asc">Kode: A - Z</option>
+          <option value="createdAt_desc">Terdaftar: Terbaru</option>
+          <option value="createdAt_asc">Terdaftar: Terlama</option>
+          <option value="pipelineStage_asc">Tahap Pipeline</option>
+        </select>
       </div>
 
       {/* Konten Pelanggan */}
@@ -494,9 +530,23 @@ export default function CustomersPage() {
             <table className="w-full text-left text-sm text-slate-700">
               <thead className="bg-slate-50 text-xs uppercase font-bold text-slate-500 border-b border-slate-200">
                 <tr>
-                  <th className="px-4 py-3">Kode & Nama Pelanggan</th>
+                  <SortableHeader
+                    label="Kode & Nama Pelanggan"
+                    field="name"
+                    currentSortBy={sortBy}
+                    currentSortOrder={sortOrder}
+                    onSort={handleSort}
+                    className="px-4 py-3"
+                  />
                   <th className="px-4 py-3">Kontak & Telepon</th>
-                  <th className="px-4 py-3">Tahap Pipeline</th>
+                  <SortableHeader
+                    label="Tahap Pipeline"
+                    field="pipelineStage"
+                    currentSortBy={sortBy}
+                    currentSortOrder={sortOrder}
+                    onSort={handleSort}
+                    className="px-4 py-3"
+                  />
                   <th className="px-4 py-3">Staf Sales</th>
                   <th className="px-4 py-3 text-center">Pesanan</th>
                   <th className="px-4 py-3 text-right">Aksi</th>

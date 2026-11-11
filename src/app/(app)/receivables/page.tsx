@@ -90,6 +90,8 @@ export default function ReceivablesPage() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'overdue' | 'current'>('all');
   const [bucketFilter, setBucketFilter] = useState<AgingBucket | 'ALL'>('ALL');
   const [search, setSearch] = useState('');
+  const [sortBy, setSortBy] = useState('dueDate');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 
   const fetchReceivables = useCallback(async () => {
     setLoading(true);
@@ -104,6 +106,8 @@ export default function ReceivablesPage() {
       if (search.trim()) {
         params.set('search', search.trim());
       }
+      params.set('sortBy', sortBy);
+      params.set('sortOrder', sortOrder);
 
       const res = await fetch(`/api/v1/receivables?${params.toString()}`);
       const json = await res.json();
@@ -118,7 +122,7 @@ export default function ReceivablesPage() {
     } finally {
       setLoading(false);
     }
-  }, [statusFilter, bucketFilter, search]);
+  }, [statusFilter, bucketFilter, search, sortBy, sortOrder]);
 
   useEffect(() => {
     fetchReceivables();
@@ -335,15 +339,37 @@ export default function ReceivablesPage() {
           </button>
         </div>
 
-        <div className="relative w-full sm:w-72">
-          <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Cari no invoice / pelanggan..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full rounded-lg border border-slate-300 bg-white pl-9 pr-3 py-1.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-          />
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+          <select
+            value={`${sortBy}_${sortOrder}`}
+            onChange={(e) => {
+              const [f, o] = e.target.value.split('_') as [string, 'asc' | 'desc'];
+              setSortBy(f);
+              setSortOrder(o);
+            }}
+            className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-700 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 min-h-[38px]"
+            title="Urutkan piutang"
+          >
+            <option value="dueDate_asc">Jatuh Tempo: Paling Dekat</option>
+            <option value="dueDate_desc">Jatuh Tempo: Paling Lama</option>
+            <option value="daysOverdue_desc">Keterlambatan: Paling Parah</option>
+            <option value="remainingAmount_desc">Sisa Piutang: Terbesar</option>
+            <option value="remainingAmount_asc">Sisa Piutang: Terkecil</option>
+            <option value="customer_asc">Pelanggan: A - Z</option>
+            <option value="customer_desc">Pelanggan: Z - A</option>
+            <option value="invoiceNumber_asc">No. Faktur: A - Z</option>
+          </select>
+
+          <div className="relative flex-1 sm:w-64">
+            <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Cari no invoice / pelanggan..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full rounded-lg border border-slate-300 bg-white pl-9 pr-3 py-1.5 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 min-h-[38px]"
+            />
+          </div>
         </div>
       </div>
 

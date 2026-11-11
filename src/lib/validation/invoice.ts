@@ -7,6 +7,9 @@ export const InvoiceQuerySchema = z.object({
   search: z.string().trim().max(100).optional(),
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(20),
+  sortBy: z.enum(['date', 'issueDate', 'dueDate', 'customer', 'amount', 'number', 'status', 'createdAt']).optional(),
+  sortOrder: z.enum(['asc', 'desc']).optional(),
+  sortDir: z.enum(['asc', 'desc']).optional(),
 });
 
 export const InvoiceApproveSchema = z

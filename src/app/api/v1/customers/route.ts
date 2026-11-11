@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { Role, PipelineStage } from '@prisma/client';
+import { Role, PipelineStage, Prisma } from '@prisma/client';
 import { withApi } from '@/lib/api/withApi';
 import { prisma } from '@/lib/db';
 import { DomainError } from '@/lib/domain/money';
@@ -57,6 +57,9 @@ const CustomerQuerySchema = z.object({
   salesId: z.string().trim().optional(),
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(50),
+  sortBy: z.enum(['name', 'code', 'createdAt', 'updatedAt', 'pipelineStage']).optional(),
+  sortOrder: z.enum(['asc', 'desc']).optional(),
+  sortDir: z.enum(['asc', 'desc']).optional(),
 });
 
 // GET /api/v1/customers - Daftar pelanggan (SA melihat semua di usaha; Sales hanya miliknya via customerScope)
@@ -101,6 +104,22 @@ export const GET = withApi(
     const limit = query?.limit ?? 50;
     const skip = (page - 1) * limit;
 
+    const sortBy = query.sortBy || 'name';
+    const sortOrder = (query.sortOrder || query.sortDir || 'asc').toLowerCase() === 'desc' ? 'desc' : 'asc';
+
+    let orderBy: Prisma.CustomerOrderByWithRelationInput | Prisma.CustomerOrderByWithRelationInput[] = [{ name: sortOrder }];
+    if (sortBy === 'code') {
+      orderBy = [{ code: sortOrder }];
+    } else if (sortBy === 'createdAt') {
+      orderBy = [{ createdAt: sortOrder }];
+    } else if (sortBy === 'updatedAt') {
+      orderBy = [{ updatedAt: sortOrder }];
+    } else if (sortBy === 'pipelineStage') {
+      orderBy = [{ pipelineStage: sortOrder }];
+    } else {
+      orderBy = [{ name: sortOrder }];
+    }
+
     const [total, customers] = await Promise.all([
       prisma.customer.count({ where }),
       prisma.customer.findMany({
@@ -119,7 +138,7 @@ export const GET = withApi(
             },
           },
         },
-        orderBy: [{ name: 'asc' }],
+        orderBy,
         skip,
         take: limit,
       }),
