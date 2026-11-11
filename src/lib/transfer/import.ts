@@ -494,7 +494,10 @@ export async function importData(
         }>)[model.charAt(0).toLowerCase() + model.slice(1)];
         if (delegate) {
           const existing = await delegate.findMany({
-            where: { id: { in: ids } },
+            where: {
+              id: { in: ids },
+              businessId: { not: '' },
+            },
             select: { id: true },
           });
           if (existing.length > 0) {
@@ -540,7 +543,10 @@ export async function importData(
         seenDeliveryNos.add(trimmedNo);
 
         const existingShipment = await prisma.shipment.findFirst({
-          where: { deliveryNo: trimmedNo },
+          where: {
+            deliveryNo: trimmedNo,
+            businessId: { not: '' },
+          },
           select: { id: true, businessId: true },
         });
         if (existingShipment) {
@@ -664,7 +670,11 @@ export async function importData(
 
         for (const [cId, maxSeq] of orderMaxSeqByCust.entries()) {
           const counter = await tx.documentCounter.findFirst({
-            where: { scope: CounterScope.ORDER_SEQ, scopeId: cId },
+            where: {
+              scope: CounterScope.ORDER_SEQ,
+              scopeId: cId,
+              businessId: { not: '' },
+            },
           });
           if (!counter) {
             throw new Error(
@@ -690,7 +700,11 @@ export async function importData(
 
         for (const [vId, maxSeq] of poMaxSeqByVendor.entries()) {
           const counter = await tx.documentCounter.findFirst({
-            where: { scope: CounterScope.PO_SEQ, scopeId: vId },
+            where: {
+              scope: CounterScope.PO_SEQ,
+              scopeId: vId,
+              businessId: { not: '' },
+            },
           });
           if (!counter) {
             throw new Error(
@@ -720,7 +734,11 @@ export async function importData(
 
         for (const [cId, maxSeq] of cnMaxSeqByCust.entries()) {
           const counter = await tx.documentCounter.findFirst({
-            where: { scope: CounterScope.CREDIT_NOTE_SEQ, scopeId: cId },
+            where: {
+              scope: CounterScope.CREDIT_NOTE_SEQ,
+              scopeId: cId,
+              businessId: { not: '' },
+            },
           });
           if (!counter) {
             throw new Error(

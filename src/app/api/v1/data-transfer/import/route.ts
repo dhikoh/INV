@@ -72,16 +72,32 @@ export const POST = withApi(
     }
 
     // 3. Jalankan impor data
-    const report = await importData(zipBytes, {
-      dryRun,
-      replaceSeedSuperadmin: false,
-      actor: { id: ctx.user.id, role: ctx.user.role },
-      uploadDir: env.UPLOAD_DIR,
-    });
+    try {
+      const report = await importData(zipBytes, {
+        dryRun,
+        replaceSeedSuperadmin: false,
+        actor: { id: ctx.user.id, role: ctx.user.role },
+        uploadDir: env.UPLOAD_DIR,
+      });
 
-    return {
-      data: report,
-      status: report.ok ? 200 : 422,
-    };
+      return {
+        data: report,
+        status: report.ok ? 200 : 422,
+      };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return {
+        data: {
+          ok: false,
+          dryRun,
+          scope: 'business',
+          counts: {},
+          uploads: { files: 0, written: 0, skipped: 0, failed: [] },
+          warnings: [],
+          errors: [`Gagal memproses berkas impor: ${msg}`],
+        },
+        status: 422,
+      };
+    }
   }
 );
