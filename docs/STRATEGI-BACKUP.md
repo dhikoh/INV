@@ -108,3 +108,4 @@ Lakukan uji petik (drill) secara berkala (minimal 1 bulan sekali):
 - [ ] Backup otomatis berhasil berjalan sesuai jadwal cron tanpa status error di log Coolify.
 - [ ] Simulasi `scripts/restore.sh` pada database pengujian (`TEST_DATABASE_URL`) berhasil pulih 100%.
 - [ ] Nomor urut faktur (`DocumentCounter`) pasca-restorasi tetap akurat dan tidak melompat mundur.
+

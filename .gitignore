@@ -47,6 +47,8 @@ Thumbs.db
 
 # Reference raw archives (optional)
 BENTOCAT-20261104T120040Z-1-001.zip
+/exports/*.zip
+!/exports/.gitkeep
 
 # Sensitive operational documents & historical city data
 /BLITAR/
