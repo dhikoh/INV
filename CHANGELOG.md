@@ -8,6 +8,24 @@ dan proyek ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- **Fitur Deteksi & Proteksi Tabrakan Calon Pelanggan 2 Pintu**:
+  - Modul domain `src/lib/domain/phone.ts`: Normalisasi telepon multi-format (`+62`, `62`, `08`) dan sanitasi nama petshop (`cleanPetshopName`).
+  - Layanan deteksi tabrakan `src/lib/services/customerCollision.ts`:
+    - **Pintu 1**: Deteksi nomor telepon toko yang sama antar-sales -> memicu penahanan status `PENDING_VERIFIKASI_ADMIN`.
+    - **Pintu 2**: Deteksi kombinasi nama petshop yang mirip DAN wilayah kota yang sama -> memicu `PENDING_VERIFIKASI_ADMIN`. Skenario nama toko mirip namun kota berbeda (dan nomor berbeda) diloloskan otomatis tanpa penahanan.
+  - Guard pemesanan di `src/lib/services/order.ts`: Memblokir pembuatan order oleh sales untuk toko berstatus `PENDING_VERIFIKASI_ADMIN` (HTTP 403).
+  - Endpoint resolusi Super Admin: `POST /api/v1/customers/:id/verify` dengan aksi `APPROVE`, `REASSIGN`, dan `REJECT`.
+  - Notifikasi Telegram instan ke seluruh Super Admin saat terjadi tabrakan leads toko baru.
+- **Peralihan Sales BentoCat & Jejak Audit Lengkap**:
+  - Pendaftaran staf sales baru `bentocat` (aktif) dan penonaktifan staf sales historis `dinia` (nonaktif).
+  - Pengalihan kepemilikan 7 toko pelanggan dan 7 pengingat repeat order ke sales BentoCat.
+  - Pelestarian 20 dokumen transaksi faktur operasional masa lalu atas nama sales Dinia untuk integritas pembukuan finansial.
+  - Pencatatan 11 entri riwayat mutasi pada audit log (`USER_CREATE`, `USER_DEACTIVATE`, 7x `CUSTOMER_REASSIGN`).
+- **Peningkatan Engine Impor Data & UI Portabilitas**:
+  - Penayangan kartu `DataTransferCard` pada status database kosong (*Empty State*) di `/settings/business` agar Super Admin dapat langsung memulihkan unit usaha pada instalasi baru.
+  - Kepatuhan isolasi tenant Prisma (`TENANT_MODELS`) pada seluruh query pengecekan tabrakan ID dan verifikasi counter dokumen di `src/lib/transfer/import.ts`.
+  - Penanganan error aman (*graceful error handling*) pada `POST /api/v1/data-transfer/import` yang mengembalikan kode 422 dengan pesan rincian terstruktur di UI alih-alih crash 500.
+
 - **Fitur Ekspor & Impor Data Portabel (ADR 0008)**:
   - Modul serialisasi lossless BigInt & Date (`src/lib/transfer/serialize.ts`).
   - Registry 36 model database dengan urutan topologis relasi DAG (`src/lib/transfer/registry.ts`).

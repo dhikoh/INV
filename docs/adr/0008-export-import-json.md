@@ -48,6 +48,11 @@ Pemilik bisnis OmniCat memerlukan kemampuan memindahkan satu unit usaha atau sel
      - Maksimal 3 kali redirect dengan validasi ulang di tiap hop.
      - Validasi magic bytes ketat: hanya format JPEG, PNG, dan WebP (menolak format non-gambar dan PDF).
 
+9. **Kepatuhan Isolasi Tenant pada Pemeriksaan Impor & Penayangan Saat Database Kosong**:
+   - Seluruh query verifikasi tabrakan ID lintas model (`Customer`, `Order`, `Product`, `Invoice`), nomor surat jalan global (`Shipment`), dan counter penomoran atomik (`DocumentCounter`) menyertakan filter `businessId: { not: '' }` agar mematuhi aturan ekstensi database multi-tenant Prisma (`TENANT_MODELS`).
+   - Penanganan error pada rute `POST /api/v1/data-transfer/import` dibungkus secara terstruktur (*graceful error handling*) sehingga kegagalan validasi mengembalikan kode status 422 dengan pesan rincian yang ramah di antarmuka alih-alih crash 500.
+   - Komponen UI `DataTransferCard` ditampilkan secara permanen pada kondisi database kosong (*Empty State*) di `/settings/business` agar Super Admin dapat langsung memulihkan unit usaha dari berkas ZIP portabel pada instalasi baru tanpa perlu membuat unit usaha manual terlebih dahulu.
+
 ## Keterbatasan & Batas Desain
 - Pengolahan arsip ZIP dilakukan di memori (in-memory buffer). Konfigurasi `TRANSFER_MAX_MB=200` menetapkan batas maksimal ukuran berkas ZIP demi menjaga stabilitas server.
 - Server memerlukan konektivitas egress port 443 ke internet untuk fitur pengambilan gambar dari URL. Jika lingkungan produksi berada di jaringan terisolasi (air-gapped), pengguna tetap dapat mengunggah berkas gambar secara manual via form berkas lokal biasa.

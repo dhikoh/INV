@@ -466,14 +466,25 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
   - *Seluruh Sistem*: `GET /api/v1/data-transfer/export` (mengemas seluruh unit usaha dan data global).
   - Opsi `?tanpaBerkas=1` untuk ekspor cepat tanpa folder uploads fisik.
 - **Mode Impor**:
-  - *Per Usaha*: Melalui UI `/settings/business` atau `POST /api/v1/data-transfer/import` dengan fitur **Periksa Dulu** (simulasi transaksi dry-run penuh tanpa menulis ke database/disk).
+  - *Per Usaha*: Melalui UI `/settings/business` atau `POST /api/v1/data-transfer/import` dengan fitur **Periksa Dulu** (simulasi transaksi dry-run penuh tanpa menulis ke database/disk). Ditampilkan secara permanen pada kondisi database kosong (*Empty State*) agar Super Admin dapat langsung memulihkan unit usaha pada instalasi baru.
   - *Seluruh Sistem*: Melalui CLI terminal server `pnpm tsx scripts/import-json.ts <berkas.zip>` pada database kosong.
 - **Keamanan & Konsistensi**:
   - Pembacaan snapshot data dalam transaksi berisolasi `RepeatableRead`.
   - Serialisasi lossless `BigInt` dan `Date` (`toJsonLine`).
   - Proteksi Zip-Bomb (rasio maksimal 5x `TRANSFER_MAX_MB`) dan Zip-Slip.
+  - Kepatuhan isolasi tenant Prisma (`TENANT_MODELS`) pada seluruh query pengecekan tabrakan ID dan verifikasi counter dokumen.
   - Verifikasi keutuhan nomor counter urutan dokumen (`DocumentCounter`).
   - Staging uploads atomik sebelum pemindahan berkas akhir.
+
+### 7. Proteksi Tabrakan Calon Pelanggan Antar-Sales (2 Pintu)
+
+- **Pintu 1 (Normalisasi Telepon)**: Validasi nomor HP toko dengan fungsi `normalizePhone` (menghapus awalan `+62`, `62`, `08`, tanda hubung, dan spasi). Jika nomor yang sama sudah dibina oleh sales lain, toko otomatis ditahan dengan status `PENDING_VERIFIKASI_ADMIN`.
+- **Pintu 2 (Kemiripan Nama & Kesamaan Wilayah Kota)**: Validasi nama petshop via `cleanPetshopName` (menghapus imbuhan kata generik seperti petshop, pethshop, ps, drh, vet, klinik). Jika nama toko mirip DAN wilayah kotanya sama, status otomatis `PENDING_VERIFIKASI_ADMIN`. Nama toko mirip namun wilayah kota berbeda (dan nomor telepon berbeda) diloloskan otomatis tanpa penahanan.
+- **Guard Pemesanan**: Sales diblokir (HTTP 403) membuat draf pesanan atau invoice untuk toko yang masih berstatus `PENDING_VERIFIKASI_ADMIN`.
+- **Resolusi Super Admin**: Endpoint `POST /api/v1/customers/:id/verify` dengan 3 opsi aksi:
+  - `APPROVE`: Menyetujui toko untuk sales pengaju.
+  - `REASSIGN`: Menyerahkan toko ke sales yang sudah membina lebih dulu.
+  - `REJECT`: Menolak toko duplikat dan menghapusnya secara aman (*soft-delete*).
 
 ---
 
