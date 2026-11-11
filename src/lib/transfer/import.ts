@@ -680,8 +680,9 @@ export async function importData(
           });
 
           // 2. Hapus model-model anak ke induk (urutan terbalik dari TABLES)
+          // Catatan: ReleaseNote (system-only) dan AuditLog (immutable trigger database) tidak boleh dihapus
           for (const spec of [...TABLES].reverse()) {
-            if (spec.model === 'ReleaseNote') continue;
+            if (spec.model === 'ReleaseNote' || spec.model === 'AuditLog') continue;
 
             const delegate = (tx as unknown as Record<string, {
               deleteMany: (args: Record<string, unknown>) => Promise<{ count: number }>;
@@ -736,7 +737,7 @@ export async function importData(
 
             await delegate.createMany({
               data: sanitizedBatch,
-              skipDuplicates: spec.model === 'ReleaseNote',
+              skipDuplicates: spec.model === 'ReleaseNote' || spec.model === 'AuditLog',
             });
           }
 

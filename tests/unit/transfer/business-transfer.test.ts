@@ -328,7 +328,12 @@ describe('Unit Transfer: API Impor Mode Usaha & RBAC (Bagian 10 Butir F)', () =>
         telegramLinkCode: vi.fn(),
         notification: { deleteMany: vi.fn() },
         business: { deleteMany: vi.fn(), createMany: vi.fn().mockResolvedValue({ count: 1 }) },
-        auditLog: { create: vi.fn() },
+        auditLog: {
+          create: vi.fn(),
+          deleteMany: vi.fn().mockImplementation(() => {
+            throw new Error('AuditLog tidak boleh diubah atau dihapus');
+          }),
+        },
       };
       return await cb(mockTx);
     });

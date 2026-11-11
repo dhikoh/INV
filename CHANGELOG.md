@@ -8,6 +8,10 @@ dan proyek ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- **Pengecualian `AuditLog` pada Pembersihan Data Impor Mode Timpa (*Preserve Immutable AuditLog*)**:
+  - Memperbaiki kegagalan rollback transaksi `P0001: AuditLog tidak boleh diubah atau dihapus` saat opsi timpa aktif. `AuditLog` adalah tabel *append-only* yang dilindungi trigger database PostgreSQL `audit_log_no_change` sehingga tidak boleh dihapus.
+  - Memastikan proses penghapusan berjenjang melewati model `AuditLog` dan penyisipan data audit log baru menggunakan `skipDuplicates: true` guna mencegah benturan primary key.
+
 - **Fallback Tangguh Pembuatan Dokumen PDF (*Resilient PDF Fallback*)**:
   - Penanganan kegagalan render Puppeteer tanpa terkecuali (*universal error catch*) pada endpoint cetak faktur (`/api/v1/invoices/[id]/pdf`), surat jalan (`/api/v1/orders/[id]/delivery-note/pdf`), dan pratinjau tema (`/api/v1/businesses/[id]/invoice-preview`).
   - Mencegah timbulnya respons HTTP 500 (`INTERNAL: Terjadi kesalahan. Coba lagi.`) saat browser Chromium di container server mengalami timeout, kendala alokasi memori, atau terhenti tak terduga; sistem secara mulus beralih (*graceful fallback*) ke tampilan cetak HTML interaktif resmi yang langsung memicu dialog cetak / *save as PDF* bawaan peramban pengguna.
