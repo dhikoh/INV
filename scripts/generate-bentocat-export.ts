@@ -524,6 +524,7 @@ async function main() {
       id: poId,
       businessId,
       vendorId: vendorMojoId,
+      vendorSeq: 1,
       poNo: 'MOJO/PO/01/01/2025/0001',
       status: 'RECEIVED',
       orderDate: new Date('2025-01-05T09:00:00Z'),
@@ -1079,7 +1080,7 @@ async function main() {
     });
   }
 
-  // 12. DocumentCounter (ORDER_SEQ per Customer)
+  // 12. DocumentCounter (ORDER_SEQ per Customer, PO_SEQ per Vendor, CREDIT_NOTE_SEQ per Customer)
   const lastSeqs: Record<string, number> = {
     'GUKGUK-SMG': 35,
     'CHERRY-CLP': 28,
@@ -1100,6 +1101,33 @@ async function main() {
       scope: 'ORDER_SEQ',
       scopeId: cust.id,
       lastSeq: lSeq,
+    });
+  }
+
+  // PO_SEQ per Vendor
+  documentCounters.push({
+    id: `dc_${String(dcIdx++).padStart(4, '0')}`,
+    businessId,
+    scope: 'PO_SEQ',
+    scopeId: vendorMojoId,
+    lastSeq: 1,
+  });
+  documentCounters.push({
+    id: `dc_${String(dcIdx++).padStart(4, '0')}`,
+    businessId,
+    scope: 'PO_SEQ',
+    scopeId: vendorTransId,
+    lastSeq: 0,
+  });
+
+  // CREDIT_NOTE_SEQ per Customer
+  for (const cust of customers) {
+    documentCounters.push({
+      id: `dc_${String(dcIdx++).padStart(4, '0')}`,
+      businessId,
+      scope: 'CREDIT_NOTE_SEQ',
+      scopeId: cust.id,
+      lastSeq: 0,
     });
   }
 

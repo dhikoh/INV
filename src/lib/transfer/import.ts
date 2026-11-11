@@ -676,7 +676,7 @@ export async function importData(
         const orderMaxSeqByCust = new Map<string, number>();
         for (const o of orderRows) {
           const cId = o.customerId as string;
-          const seq = Number(o.customerSeq);
+          const seq = Number(o.customerSeq) || 0;
           if (!orderMaxSeqByCust.has(cId) || seq > orderMaxSeqByCust.get(cId)!) {
             orderMaxSeqByCust.set(cId, seq);
           }
@@ -706,7 +706,7 @@ export async function importData(
         const poMaxSeqByVendor = new Map<string, number>();
         for (const po of poRows) {
           const vId = po.vendorId as string;
-          const seq = Number(po.vendorSeq);
+          const seq = Number(po.vendorSeq) || 0;
           if (!poMaxSeqByVendor.has(vId) || seq > poMaxSeqByVendor.get(vId)!) {
             poMaxSeqByVendor.set(vId, seq);
           }
