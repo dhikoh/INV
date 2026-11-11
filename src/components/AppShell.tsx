@@ -226,6 +226,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     { label: 'Pelanggan', href: '/customers', icon: Users },
     { label: 'Katalog', href: '/catalogs', icon: BookOpen },
     { label: 'Produk & Harga', href: '/products', icon: Package },
+    { label: 'Daftar Harga', href: '/price-list', icon: DollarSign },
     { label: 'Stok & Opname', href: '/stock', icon: Boxes },
     { label: 'Purchase Order', href: '/purchase-orders', icon: ClipboardList },
     { label: 'Vendor', href: '/vendors', icon: Truck },
@@ -244,11 +245,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   ];
 
   const salesDesktopNav = [
-    { label: 'Beranda', href: '/dashboard', icon: LayoutDashboard },
+    { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
     { label: 'Order', href: '/orders', icon: ShoppingCart },
     { label: 'Invoice', href: '/invoices', icon: FileText },
     { label: 'Piutang', href: '/receivables', icon: Receipt },
-    { label: 'Customer', href: '/customers', icon: Users },
+    { label: 'Pelanggan', href: '/customers', icon: Users },
     { label: 'Katalog', href: '/catalogs', icon: BookOpen },
     { label: 'Produk & Harga', href: '/products', icon: Package },
     { label: 'Daftar Harga', href: '/price-list', icon: DollarSign },
@@ -266,9 +267,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const currentRoleNav = isSuperAdmin ? superAdminNav : salesDesktopNav;
 
   const salesNav = [
-    { label: 'Beranda', href: '/dashboard', icon: LayoutDashboard },
+    { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
     { label: 'Order', href: '/orders', icon: ShoppingCart },
-    { label: 'Customer', href: '/customers', icon: Users },
+    { label: 'Pelanggan', href: '/customers', icon: Users },
     { label: 'Katalog', href: '/catalogs', icon: BookOpen },
     {
       label: 'Menu',
@@ -430,7 +431,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           <nav className="space-y-1 flex-1">
             {(isSuperAdmin ? superAdminNav : salesDesktopNav).map((item) => {
               const Icon = item.icon;
-              const active = pathname === item.href;
+              const active =
+                pathname === item.href ||
+                (item.href !== '/dashboard' && pathname.startsWith(item.href + '/'));
               return (
                 <Link
                   key={item.href}
@@ -462,8 +465,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </nav>
         </aside>
 
-        {/* Drawer Mobile Super Admin */}
-        {isSuperAdmin && sidebarOpen && (
+        {/* Drawer Mobile (Super Admin & Sales) */}
+        {sidebarOpen && (
           <div className="fixed inset-0 z-40 md:hidden flex">
             <div
               className="fixed inset-0 bg-slate-900/40"
@@ -485,7 +488,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               <nav className="space-y-1 overflow-y-auto flex-1">
                 {currentRoleNav.map((item) => {
                   const Icon = item.icon;
-                  const active = pathname === item.href;
+                  const active =
+                    pathname === item.href ||
+                    (item.href !== '/dashboard' && pathname.startsWith(item.href + '/'));
                   return (
                     <Link
                       key={item.href}
@@ -531,7 +536,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         <nav className="fixed bottom-0 left-0 right-0 h-16 bg-white border-t border-slate-200 flex items-center justify-around z-30 shadow-lg md:hidden">
           {salesNav.map((item) => {
             const Icon = item.icon;
-            const active = pathname === item.href;
+            const active =
+              pathname === item.href ||
+              (item.href !== '/dashboard' &&
+                item.href !== '#menu' &&
+                pathname.startsWith(item.href + '/'));
             if (item.onClick) {
               return (
                 <button

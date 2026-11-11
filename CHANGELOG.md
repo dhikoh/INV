@@ -8,6 +8,13 @@ dan proyek ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- **Perbaikan Keterbukaan Drawer Mobile Sales & Active State Navigasi (NAV-002, NAV-007, NAV-008, NAV-011)**:
+  - Menghapus pembungkus peran `isSuperAdmin` pada drawer mobile di `src/components/AppShell.tsx` sehingga pengguna Sales pada perangkat seluler dapat membuka menu navigasi lengkap (Invoice, Piutang, Pelanggan, Daftar Harga, Laporan CRM, Pengingat, Pembaruan, Profil Saya).
+  - Menambahkan menu resmi `Daftar Harga` (`/price-list`) ke `superAdminNav` agar Super Admin dapat menginspeksi daftar harga acuan resmi langsung dari menu utama.
+  - Memperbaiki active state menu pada sidebar desktop, mobile drawer, dan mobile bottom bar menggunakan pengecekan sub-rute `pathname.startsWith(item.href + '/')` agar indikator menu tetap menyala saat membuka halaman anak/detail.
+  - Menyeragamkan label terminologi navigasi menjadi `Dashboard` dan `Pelanggan` untuk seluruh peran pengguna (Keputusan 1).
+  - Menambahkan suite pengujian unit regresi di `tests/unit/navigation-shell.test.ts` (3/3 passed).
+
 - **Perbaikan Path Gambar Item Katalog & Cache Offline PWA (NAV-001)**:
   - Mengoreksi konstruksi URL gambar produk pada `src/app/(app)/catalogs/[id]/page.tsx` dari rute fiktif `/api/v1/uploads/${imagePath}` ke rute resmi file handler `/api/v1/files/${imagePath}`.
   - Memastikan pengiriman daftar URL ke Service Worker (`SAVE_CATALOG`) menggunakan rute resmi sehingga cache offline PWA menyimpan aset gambar produk yang sah (200 OK).
