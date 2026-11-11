@@ -8,6 +8,12 @@ dan proyek ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- **Integrasi Antarmuka Penyelesaian Tabrakan Calon Pelanggan (NAV-004)**:
+  - Mengintegrasikan alur bisnis backend `POST /api/v1/customers/:id/verify` ke antarmuka pengguna pada `src/app/(app)/customers/[id]/page.tsx`.
+  - Menampilkan banner peringatan tindakan prioritas dan 3 tombol penyelesaian resmi (Setujui Sebagai Cabang Resmi, Alihkan ke Sales Pembina, dan Tolak & Hapus Duplikat) saat calon toko ditandai tag `PENDING_VERIFIKASI_ADMIN`.
+  - Menyediakan modal interaktif untuk memilih sales pembina tujuan pengalihan toko lengkap dengan input catatan administratif.
+  - Menambahkan suite pengujian unit di `tests/unit/customer-verify-ui.test.ts` (2/2 passed).
+
 - **Penguncian Keamanan Navigasi, Guard Rute Klien, & Sinkronisasi Multi-Tenant (NAV-003, NAV-006, NAV-009)**:
   - Mengganti `router.refresh()` dengan `window.location.reload()` pada fungsi pengalih unit usaha (`handleSwitchBusiness`) di `src/components/AppShell.tsx` untuk menjamin seluruh komponen klien memuat ulang dataset usaha baru secara bersih tanpa kebocoran tampilan.
   - Memasang guard rute klien terpusat (`SUPERADMIN_ONLY_PREFIXES`) di `AppShell.tsx` yang memblokir akses pengguna non-SuperAdmin ke rute `/approvals`, `/stock`, `/purchase-orders`, `/payments`, `/audit`, `/sales`, `/vendors`, `/settings`, dan `/reports/margin` dengan tampilan resmi "Akses Dibatasi", mencegah error merah 403 API.

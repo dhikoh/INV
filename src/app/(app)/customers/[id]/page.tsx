@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import {
   ArrowLeft,
   Users,
@@ -174,8 +174,15 @@ interface SalesOption {
 }
 
 export default function CustomerDetailPage() {
+  const router = useRouter();
   const params = useParams();
   const customerId = params?.id as string;
+
+  // Verifikasi Tabrakan Toko (NAV-004)
+  const [verifyingCollision, setVerifyingCollision] = useState(false);
+  const [showReassignCollisionModal, setShowReassignCollisionModal] = useState(false);
+  const [targetCollisionSalesId, setTargetCollisionSalesId] = useState('');
+  const [collisionNotes, setCollisionNotes] = useState('');
 
   // State data utama
   const [customer, setCustomer] = useState<CustomerDetail | null>(null);
@@ -373,6 +380,56 @@ export default function CustomerDetailPage() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Aksi Penyelesaian Verifikasi Tabrakan Toko (NAV-004)
+  const handleVerifyCollision = async (
+    action: 'APPROVE' | 'REASSIGN' | 'REJECT',
+    targetSalesId?: string,
+    notes?: string
+  ) => {
+    if (action === 'REJECT') {
+      if (
+        !confirm(
+          'Apakah Anda yakin ingin menolak pendaftaran toko ini karena duplikasi data? Tindakan ini akan menghapus data calon toko.'
+        )
+      ) {
+        return;
+      }
+    }
+
+    try {
+      setVerifyingCollision(true);
+      const res = await fetch(`/api/v1/customers/${customerId}/verify`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action,
+          targetSalesId: targetSalesId || undefined,
+          notes: notes || undefined,
+        }),
+      });
+
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        throw new Error(json.error?.message || 'Gagal memproses verifikasi toko');
+      }
+
+      if (action === 'REJECT') {
+        router.push('/customers');
+      } else {
+        setShowReassignCollisionModal(false);
+        setTargetCollisionSalesId('');
+        setCollisionNotes('');
+        await loadData();
+      }
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Terjadi kesalahan sistem');
+    } finally {
+      setVerifyingCollision(false);
+    }
+  };
 
   // Handler Ganti Tahap Pipeline Cepat
   const handleChangeStage = async (newStage: PipelineStage) => {
@@ -978,6 +1035,64 @@ export default function CustomerDetailPage() {
           </div>
         )}
       </div>
+
+      {/* Banner Verifikasi Tabrakan Toko (NAV-004) */}
+      {customer.tags &&
+        customer.tags.includes('PENDING_VERIFIKASI_ADMIN') &&
+        currentUserRole === 'SUPERADMIN' && (
+          <div className="bg-amber-50 border-2 border-amber-300 rounded-2xl p-4 md:p-5 shadow-sm space-y-3">
+            <div className="flex items-start gap-3">
+              <div className="p-2 bg-amber-100 text-amber-700 rounded-xl shrink-0 mt-0.5">
+                <AlertCircle className="w-5 h-5" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-sm font-bold text-amber-950">
+                  Verifikasi Tabrakan Toko (Persetujuan Owner Diperlukan)
+                </h3>
+                <p className="text-xs text-amber-800 mt-1 leading-relaxed">
+                  Sistem mendeteksi calon toko ini memiliki kemiripan nama, nomor kontak, atau lokasi dengan toko binaan sales lain. Status penahanan aktif sampai Super Admin menyelesaikan verifikasi resmi di bawah ini.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-amber-200/60">
+              <button
+                type="button"
+                disabled={verifyingCollision}
+                onClick={() => handleVerifyCollision('APPROVE')}
+                className="min-h-[40px] px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm transition-colors disabled:opacity-50"
+              >
+                <Check className="w-4 h-4" />
+                <span>Setujui Sebagai Cabang Resmi</span>
+              </button>
+
+              <button
+                type="button"
+                disabled={verifyingCollision}
+                onClick={() => setShowReassignCollisionModal(true)}
+                className="min-h-[40px] px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm transition-colors disabled:opacity-50"
+              >
+                <Users className="w-4 h-4" />
+                <span>Alihkan ke Sales Pembina</span>
+              </button>
+
+              <button
+                type="button"
+                disabled={verifyingCollision}
+                onClick={() => {
+                  const reason = prompt('Masukkan catatan/alasan penolakan duplikat (opsional):');
+                  if (reason !== null) {
+                    handleVerifyCollision('REJECT', undefined, reason);
+                  }
+                }}
+                className="min-h-[40px] px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm transition-colors disabled:opacity-50"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Tolak & Hapus Duplikat</span>
+              </button>
+            </div>
+          </div>
+        )}
 
       {/* Ringkasan Angka Statistik */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
@@ -2422,6 +2537,77 @@ export default function CustomerDetailPage() {
                 className="px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-700 font-semibold text-xs hover:bg-slate-100 min-h-[36px]"
               >
                 Tutup
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Alihkan Calon Toko Tabrakan (NAV-004) */}
+      {showReassignCollisionModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+            <h3 className="text-base font-bold text-slate-900">
+              Alihkan Calon Toko ke Sales Pembina
+            </h3>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Pilih staf sales yang membina wilayah atau jaringan toko ini. Status penahanan tabrakan akan dilepaskan secara otomatis.
+            </p>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Pilih Staf Sales Tujuan <span className="text-rose-500">*</span>
+                </label>
+                <select
+                  value={targetCollisionSalesId}
+                  onChange={(e) => setTargetCollisionSalesId(e.target.value)}
+                  className="w-full text-xs font-medium bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-slate-800 focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">-- Pilih Staf Sales --</option>
+                  {salesList.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} (@{s.username})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Catatan Pengalihan (Opsional)
+                </label>
+                <textarea
+                  value={collisionNotes}
+                  onChange={(e) => setCollisionNotes(e.target.value)}
+                  placeholder="Contoh: Toko ini cabang dari langganan lama di Blitar..."
+                  rows={2}
+                  className="w-full text-xs bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-slate-800 focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setShowReassignCollisionModal(false)}
+                className="px-4 py-2 text-xs font-medium text-slate-600 hover:text-slate-800 transition-colors"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                disabled={!targetCollisionSalesId || verifyingCollision}
+                onClick={() =>
+                  handleVerifyCollision(
+                    'REASSIGN',
+                    targetCollisionSalesId,
+                    collisionNotes
+                  )
+                }
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold shadow-sm transition-colors disabled:opacity-50"
+              >
+                {verifyingCollision ? 'Memproses...' : 'Simpan & Alihkan'}
               </button>
             </div>
           </div>
