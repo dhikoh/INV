@@ -29,20 +29,20 @@ export default function CrmReportPage() {
   useEffect(() => {
     async function initUser() {
       try {
-        const [meRes, usersRes] = await Promise.all([
-          fetch('/api/v1/auth/me'),
-          fetch('/api/v1/users'),
-        ]);
-
+        const meRes = await fetch('/api/v1/auth/me');
         if (meRes.ok) {
           const json = await meRes.json();
-          setUserRole(json.data.user.role);
-        }
+          const role = json.data?.user?.role;
+          setUserRole(role);
 
-        if (usersRes.ok) {
-          const json = await usersRes.json();
-          const sales = (json.data || []).filter((u: { role: string }) => u.role === 'SALES');
-          setSalesList(sales);
+          if (role === 'SUPERADMIN') {
+            const usersRes = await fetch('/api/v1/users');
+            if (usersRes.ok) {
+              const usersJson = await usersRes.json();
+              const sales = (usersJson.data || []).filter((u: { role: string }) => u.role === 'SALES');
+              setSalesList(sales);
+            }
+          }
         }
       } catch {
         setError('Gagal memverifikasi akun pengguna');

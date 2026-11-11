@@ -8,6 +8,17 @@ dan proyek ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- **Perbaikan Kontrak UI-API Bootstrap Formulir Order & Dropdown Pelanggan (T1)**:
+  - Menyediakan helper defensif `unwrapList()` (`src/lib/api/client.ts`) untuk menangani format respons array langsung `data: T[]` maupun objek paginasi `data: { items: T[] }`.
+  - Mengatasi masalah tombol "Tambah Produk" tidak bereaksi pada `OrderForm.tsx` dan dropdown pelanggan kosong akibat salah membaca `custJson.data.items` dan `prodJson.data.items`.
+
+- **Pembersihan Panggilan Endpoint Super Admin dari Halaman Sales (T3)**:
+  - Membatasi pemanggilan `GET /api/v1/users` pada `customers/page.tsx` dan `reports/crm/page.tsx` hanya saat user berstatus Super Admin.
+  - Mengalihkan pengambilan harga paten pelanggan pada formulir katalog baru (`catalogs/new/page.tsx`) ke endpoint `GET /api/v1/customers/:id/pricing` yang sah bagi Sales, menghindari error 403 senyap.
+
+- **Toleransi CSRF Same-Origin di Balik Reverse Proxy (T5)**:
+  - Mendukung pencocokan origin fleksibel terhadap `req.nextUrl.origin` dan `host / x-forwarded-host` pada `src/lib/auth/origin.ts` agar permintaan mutasi tidak ditolak 403 saat aplikasi diakses melalui domain reverse proxy.
+
 - **Pengecualian `AuditLog` pada Pembersihan Data Impor Mode Timpa (*Preserve Immutable AuditLog*)**:
   - Memperbaiki kegagalan rollback transaksi `P0001: AuditLog tidak boleh diubah atau dihapus` saat opsi timpa aktif. `AuditLog` adalah tabel *append-only* yang dilindungi trigger database PostgreSQL `audit_log_no_change` sehingga tidak boleh dihapus.
   - Memastikan proses penghapusan berjenjang melewati model `AuditLog` dan penyisipan data audit log baru menggunakan `skipDuplicates: true` guna mencegah benturan primary key.
@@ -17,6 +28,11 @@ dan proyek ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   - Mencegah timbulnya respons HTTP 500 (`INTERNAL: Terjadi kesalahan. Coba lagi.`) saat browser Chromium di container server mengalami timeout, kendala alokasi memori, atau terhenti tak terduga; sistem secara mulus beralih (*graceful fallback*) ke tampilan cetak HTML interaktif resmi yang langsung memicu dialog cetak / *save as PDF* bawaan peramban pengguna.
 
 ### Added
+
+- **Integrasi Penuh Antarmuka Sisi Sales Desktop & Mobile (T2, T7)**:
+  - Menambahkan menu `Produk & Harga` (`/products`) dan `Daftar Harga` (`/price-list`) ke navigasi desktop Sales (`AppShell.tsx`).
+  - Menghubungkan menu laci mobile (*drawer*) ke seluruh rute Sales dan menambahkan tombol pemicu laci pada bilah navigasi bawah seluler.
+  - Menambahkan suite pengujian E2E Playwright `tests/e2e/sales-journey.spec.ts` (15 skenario) dan integrasi kontrak `tests/integration/sales-ui-bootstrap.test.ts`.
 
 - **Fitur Pengurutan Interaktif Tabel & Bilah Filter (*Table Header & Quick Sort*) di Seluruh Modul Inti**:
   - Menghadirkan komponen reusable `SortableHeader` (`src/components/ui/SortableHeader.tsx`) yang menyediakan indikator panah dinamis (Ascending, Descending, Netral) serta interaksi klik kolom yang responsif di seluruh layar tabel data.

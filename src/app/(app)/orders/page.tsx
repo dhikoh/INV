@@ -18,6 +18,7 @@ import { Skeleton, EmptyState, ErrorState } from '@/components/ui/States';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { SortableHeader } from '@/components/ui/SortableHeader';
 import { formatRupiah } from '@/lib/domain/money';
+import { unwrapList } from '@/lib/api/client';
 
 interface CustomerSummary {
   id: string;
@@ -128,7 +129,7 @@ export default function OrdersPage() {
         const res = await fetch('/api/v1/customers?limit=100');
         if (res.ok) {
           const json = await res.json();
-          setCustomerOptions(json.data.items || []);
+          setCustomerOptions(unwrapList<CustomerSummary>(json));
         }
       } catch {
         // Abaikan kegagalan memuat dropdown pelanggan

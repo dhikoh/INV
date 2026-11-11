@@ -495,10 +495,11 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
 2. [ADR 0002: Pemilihan Teknologi Stack](adr/0002-stack.md) - Next.js App Router, Prisma, Vitest, pg-boss, puppeteer-core.
 3. [ADR 0003: Konfigurasi Datasource Prisma 7 dan Driver Adapter PostgreSQL](adr/0003-prisma-7-config.md) - Penyesuaian konfigurasi prisma.config.ts, @prisma/adapter-pg, dan pglite.
 4. [ADR 0004: Arsitektur Worker pg-boss dan Bot grammY](adr/0004-pg-boss-grammy.md) - Pemisahan proses background worker dan integrasi grammY + pg-boss v12.
-5. [ADR 0005: Kebijakan Migrasi Skema Database Entrypoint dan Sanitasi Seed](adr/0005-database-migration-entrypoint-and-seed.md) - Penggunaan prisma migrate deploy di entrypoint, fail-fast, dan isolasi worker.
+5. [ADR 0005: Pustaka Pembuatan Berkas XLSX ExcelJS](adr/0005-exceljs-export.md) - Penggunaan exceljs untuk ekspor spreadsheet in-memory streaming.
 6. [ADR 0006: Harga Paten, Katalog Terintegrasi Multi-Usaha, dan Isolasi Database Lapis PostgreSQL](adr/0006-harga-paten-dan-katalog-terintegrasi.md) - Implementasi Addendum v2, trigger DB `catalogitem_same_business_trg`, dan DTO price list 11 kunci.
 7. [ADR 0007: Inisialisasi Akun Super Admin dan Kebijakan Rotasi Kredensial](adr/0007-superadmin-seed-and-credential-rotation.md) - Penegakan password env >= 12 karakter, pencegahan overwrite, mustChangePassword: true, dan sanitasi log.
 8. [ADR 0008: Ekspor & Impor Data Portabel (JSON dalam ZIP)](adr/0008-export-import-json.md) - Format portabel ndjson + uploads, snapshot RepeatableRead, dry-run simulation, dan mitigasi zip-bomb/zip-slip.
+9. [ADR 0009: Kebijakan Migrasi Skema Database Entrypoint dan Sanitasi Seed](adr/0009-database-migration-entrypoint-and-seed.md) - Penggunaan prisma migrate deploy di entrypoint, fail-fast, dan isolasi worker.
 
 ---
 

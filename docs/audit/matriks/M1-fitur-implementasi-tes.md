@@ -32,7 +32,7 @@ Pemetaan menyeluruh seluruh butir spesifikasi arsitektur BLUEPRINT.md (Seksi 4 H
 | Master Produk & Zero-Leakage HPP | `src/app/api/v1/products/route.ts`, `[id]/route.ts` | `tests/integration/products.test.ts`, `tests/unit/leak-detector.test.ts` | **Ada** | `costPrice` disaring untuk Sales. |
 | Unggah & Kelola Foto Produk | `src/app/api/v1/products/[id]/images/route.ts`, `[imageId]/route.ts` | `tests/integration/products.test.ts` | **Ada** | Maks 8 foto, WebP 1600px. |
 | Riwayat Perubahan Harga Produk | `src/app/api/v1/products/[id]/price-history/route.ts` | `tests/integration/products.test.ts` | **Ada** | Alasan perubahan wajib. |
-| Daftar Harga Resmi (`/price-list`) | `src/app/api/v1/price-list/route.ts`, `src/lib/dto/priceList.ts` | `tests/integration/price-list.test.ts` | **Parsial** | **AUD-GAP-002 (S3)**: Endpoint & DTO ada dan teruji, tetapi **belum ada pemanggil UI** di frontend. |
+| Daftar Harga Resmi (`/price-list`) | `src/app/api/v1/price-list/route.ts`, `src/lib/dto/priceList.ts`, `src/app/(app)/price-list/page.tsx` | `tests/integration/price-list.test.ts` | **Ada** | Terhubung ke antarmuka `/price-list` dan menu navigasi. |
 | Trigger Database Isolasi Tenant Katalog | `prisma/migrations/20261110000003_catalog_same_business_guard/migration.sql` | `tests/integration/catalog-isolation.test.ts` | **Parsial** | **AUD-SPEC-006 (S1)**: Trigger ada di migrasi, tetapi tidak terpasang di produksi akibat `db push`. |
 
 ## 4. CRM, Pelanggan, Tugas Follow-up & Promo Khusus

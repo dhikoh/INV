@@ -114,14 +114,14 @@ export default function NewCatalogPage() {
 
     async function loadCustomerMinPrices() {
       try {
-        const res = await fetch(`/api/v1/customers/${customerId}/min-prices`);
+        const res = await fetch(`/api/v1/customers/${customerId}/pricing`);
         if (res.ok) {
           const json = await res.json();
           const map = new Map<string, number>();
-          const list = Array.isArray(json.data) ? json.data : json.data?.items;
-          if (Array.isArray(list)) {
-            list.forEach((cm: { productId: string; minPrice: number }) => {
-              map.set(cm.productId, Number(cm.minPrice));
+          const pricing = json.data?.pricing;
+          if (Array.isArray(pricing)) {
+            pricing.forEach((cm: { productId: string; effectiveFloorPrice: number }) => {
+              map.set(cm.productId, Number(cm.effectiveFloorPrice));
             });
           }
           setCustomerFloorMap(map);

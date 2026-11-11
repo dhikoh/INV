@@ -424,7 +424,10 @@ export default function ProductsPage() {
 
       const json = await res.json();
       if (!res.ok) {
-        throw new Error(json.error?.message || 'Gagal menyimpan produk');
+        const errorMsg = json.error?.fields
+          ? Object.entries(json.error.fields).map(([k, v]) => `${k}: ${v}`).join('; ')
+          : (json.error?.message || 'Gagal menyimpan produk');
+        throw new Error(errorMsg);
       }
 
       setFeedbackSuccess(`Produk "${newProduct.name}" berhasil ditambahkan.`);
@@ -498,7 +501,10 @@ export default function ProductsPage() {
         if (res.status === 409) {
           throw new Error('Data produk telah diperbarui oleh sesi lain. Silakan tutup dan muat ulang.');
         }
-        throw new Error(json.error?.message || 'Gagal memperbarui produk');
+        const errorMsg = json.error?.fields
+          ? Object.entries(json.error.fields).map(([k, v]) => `${k}: ${v}`).join('; ')
+          : (json.error?.message || 'Gagal memperbarui produk');
+        throw new Error(errorMsg);
       }
 
       setFeedbackSuccess(`Produk "${editForm.name}" berhasil diperbarui.`);

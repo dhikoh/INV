@@ -24,6 +24,7 @@ import {
   Sparkles,
   BookOpen,
   User,
+  DollarSign,
   LogOut,
   Building2,
   ChevronDown,
@@ -248,8 +249,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     { label: 'Invoice', href: '/invoices', icon: FileText },
     { label: 'Piutang', href: '/receivables', icon: Receipt },
     { label: 'Customer', href: '/customers', icon: Users },
-    { label: 'Laporan CRM', href: '/reports/crm', icon: BarChart3 },
     { label: 'Katalog', href: '/catalogs', icon: BookOpen },
+    { label: 'Produk & Harga', href: '/products', icon: Package },
+    { label: 'Daftar Harga', href: '/price-list', icon: DollarSign },
+    { label: 'Laporan CRM', href: '/reports/crm', icon: BarChart3 },
     { label: 'Pengingat', href: '/reminders', icon: Bell },
     {
       label: 'Pembaruan',
@@ -260,15 +263,18 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     { label: 'Profil Saya', href: '/profile', icon: User },
   ];
 
+  const currentRoleNav = isSuperAdmin ? superAdminNav : salesDesktopNav;
+
   const salesNav = [
     { label: 'Beranda', href: '/dashboard', icon: LayoutDashboard },
     { label: 'Order', href: '/orders', icon: ShoppingCart },
     { label: 'Customer', href: '/customers', icon: Users },
-    { label: 'Pengingat', href: '/reminders', icon: Bell },
+    { label: 'Katalog', href: '/catalogs', icon: BookOpen },
     {
-      label: 'Lainnya',
-      href: '/profile',
-      icon: User,
+      label: 'Menu',
+      href: '#menu',
+      icon: Menu,
+      onClick: () => setSidebarOpen(true),
       hasUnread: unreadCount > 0,
     },
   ];
@@ -299,21 +305,19 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       {/* Header Utama */}
       <header className="h-16 bg-white border-b border-slate-200 px-4 flex items-center justify-between sticky top-0 z-30">
         <div className="flex items-center gap-3">
-          {/* Tombol Menu Mobile untuk Super Admin */}
-          {isSuperAdmin && (
-            <button
-              type="button"
-              onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="md:hidden min-h-[44px] min-w-[44px] flex items-center justify-center text-slate-600 hover:text-slate-900"
-              aria-label="Buka menu navigasi"
-            >
-              {sidebarOpen ? (
-                <X className="w-6 h-6" />
-              ) : (
-                <Menu className="w-6 h-6" />
-              )}
-            </button>
-          )}
+          {/* Tombol Menu Mobile */}
+          <button
+            type="button"
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            className="md:hidden min-h-[44px] min-w-[44px] flex items-center justify-center text-slate-600 hover:text-slate-900"
+            aria-label="Buka menu navigasi"
+          >
+            {sidebarOpen ? (
+              <X className="w-6 h-6" />
+            ) : (
+              <Menu className="w-6 h-6" />
+            )}
+          </button>
 
           <Link href="/dashboard" className="flex items-center gap-2">
             <span className="font-extrabold text-xl tracking-tight text-blue-600">
@@ -479,7 +483,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 </button>
               </div>
               <nav className="space-y-1 overflow-y-auto flex-1">
-                {superAdminNav.map((item) => {
+                {currentRoleNav.map((item) => {
                   const Icon = item.icon;
                   const active = pathname === item.href;
                   return (
@@ -528,6 +532,24 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           {salesNav.map((item) => {
             const Icon = item.icon;
             const active = pathname === item.href;
+            if (item.onClick) {
+              return (
+                <button
+                  key={item.label}
+                  type="button"
+                  onClick={item.onClick}
+                  className="relative flex flex-col items-center justify-center flex-1 h-full min-h-[44px] text-slate-500 hover:text-blue-600"
+                >
+                  <div className="relative">
+                    <Icon className="w-5 h-5" />
+                    {item.hasUnread && (
+                      <span className="absolute -top-1 -right-1 w-2 h-2 bg-amber-500 rounded-full ring-2 ring-white" />
+                    )}
+                  </div>
+                  <span className="text-[11px] mt-0.5">{item.label}</span>
+                </button>
+              );
+            }
             return (
               <Link
                 key={item.href}

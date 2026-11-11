@@ -133,10 +133,12 @@ export default function CustomersPage() {
       setError(null);
 
       // Cek auth role
+      let role = currentUser?.role;
       const meRes = await fetch('/api/v1/auth/me');
       if (meRes.ok) {
         const meData = await meRes.json();
         if (meData.ok && meData.data?.user) {
+          role = meData.data.user.role;
           setCurrentUser({
             id: meData.data.user.id,
             role: meData.data.user.role,
@@ -165,15 +167,17 @@ export default function CustomersPage() {
         setCustomers(custData.data);
       }
 
-      // Ambil daftar sales jika Super Admin
-      const usersRes = await fetch('/api/v1/users');
-      if (usersRes.ok) {
-        const usersData = await usersRes.json();
-        if (usersData.ok && Array.isArray(usersData.data)) {
-          const onlySales = usersData.data.filter(
-            (u: { role: string }) => u.role === 'SALES'
-          );
-          setSalesList(onlySales);
+      // Ambil daftar sales HANYA jika Super Admin
+      if (role === 'SUPERADMIN') {
+        const usersRes = await fetch('/api/v1/users');
+        if (usersRes.ok) {
+          const usersData = await usersRes.json();
+          if (usersData.ok && Array.isArray(usersData.data)) {
+            const onlySales = usersData.data.filter(
+              (u: { role: string }) => u.role === 'SALES'
+            );
+            setSalesList(onlySales);
+          }
         }
       }
     } catch (err: unknown) {
@@ -181,7 +185,7 @@ export default function CustomersPage() {
     } finally {
       setLoading(false);
     }
-  }, [searchQuery, stageFilter, salesFilter, sortBy, sortOrder]);
+  }, [searchQuery, stageFilter, salesFilter, sortBy, sortOrder, currentUser?.role]);
 
   // Debounced search
   useEffect(() => {

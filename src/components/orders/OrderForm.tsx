@@ -23,6 +23,7 @@ import { MoneyInput } from '@/components/ui/MoneyInput';
 import { PercentInput } from '@/components/ui/PercentInput';
 import { formatRupiah } from '@/lib/domain/money';
 import { PatenPrice } from '@/components/ui/PatenPrice';
+import { unwrapList } from '@/lib/api/client';
 
 export interface CustomerOption {
   id: string;
@@ -225,12 +226,12 @@ export function OrderForm({
 
         if (custRes.ok) {
           const custJson = await custRes.json();
-          setCustomers(custJson.data.items || []);
+          setCustomers(unwrapList<CustomerOption>(custJson));
         }
 
         if (prodRes.ok) {
           const prodJson = await prodRes.json();
-          setProducts(prodJson.data.items || []);
+          setProducts(unwrapList<ProductOption>(prodJson));
         }
       } catch {
         setFormError('Gagal memuat data awal formulir.');

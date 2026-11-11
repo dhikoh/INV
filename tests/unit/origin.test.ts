@@ -41,6 +41,18 @@ describe('CSRF Same-Origin Guard (T1.1 & Seksi 10.1)', () => {
     expect(() => assertSameOrigin(patchReq)).not.toThrow();
   });
 
+  it('mengizinkan metode mutasi bila header Origin cocok dengan host request di balik reverse proxy', () => {
+    const proxyReq = new NextRequest('https://modula.click/api/v1/orders', {
+      method: 'POST',
+      headers: {
+        origin: 'https://modula.click',
+        host: 'modula.click',
+        'x-forwarded-proto': 'https',
+      },
+    });
+    expect(() => assertSameOrigin(proxyReq)).not.toThrow();
+  });
+
   it('mengizinkan metode mutasi bila header Referer cocok saat Origin absen', () => {
     const deleteReq = new NextRequest(APP_URL + '/api/v1/products/123', {
       method: 'DELETE',

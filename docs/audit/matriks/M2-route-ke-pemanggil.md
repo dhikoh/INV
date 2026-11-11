@@ -116,7 +116,7 @@ Total Endpoint Handlers: 170
 | 108 | `POST` | `/api/v1/payments/[id]/reject` | `src/app/api/v1/payments/[id]/reject/route.ts` | `SUPERADMIN` | [invoiceId]/page.tsx, dashboard/page.tsx, invoices/page.tsx | approval-and-invoice-ui.test.ts, backup-restore.test.ts | **Terhubung Penuh** |
 | 109 | `POST` | `/api/v1/payments/[id]/verify` | `src/app/api/v1/payments/[id]/verify/route.ts` | `SUPERADMIN` | [id]/page.tsx, payments/page.tsx | payments.test.ts, permissions.test.ts | **Terhubung Penuh** |
 | 110 | `POST` | `/api/v1/payments/[id]/void` | `src/app/api/v1/payments/[id]/void/route.ts` | `SUPERADMIN` | [invoiceId]/page.tsx, invoices/page.tsx, [id]/page.tsx | leak.ts, approval-and-invoice-ui.test.ts | **Terhubung Penuh** |
-| 111 | `GET` | `/api/v1/price-list` | `src/app/api/v1/price-list/route.ts` | `SUPERADMIN, SALES` | - | price-list.test.ts | **Yatim (Tanpa Pemanggil UI)** |
+| 111 | `GET` | `/api/v1/price-list` | `src/app/api/v1/price-list/route.ts` | `SUPERADMIN, SALES` | price-list/page.tsx, AppShell.tsx | price-list.test.ts | **Terhubung Penuh** |
 | 112 | `GET` | `/api/v1/products` | `src/app/api/v1/products/route.ts` | `SUPERADMIN, SALES` | new/page.tsx, dashboard/page.tsx, products/page.tsx | catalog-from-products.test.ts, catalogs.test.ts | **Terhubung Penuh** |
 | 113 | `POST` | `/api/v1/products` | `src/app/api/v1/products/route.ts` | `SUPERADMIN, SALES` | new/page.tsx, dashboard/page.tsx, products/page.tsx | catalog-from-products.test.ts, catalogs.test.ts | **Terhubung Penuh** |
 | 114 | `POST` | `/api/v1/products/[id]/images` | `src/app/api/v1/products/[id]/images/route.ts` | `SUPERADMIN` | products/page.tsx | catalog-from-products.test.ts, catalogs.test.ts | **Terhubung Penuh** |

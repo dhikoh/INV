@@ -13,7 +13,7 @@ Perbandingan ketat antara matriks hak akses BLUEPRINT.md Seksi 4 dengan implemen
 | Kelola Akun Sales, Target & Komisi | SA: Ya, Sales: Tidak | `SUPERADMIN` only | Menu `/settings/users`, `/sales` hanya untuk SA | Sales tidak memiliki akses ke entitas pengguna lain | **Sesuai 100%** |
 | Kelola Vendor (Supplier/Transport) | SA: Ya, Sales: Tidak | `SUPERADMIN` only | Menu `/vendors` hanya tampil untuk SA | Detail hutang vendor hanya untuk SA | **Sesuai 100%** |
 | Lihat Produk | SA: Lengkap + HPP/Margin, Sales: Aktif, Tanpa HPP | `SUPERADMIN, SALES` | Tampilan `/products` kolom HPP/Margin tersembunyi untuk Sales | `formatProductDto` menyaring `costPrice`, `margin` bila role = Sales | **Sesuai 100%** |
-| Lihat Daftar Harga Resmi (`/price-list`)| SA: Semua floor, Sales: Customernya | `SUPERADMIN, SALES` | Belum ada UI khusus | `priceListItemDto` 11 kunci, evaluasi floorPrice efektif | **Sesuai (API)** |
+| Lihat Daftar Harga Resmi (`/price-list`)| SA: Semua floor, Sales: Customernya | `SUPERADMIN, SALES` | Halaman `/price-list` terintegrasi di desktop nav dan drawer mobile | `priceListItemDto` 11 kunci, evaluasi floorPrice efektif | **Sesuai 100%** |
 | Buat & Sinkronisasi Katalog | SA: Ya, Sales: Ya (Milik sendiri) | `SUPERADMIN, SALES` | Halaman `/catalogs`, modal sync | Sales hanya melihat dan menyinkronkan katalognya | **Sesuai 100%** |
 | Ubah Harga Master & HPP | SA: Ya, Sales: Tidak | `SUPERADMIN` only | Tombol edit harga hanya tampil untuk SA | Sales ditolak 403 bila mencoba PATCH produk | **Sesuai 100%** |
 | Ajukan Order Baru | SA: Ya, Sales: Ya (Customer sendiri) | `SUPERADMIN, SALES` | Halaman `/orders/new` (`OrderForm`) | Validasi customerScope: Sales ditolak bila bukan miliknya | **Sesuai 100%** |
