@@ -32,6 +32,7 @@ export default function DataTransferCard({
   // Impor state
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [fileHash, setFileHash] = useState<string>(''); // Untuk deteksi pergantian berkas
+  const [overwrite, setOverwrite] = useState(false);
   const [inspecting, setInspecting] = useState(false);
   const [importing, setImporting] = useState(false);
   const [inspectReport, setInspectReport] = useState<ImportReport | null>(null);
@@ -79,7 +80,8 @@ export default function DataTransferCard({
       const formData = new FormData();
       formData.append('file', selectedFile);
 
-      const res = await fetch('/api/v1/data-transfer/import?dryRun=1', {
+      const query = `?dryRun=1${overwrite ? '&overwrite=1' : ''}`;
+      const res = await fetch(`/api/v1/data-transfer/import${query}`, {
         method: 'POST',
         body: formData,
       });
@@ -101,9 +103,11 @@ export default function DataTransferCard({
   const handleExecuteImport = async () => {
     if (!selectedFile || !inspectReport || !inspectReport.ok) return;
 
-    const confirmed = window.confirm(
-      'Impor akan menambahkan unit usaha beserta seluruh riwayat transaksi dan data master ke database. Proses ini tidak bisa dibatalkan. Lanjutkan?'
-    );
+    const confirmMsg = overwrite
+      ? 'PERINGATAN: Opsi timpa aktif! Seluruh data lama unit usaha ini di database akan dibersihkan dan digantikan dengan data baru dari berkas ZIP. Tindakan ini tidak bisa dibatalkan. Lanjutkan?'
+      : 'Impor akan menambahkan unit usaha beserta seluruh riwayat transaksi dan data master ke database. Proses ini tidak bisa dibatalkan. Lanjutkan?';
+
+    const confirmed = window.confirm(confirmMsg);
     if (!confirmed) return;
 
     setImporting(true);
@@ -113,7 +117,8 @@ export default function DataTransferCard({
       const formData = new FormData();
       formData.append('file', selectedFile);
 
-      const res = await fetch('/api/v1/data-transfer/import', {
+      const query = overwrite ? '?overwrite=1' : '';
+      const res = await fetch(`/api/v1/data-transfer/import${query}`, {
         method: 'POST',
         body: formData,
       });
@@ -268,6 +273,24 @@ export default function DataTransferCard({
                   </>
                 )}
               </button>
+            </div>
+
+            {/* Opsi Timpa Data (Overwrite Mode) */}
+            <div className="flex items-start gap-2.5 bg-amber-50/70 border border-amber-200 rounded-lg p-3">
+              <input
+                id="overwrite-business"
+                type="checkbox"
+                checked={overwrite}
+                onChange={(e) => {
+                  setOverwrite(e.target.checked);
+                  setInspectReport(null);
+                  setErrorMessage(null);
+                }}
+                className="mt-0.5 rounded border-amber-300 text-amber-600 focus:ring-amber-500 w-4 h-4 cursor-pointer"
+              />
+              <label htmlFor="overwrite-business" className="text-xs text-amber-950 leading-relaxed cursor-pointer select-none">
+                <span className="font-semibold text-amber-900">Timpa data unit usaha</span> jika ID atau Kode sudah ada di sistem. Seluruh data lama unit usaha tersebut di database akan dibersihkan sebelum data baru dari ZIP dimasukkan.
+              </label>
             </div>
 
             {/* Notifikasi Error Umum */}

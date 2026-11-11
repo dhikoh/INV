@@ -16,6 +16,7 @@ export interface ImportOptions {
   replaceSeedSuperadmin: boolean;
   actor: { id: string; role: Role } | null;
   uploadDir: string;
+  overwrite?: boolean;
 }
 
 export interface ImportReport {
@@ -313,10 +314,11 @@ export async function importData(
   zip: Uint8Array,
   opts: ImportOptions
 ): Promise<ImportReport> {
-  const { dryRun, replaceSeedSuperadmin, actor, uploadDir } = opts;
+  const { dryRun, replaceSeedSuperadmin, actor, uploadDir, overwrite = false } = opts;
   const errors: string[] = [];
   const warnings: string[] = [];
   const counts: Record<string, number> = {};
+  const businessesToOverwrite: string[] = [];
 
   const report: ImportReport = {
     ok: false,
@@ -475,10 +477,19 @@ export async function importData(
         },
       });
       if (conflict) {
-        errors.push(
-          `Unit usaha dengan ID '${biz.id}' atau Kode '${biz.code}' sudah terdaftar di sistem target.`
-        );
-        return report;
+        if (!overwrite) {
+          errors.push(
+            `Unit usaha dengan ID '${biz.id}' atau Kode '${biz.code}' sudah terdaftar di sistem target.`
+          );
+          return report;
+        } else {
+          if (!businessesToOverwrite.includes(conflict.id)) {
+            businessesToOverwrite.push(conflict.id);
+          }
+          warnings.push(
+            `Unit usaha '${conflict.name}' (${conflict.code}) sudah terdaftar di sistem dan akan ditimpa (seluruh data lama unit usaha ini akan dibersihkan sebelum data baru dimasukkan).`
+          );
+        }
       }
     }
 
@@ -486,13 +497,20 @@ export async function importData(
     const userRows = parsedTablesData['User'] || [];
     const usernames = userRows.map((u) => u.username as string).filter(Boolean);
     if (usernames.length > 0) {
+      const whereUsers: Record<string, unknown> = {
+        username: { in: usernames },
+        deletedAt: null,
+      };
+      if (overwrite && businessesToOverwrite.length > 0) {
+        whereUsers.businessId = { notIn: businessesToOverwrite };
+      }
       const existingUsers = await prisma.user.findMany({
-        where: { username: { in: usernames }, deletedAt: null },
+        where: whereUsers,
         select: { username: true },
       });
       if (existingUsers.length > 0) {
         const conflicts = existingUsers.map((u) => u.username).join(', ');
-        errors.push(`Username berikut sudah digunakan di sistem target: ${conflicts}`);
+        errors.push(`Username berikut sudah digunakan oleh unit usaha lain di sistem target: ${conflicts}`);
         return report;
       }
     }
@@ -506,16 +524,20 @@ export async function importData(
           findMany: (args: Record<string, unknown>) => Promise<Array<{ id: string }>>;
         }>)[model.charAt(0).toLowerCase() + model.slice(1)];
         if (delegate) {
+          const whereModel: Record<string, unknown> = {
+            id: { in: ids },
+            businessId: { not: '' },
+          };
+          if (overwrite && businessesToOverwrite.length > 0) {
+            whereModel.businessId = { notIn: businessesToOverwrite };
+          }
           const existing = await delegate.findMany({
-            where: {
-              id: { in: ids },
-              businessId: { not: '' },
-            },
+            where: whereModel,
             select: { id: true },
           });
           if (existing.length > 0) {
             errors.push(
-              `Terdapat ${existing.length} data ${model} dari berkas yang ID-nya sudah ada di target.`
+              `Terdapat ${existing.length} data ${model} dari berkas yang ID-nya sudah digunakan oleh unit usaha lain di target.`
             );
             return report;
           }
@@ -526,11 +548,15 @@ export async function importData(
     // Periksa telegramChatId bentrok
     for (const u of userRows) {
       if (u.telegramChatId) {
+        const whereChat: Record<string, unknown> = {
+          telegramChatId: BigInt(u.telegramChatId as string | number | bigint),
+          deletedAt: null,
+        };
+        if (overwrite && businessesToOverwrite.length > 0) {
+          whereChat.businessId = { notIn: businessesToOverwrite };
+        }
         const existingChat = await prisma.user.findFirst({
-          where: {
-            telegramChatId: BigInt(u.telegramChatId as string | number | bigint),
-            deletedAt: null,
-          },
+          where: whereChat,
         });
         if (existingChat) {
           u.telegramChatId = null;
@@ -563,10 +589,12 @@ export async function importData(
           select: { id: true, businessId: true },
         });
         if (existingShipment) {
-          errors.push(
-            `Nomor surat jalan '${trimmedNo}' sudah terpakai oleh unit usaha lain di target.`
-          );
-          return report;
+          if (!overwrite || !businessesToOverwrite.includes(existingShipment.businessId)) {
+            errors.push(
+              `Nomor surat jalan '${trimmedNo}' sudah terpakai oleh unit usaha lain di target.`
+            );
+            return report;
+          }
         }
       }
     }
@@ -626,6 +654,54 @@ export async function importData(
             await tx.telegramLinkCode.deleteMany({ where: { userId: { in: ids } } });
             await tx.notification.deleteMany({ where: { userId: { in: ids } } });
             await tx.user.deleteMany({ where: { id: { in: ids } } });
+          }
+        }
+
+        // Bersihkan data unit usaha lama bila mode business dan overwrite=true
+        if (manifest.scope === 'business' && overwrite && businessesToOverwrite.length > 0) {
+          // 1. Ambil semua user milik unit usaha yang akan ditimpa untuk bersihkan sessions, link codes, notifications
+          const bizUsers = await tx.user.findMany({
+            where: { businessId: { in: businessesToOverwrite } },
+            select: { id: true },
+          });
+          const bizUserIds = bizUsers.map((u) => u.id);
+
+          if (bizUserIds.length > 0) {
+            await tx.session.deleteMany({ where: { userId: { in: bizUserIds } } });
+            await tx.telegramLinkCode.deleteMany({ where: { userId: { in: bizUserIds } } });
+          }
+          await tx.notification.deleteMany({
+            where: {
+              OR: [
+                { businessId: { in: businessesToOverwrite } },
+                ...(bizUserIds.length > 0 ? [{ userId: { in: bizUserIds } }] : []),
+              ],
+            },
+          });
+
+          // 2. Hapus model-model anak ke induk (urutan terbalik dari TABLES)
+          for (const spec of [...TABLES].reverse()) {
+            if (spec.model === 'ReleaseNote') continue;
+
+            const delegate = (tx as unknown as Record<string, {
+              deleteMany: (args: Record<string, unknown>) => Promise<{ count: number }>;
+            }>)[spec.delegate];
+
+            if (delegate && typeof delegate.deleteMany === 'function') {
+              if (spec.scope === 'via-parent' && spec.parentRelation) {
+                await delegate.deleteMany({
+                  where: { [spec.parentRelation]: { businessId: { in: businessesToOverwrite } } },
+                });
+              } else if (spec.scope === 'business-id') {
+                await delegate.deleteMany({
+                  where: { businessId: { in: businessesToOverwrite } },
+                });
+              } else if (spec.scope === 'business-pk') {
+                await delegate.deleteMany({
+                  where: { id: { in: businessesToOverwrite } },
+                });
+              }
+            }
           }
         }
 

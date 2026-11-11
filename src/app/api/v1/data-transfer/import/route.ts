@@ -34,6 +34,9 @@ export const POST = withApi(
 
     const url = new URL(req.url);
     const dryRun = url.searchParams.get('dryRun') === '1';
+    const overwrite =
+      url.searchParams.get('overwrite') === '1' ||
+      url.searchParams.get('overwrite') === 'true';
 
     const formData = await req.formData().catch(() => {
       throw new DomainError('BAD_REQUEST', 'Form data tidak valid', 400);
@@ -75,6 +78,7 @@ export const POST = withApi(
     try {
       const report = await importData(zipBytes, {
         dryRun,
+        overwrite,
         replaceSeedSuperadmin: false,
         actor: { id: ctx.user.id, role: ctx.user.role },
         uploadDir: env.UPLOAD_DIR,

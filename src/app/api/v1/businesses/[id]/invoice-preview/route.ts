@@ -6,7 +6,7 @@ import { toErrorResponse } from '@/lib/api/withApi';
 import { DomainError } from '@/lib/domain/money';
 import { Role, InvoiceTheme } from '@prisma/client';
 import { InvoiceDocument } from '@/lib/pdf/InvoiceDocument';
-import { renderReactToPdf } from '@/lib/pdf/engine';
+import { renderReactToPdf, renderReactToHtml } from '@/lib/pdf/engine';
 import { getDummySnapshot } from '@/lib/pdf/dummy';
 import { getLogoDataUri } from '@/lib/pdf/logo';
 
@@ -81,7 +81,23 @@ export async function GET(
       logoDataUri,
     });
 
-    const pdfBuffer = await renderReactToPdf(element);
+    let pdfBuffer: Buffer;
+    try {
+      pdfBuffer = await renderReactToPdf(element);
+    } catch {
+      const html = renderReactToHtml(element);
+      const printableHtml = html.replace(
+        '</body>',
+        `<script>window.addEventListener('DOMContentLoaded', () => { window.print(); });</script></body>`
+      );
+      return new NextResponse(printableHtml, {
+        status: 200,
+        headers: {
+          'Content-Type': 'text/html; charset=utf-8',
+          'Cache-Control': 'private, no-store',
+        },
+      });
+    }
 
     return new NextResponse(pdfBuffer, {
       status: 200,

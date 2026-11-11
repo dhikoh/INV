@@ -210,31 +210,21 @@ export async function GET(
     let pdfBuffer: Buffer;
     try {
       pdfBuffer = await renderReactToPdf(element);
-    } catch (renderErr) {
-      // Fallback anggun: jika headless browser Chromium di server belum terkonfigurasi / spawn error,
-      // kembalikan tampilan dokumen HTML dengan auto-print agar pengguna tetap dapat mencetak faktur
-      const errMsg = renderErr instanceof Error ? renderErr.message : String(renderErr);
-      if (
-        errMsg.includes('Failed to launch the browser') ||
-        errMsg.includes('ENOENT') ||
-        errMsg.includes('chromium') ||
-        errMsg.includes('chrome') ||
-        errMsg.includes('spawn')
-      ) {
-        const html = renderReactToHtml(element);
-        const printableHtml = html.replace(
-          '</body>',
-          `<script>window.addEventListener('DOMContentLoaded', () => { window.print(); });</script></body>`
-        );
-        return new NextResponse(printableHtml, {
-          status: 200,
-          headers: {
-            'Content-Type': 'text/html; charset=utf-8',
-            'Cache-Control': 'private, no-store',
-          },
-        });
-      }
-      throw renderErr;
+    } catch {
+      // Fallback anggun: jika headless browser Chromium di server belum terkonfigurasi / spawn error / timeout / memory issue,
+      // kembalikan tampilan dokumen HTML dengan auto-print agar pengguna tetap dapat mencetak faktur tanpa kegagalan (500)
+      const html = renderReactToHtml(element);
+      const printableHtml = html.replace(
+        '</body>',
+        `<script>window.addEventListener('DOMContentLoaded', () => { window.print(); });</script></body>`
+      );
+      return new NextResponse(printableHtml, {
+        status: 200,
+        headers: {
+          'Content-Type': 'text/html; charset=utf-8',
+          'Cache-Control': 'private, no-store',
+        },
+      });
     }
 
     const rawNumber = snapshot.number || (preview ? 'DRAFT-INVOICE' : 'INVOICE');

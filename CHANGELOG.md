@@ -6,7 +6,19 @@ dan proyek ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Fixed
+
+- **Fallback Tangguh Pembuatan Dokumen PDF (*Resilient PDF Fallback*)**:
+  - Penanganan kegagalan render Puppeteer tanpa terkecuali (*universal error catch*) pada endpoint cetak faktur (`/api/v1/invoices/[id]/pdf`), surat jalan (`/api/v1/orders/[id]/delivery-note/pdf`), dan pratinjau tema (`/api/v1/businesses/[id]/invoice-preview`).
+  - Mencegah timbulnya respons HTTP 500 (`INTERNAL: Terjadi kesalahan. Coba lagi.`) saat browser Chromium di container server mengalami timeout, kendala alokasi memori, atau terhenti tak terduga; sistem secara mulus beralih (*graceful fallback*) ke tampilan cetak HTML interaktif resmi yang langsung memicu dialog cetak / *save as PDF* bawaan peramban pengguna.
+
 ### Added
+
+- **Fitur Timpa Data Unit Usaha (*Overwrite / Replace Mode*) pada Impor Data Usaha**:
+  - Dukungan parameter `overwrite=1` pada endpoint `POST /api/v1/data-transfer/import` dan flag CLI `--overwrite` pada `scripts/import-json.ts`.
+  - Pengecekan pra-impor cerdas (*overwrite-aware preflight*): jika unit usaha target sudah ada di sistem dan opsi timpa aktif, benturan ID/kode usaha, username pengguna, ID model data, dan nomor surat jalan milik unit usaha yang bersangkutan tidak memblokir impor, melainkan memberikan peringatan (*warning*) transparan.
+  - Pembersihan data lama secara topologis terbalik (*cascading reverse DAG deletion*) di dalam transaksi atomik PostgreSQL (`prisma.$transaction`) sebelum data baru dari berkas ZIP disisipkan, menjamin kebersihan database tanpa melanggar foreign key constraint.
+  - Penambahan checkbox interaktif "Timpa data unit usaha" di komponen antarmuka `DataTransferCard.tsx` (`/settings/business`) lengkap dengan dialog konfirmasi keamanan sebelum eksekusi impor nyata.
 
 - **Penyelarasan Presisi Harga Pasir Zeolite & Master Pelanggan Berbasis Arsip Riil**:
   - Penyelarasan produk `ZEO-01` (Pasir Zeolite No 1 - Halus) agar identik dengan `ZEO-02` dan `ZEO-03` sesuai penegasan pengguna dan arsip kalkulator riil BentoCat:

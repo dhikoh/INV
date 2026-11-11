@@ -63,6 +63,7 @@ Penggunaan:
 
 Opsi:
   --dry-run                 Simulasi impor penuh dengan rollback (tanpa mengubah database & disk)
+  --overwrite               Timpa data unit usaha jika sudah ada di sistem target
   --ganti-superadmin-seed   Ganti akun Super Admin bawaan seed jika ada di database target
   --pulihkan-berkas         Hanya pulihkan berkas uploads yang belum ada di disk (tanpa menyentuh DB)
   --yes                     Lewati konfirmasi ketik 'IMPOR' untuk eksekusi non-interaktif
@@ -88,6 +89,7 @@ Opsi:
   const { importData, restoreUploadsOnly } = await import('../src/lib/transfer/import');
 
   const dryRun = args.includes('--dry-run');
+  const overwrite = args.includes('--overwrite');
   const replaceSeedSuperadmin = args.includes('--ganti-superadmin-seed');
   const pulihkanBerkas = args.includes('--pulihkan-berkas');
   const autoYes = args.includes('--yes');
@@ -150,6 +152,7 @@ Opsi:
   console.log('⏳ Memproses impor data...');
   const report = await importData(zipBytes, {
     dryRun,
+    overwrite,
     replaceSeedSuperadmin,
     actor: null,
     uploadDir: env.UPLOAD_DIR,
