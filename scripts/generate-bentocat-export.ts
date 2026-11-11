@@ -38,7 +38,6 @@ async function main() {
       dueDays: 14,
       isActive: true,
       logoPath: null,
-      rev: 0,
       createdAt: new Date('2023-01-01T00:00:00.000Z'),
       updatedAt: now,
       deletedAt: null,
@@ -54,8 +53,6 @@ async function main() {
       accountNumber: '0901422817',
       accountHolder: 'DHIKO HERLAMBANG',
       isDefault: true,
-      createdAt: new Date('2023-01-01T00:00:00.000Z'),
-      updatedAt: now,
       deletedAt: null,
     },
   ];
@@ -103,8 +100,6 @@ async function main() {
       businessId,
       name: 'Pasir BentoCat',
       sortOrder: 1,
-      createdAt: new Date('2023-01-01T00:00:00.000Z'),
-      updatedAt: now,
       deletedAt: null,
     },
     {
@@ -112,8 +107,6 @@ async function main() {
       businessId,
       name: 'Pasir Zeolite',
       sortOrder: 2,
-      createdAt: new Date('2023-01-01T00:00:00.000Z'),
-      updatedAt: now,
       deletedAt: null,
     },
   ];
@@ -319,7 +312,6 @@ async function main() {
       shippingAddress: 'Jl. Mangga No. 27 RT 01 RW 07, Desa Adipala, Kec. Adipala, Kab. Cilacap Jateng',
       billingAddress: 'Jl. Mangga No. 27 RT 01 RW 07, Desa Adipala, Kec. Adipala, Kab. Cilacap Jateng',
       phone: '081234567803',
-      email: null,
       assignedSalesId: bentoSalesId,
       pipelineStage: 'REPEAT',
       notes: 'Pelanggan aktif repeat order wilayah Cilacap (dialihkan dari Dinia ke BentoCat)',
@@ -338,7 +330,6 @@ async function main() {
       shippingAddress: 'Kampung baris 505, Karangturi, Semarang Timur, Kota Semarang',
       billingAddress: 'Kampung baris 505, Karangturi, Semarang Timur, Kota Semarang',
       phone: '081234567805',
-      email: null,
       assignedSalesId: bentoSalesId,
       pipelineStage: 'REPEAT',
       notes: 'Pelanggan aktif repeat order wilayah Semarang (dialihkan dari Dinia ke BentoCat)',
@@ -357,7 +348,6 @@ async function main() {
       shippingAddress: 'Jl Ahmad Yani, No.2 Jambean, Sukorejo, Kec. Bojonegoro',
       billingAddress: 'Jl Ahmad Yani, No.2 Jambean, Sukorejo, Kec. Bojonegoro',
       phone: '081234567804',
-      email: null,
       assignedSalesId: bentoSalesId,
       pipelineStage: 'REPEAT',
       notes: 'Pelanggan aktif repeat order wilayah Bojonegoro (dialihkan dari Dinia ke BentoCat)',
@@ -376,7 +366,6 @@ async function main() {
       shippingAddress: 'Jl. Lamongan Raya, Kab. Lamongan, Jawa Timur',
       billingAddress: 'Jl. Lamongan Raya, Kab. Lamongan, Jawa Timur',
       phone: '081234567807',
-      email: null,
       assignedSalesId: bentoSalesId,
       pipelineStage: 'REPEAT',
       notes: 'Pelanggan aktif repeat order wilayah Lamongan (dialihkan dari Dinia ke BentoCat)',
@@ -395,7 +384,6 @@ async function main() {
       shippingAddress: 'Jl. Raya Tuban, Kab. Tuban, Jawa Timur',
       billingAddress: 'Jl. Raya Tuban, Kab. Tuban, Jawa Timur',
       phone: '081234567808',
-      email: null,
       assignedSalesId: bentoSalesId,
       pipelineStage: 'REPEAT',
       notes: 'Pelanggan aktif repeat order wilayah Tuban (dialihkan dari Dinia ke BentoCat)',
@@ -414,7 +402,6 @@ async function main() {
       shippingAddress: 'Jl. Cenderawasih, Timika, Papua',
       billingAddress: 'Jl. Cenderawasih, Timika, Papua',
       phone: '085244972449',
-      email: null,
       assignedSalesId: bentoSalesId,
       pipelineStage: 'REPEAT',
       notes: 'Pelanggan aktif repeat order wilayah Timika, Papua (dialihkan dari Dinia ke BentoCat)',
@@ -433,7 +420,6 @@ async function main() {
       shippingAddress: 'Jl. Cemara perum cemara No.ruko 1, Tlumpu, Kec. Sukorejo, Kota Blitar',
       billingAddress: 'Jl. Cemara perum cemara No.ruko 1, Tlumpu, Kec. Sukorejo, Kota Blitar',
       phone: '081234567801',
-      email: null,
       assignedSalesId: bentoSalesId,
       pipelineStage: 'REPEAT',
       notes: 'Pelanggan aktif repeat order wilayah Kota Blitar (dialihkan dari Dinia ke BentoCat)',
@@ -483,7 +469,6 @@ async function main() {
         productId: prod.id,
         minPrice: mp.minPrice,
         note: `Batas harga kesepakatan ${cust.name}`,
-        createdAt: new Date('2023-01-01T00:00:00.000Z'),
         updatedAt: now,
       });
     }
@@ -563,7 +548,6 @@ async function main() {
     receivedQty: it.qty,
     unitCost: it.unitCost,
     lineTotal: it.lineTotal,
-    createdAt: new Date('2025-01-05T09:00:00Z'),
   }));
 
   // 11. Transaksi Riil 3 Dokumen Terakhir per Kota (20 Transaksi)
@@ -968,7 +952,6 @@ async function main() {
         floorPrice: prod.minPrice,
         belowMin: false,
         sortOrder: i + 1,
-        createdAt: raw.orderDate,
       };
       orderItems.push(orderItem);
       orderItemsLocal.push(orderItem);
@@ -1020,11 +1003,10 @@ async function main() {
       issueDate: raw.orderDate,
       dueDate,
       theme: 'PROFESIONAL',
-      pdfPath: null,
       requestedById: diniaId,
       approvedById: diniaId,
       approvedAt: raw.orderDate,
-      rejectionReason: null,
+      rejectReason: null,
       createdAt: raw.orderDate,
       updatedAt: raw.orderDate,
       deletedAt: null,
@@ -1049,7 +1031,6 @@ async function main() {
       createdById: diniaId,
       createdAt: raw.orderDate,
       updatedAt: raw.orderDate,
-      deletedAt: null,
     });
 
     // 4. Payment 2: Pelunasan 50% (3-5 hari kemudian saat muatan sampai)
@@ -1072,7 +1053,6 @@ async function main() {
       createdById: diniaId,
       createdAt: pelunasanDate,
       updatedAt: pelunasanDate,
-      deletedAt: null,
     });
 
     // 5. Shipment
@@ -1161,8 +1141,8 @@ async function main() {
       action: 'BUSINESS_EXPORT_PACKAGE_INITIALIZE',
       entityType: 'Business',
       entityId: businessId,
-      oldData: null,
-      newData: { code: businessCode, name: 'BentoCat Premium Cat Litter' },
+      before: null,
+      after: { code: businessCode, name: 'BentoCat Premium Cat Litter' },
       createdAt: now,
     },
     {
@@ -1172,8 +1152,8 @@ async function main() {
       action: 'OPERATIONAL_TRANSACTIONS_RESTORED',
       entityType: 'Order',
       entityId: orders[orders.length - 1].id,
-      oldData: null,
-      newData: { count: orders.length, scope: '7 Cities Real PDF Invoices' },
+      before: null,
+      after: { count: orders.length, scope: '7 Cities Real PDF Invoices' },
       createdAt: now,
     },
     {
@@ -1183,8 +1163,8 @@ async function main() {
       action: 'USER_CREATE',
       entityType: 'User',
       entityId: bentoSalesId,
-      oldData: null,
-      newData: { username: 'bentocat', name: 'BentoCat', role: 'SALES', isActive: true },
+      before: null,
+      after: { username: 'bentocat', name: 'BentoCat', role: 'SALES', isActive: true },
       createdAt: reassignDate,
     },
     {
@@ -1194,8 +1174,8 @@ async function main() {
       action: 'USER_DEACTIVATE',
       entityType: 'User',
       entityId: diniaId,
-      oldData: { username: 'dinia', isActive: true },
-      newData: { username: 'dinia', isActive: false, reason: 'Mutasi staf / sales Dinia pindah tugas' },
+      before: { username: 'dinia', isActive: true },
+      after: { username: 'dinia', isActive: false, reason: 'Mutasi staf / sales Dinia pindah tugas' },
       createdAt: reassignDate,
     },
     ...customers.map((cust, idx) => ({
@@ -1205,11 +1185,11 @@ async function main() {
       action: 'CUSTOMER_REASSIGN',
       entityType: 'Customer',
       entityId: cust.id,
-      oldData: {
+      before: {
         assignedSalesId: diniaId,
         assignedSalesName: 'Dinia',
       },
-      newData: {
+      after: {
         assignedSalesId: bentoSalesId,
         assignedSalesName: 'BentoCat',
         reason: 'Peralihan kepemilikan dan pembinaan pelanggan dari Dinia (off) ke staf sales baru BentoCat',

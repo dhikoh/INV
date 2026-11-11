@@ -87,14 +87,27 @@ function getAppVersion(): string {
   return '1.0.0';
 }
 
+const modelScalarFields: Record<string, Set<string>> = {};
+for (const model of Prisma.dmmf.datamodel.models) {
+  modelScalarFields[model.name] = new Set(
+    model.fields.filter((f) => f.kind === 'scalar' || f.kind === 'enum').map((f) => f.name)
+  );
+}
+
 function sanitizeRowForInsert(
   rawRow: Record<string, unknown>,
   jsonCols: Set<string>,
-  nullableWithDefaultCols: Set<string>
+  nullableWithDefaultCols: Set<string>,
+  validFields?: Set<string>
 ): Record<string, unknown> {
   const result: Record<string, unknown> = {};
 
   for (const [key, value] of Object.entries(rawRow)) {
+    // Saring dan buang field yang tidak terdaftar di skema database (contoh: rev pada Business)
+    if (validFields && !validFields.has(key)) {
+      continue;
+    }
+
     if (value === null) {
       if (nullableWithDefaultCols.has(key)) {
         if (jsonCols.has(key)) {
@@ -640,8 +653,9 @@ export async function importData(
           const batchSize = 500;
           for (let b = 0; b < rows.length; b += batchSize) {
             const batch = rows.slice(b, b + batchSize);
+            const validFields = modelScalarFields[spec.model];
             const sanitizedBatch = batch.map((r) =>
-              sanitizeRowForInsert(r, jsonCols, nullableWithDefaultCols)
+              sanitizeRowForInsert(r, jsonCols, nullableWithDefaultCols, validFields)
             );
 
             await delegate.createMany({
