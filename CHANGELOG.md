@@ -8,6 +8,11 @@ dan proyek ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- **Penyediaan Halaman 404 Kustom & Global Error Boundary (NAV-010)**:
+  - Menambahkan `src/app/not-found.tsx` bertema resmi OmniCat dengan tautan navigasi aman kembali ke Dashboard untuk menangani URL yang tidak ditemukan.
+  - Menambahkan `src/app/error.tsx` sebagai React Error Boundary tingkat aplikasi dengan tombol muat ulang (`reset()`) dan tautan kembali ke Dashboard saat terjadi kendala runtime.
+  - Menambahkan suite pengujian unit di `tests/unit/error-pages.test.ts` (2/2 passed).
+
 - **Integrasi Antarmuka Penyelesaian Tabrakan Calon Pelanggan (NAV-004)**:
   - Mengintegrasikan alur bisnis backend `POST /api/v1/customers/:id/verify` ke antarmuka pengguna pada `src/app/(app)/customers/[id]/page.tsx`.
   - Menampilkan banner peringatan tindakan prioritas dan 3 tombol penyelesaian resmi (Setujui Sebagai Cabang Resmi, Alihkan ke Sales Pembina, dan Tolak & Hapus Duplikat) saat calon toko ditandai tag `PENDING_VERIFIKASI_ADMIN`.
