@@ -53,6 +53,11 @@ Pemilik bisnis OmniCat memerlukan kemampuan memindahkan satu unit usaha atau sel
    - Penanganan error pada rute `POST /api/v1/data-transfer/import` dibungkus secara terstruktur (*graceful error handling*) sehingga kegagalan validasi mengembalikan kode status 422 dengan pesan rincian yang ramah di antarmuka alih-alih crash 500.
    - Komponen UI `DataTransferCard` ditampilkan secara permanen pada kondisi database kosong (*Empty State*) di `/settings/business` agar Super Admin dapat langsung memulihkan unit usaha dari berkas ZIP portabel pada instalasi baru tanpa perlu membuat unit usaha manual terlebih dahulu.
 
+10. **Sanitasi Dinamis Kolom Skema (*Schema Drift & Unknown Fields Stripping*)**:
+   - Engine impor membaca metadata seluruh kolom skalar dan enum yang sah langsung dari Prisma DMMF (`Prisma.dmmf.datamodel.models`).
+   - Fungsi `sanitizeRowForInsert` secara proaktif menyaring dan membuang (*strip*) setiap properti/kolom yang tidak terdaftar pada skema model database target sebelum mengeksekusi `createMany()`.
+   - Hal ini mencegah terjadinya *runtime rollback* yang disebabkan oleh perbedaan minor versi skema (*schema drift*) atau keberadaan properti asing (seperti field `rev`, metadata internal, atau format legacy) di dalam berkas impor.
+
 ## Keterbatasan & Batas Desain
 - Pengolahan arsip ZIP dilakukan di memori (in-memory buffer). Konfigurasi `TRANSFER_MAX_MB=200` menetapkan batas maksimal ukuran berkas ZIP demi menjaga stabilitas server.
 - Server memerlukan konektivitas egress port 443 ke internet untuk fitur pengambilan gambar dari URL. Jika lingkungan produksi berada di jaringan terisolasi (air-gapped), pengguna tetap dapat mengunggah berkas gambar secara manual via form berkas lokal biasa.

@@ -25,6 +25,8 @@ dan proyek ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   - Penayangan kartu `DataTransferCard` pada status database kosong (*Empty State*) di `/settings/business` agar Super Admin dapat langsung memulihkan unit usaha pada instalasi baru.
   - Kepatuhan isolasi tenant Prisma (`TENANT_MODELS`) pada seluruh query pengecekan tabrakan ID dan verifikasi counter dokumen di `src/lib/transfer/import.ts`.
   - Penanganan error aman (*graceful error handling*) pada `POST /api/v1/data-transfer/import` yang mengembalikan kode 422 dengan pesan rincian terstruktur di UI alih-alih crash 500.
+  - Sanitasi dinamis kolom skema (*schema drift guard*) berbasis Prisma DMMF: otomatis menyaring dan membuang (*strip*) field/properti asing sebelum `createMany`.
+  - Penyelarasan generator transfer data BentoCat (`scripts/generate-bentocat-export.ts`) bebas dari field non-skema (`rev` di `Business`, `email` di `Customer`, dll.) dengan hasil validasi 100% lulus pada 35 model tabel.
 
 - **Fitur Ekspor & Impor Data Portabel (ADR 0008)**:
   - Modul serialisasi lossless BigInt & Date (`src/lib/transfer/serialize.ts`).

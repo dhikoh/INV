@@ -473,6 +473,7 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
   - Serialisasi lossless `BigInt` dan `Date` (`toJsonLine`).
   - Proteksi Zip-Bomb (rasio maksimal 5x `TRANSFER_MAX_MB`) dan Zip-Slip.
   - Kepatuhan isolasi tenant Prisma (`TENANT_MODELS`) pada seluruh query pengecekan tabrakan ID dan verifikasi counter dokumen.
+  - Sanitasi dinamis kolom skema (*schema drift guard*) berbasis Prisma DMMF: otomatis menyaring dan membuang property/field asing sebelum eksekusi `createMany`.
   - Verifikasi keutuhan nomor counter urutan dokumen (`DocumentCounter`).
   - Staging uploads atomik sebelum pemindahan berkas akhir.
 
