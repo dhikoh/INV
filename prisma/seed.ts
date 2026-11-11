@@ -325,14 +325,14 @@ export async function seedBentoCatData(superAdmin: { id: string }) {
       name: 'Pasir Zeolite No 1 (Halus)',
       description: 'Pasir kucing zeolite butiran halus No. 1 kemasan 18 kg/sak.',
       unit: 'sak',
-      costPrice: BigInt(9500), // Modal dari user
-      basePrice: BigInt(20500),
-      minPrice: BigInt(18000),
+      costPrice: BigInt(9500), // Modal HPP Rp 9.500 sama persis seperti Zeo 2 & 3
+      basePrice: BigInt(11000), // Harga jual Rp 11.000 sama persis seperti Zeo 2 & 3
+      minPrice: BigInt(10000),  // Batas minimal Rp 10.000 sama persis seperti Zeo 2 & 3
       stockQty: 500,
       categoryId: catZeo.id,
       defaultVendorId: vendorMojo.id,
       oldCostPrice: BigInt(8500),
-      oldBasePrice: BigInt(18500),
+      oldBasePrice: BigInt(10000),
     },
     {
       sku: 'ZEO-02',
@@ -453,14 +453,14 @@ export async function seedBentoCatData(superAdmin: { id: string }) {
 
   logger.info('Master Produk BentoCat & Zeolite beserta PriceHistory berhasil di-seed.');
 
-  // 7. Master Pelanggan (Petshop) Lintas Wilayah
+  // 7. Master Pelanggan (Petshop) Lintas Wilayah Terverifikasi
   const customersData = [
     {
       code: 'VETMA-BLT',
-      name: 'Drh Nela Dwi (Vetma Petshop)',
+      name: 'Drh. Nela Dwi (Vetma Pet and Poultry Shop)',
       contactName: 'Drh. Nela Dwi',
-      address: 'Jl. Cemara perum cemara No.ruko 1, Tlumpu, Kec. Sukorejo, Kota Blitar',
-      phone: '081234567801',
+      address: 'Perum Cemara Green View No. Ruko 1, Jl. Cemara, Kel. Tlumpu, Kec. Sukorejo, Kota Blitar, Jawa Timur 66124',
+      phone: '085695188823',
       specialPrices: {
         'BC-25L': BigInt(72000),
         'BC-10L': BigInt(36000),
@@ -492,14 +492,16 @@ export async function seedBentoCatData(superAdmin: { id: string }) {
     {
       code: 'CHERRY-CLP',
       name: 'Cherry Petshop',
-      contactName: 'Ibu Cherry',
-      address: 'Jl. Mangga No. 27 RT 01 RW 07, Desa Adipala, Kec. Adipala, Kab. Cilacap Jateng',
-      phone: '081234567803',
+      contactName: 'Cherry Petshop (Adipala)',
+      address: 'Jl. Mangga No. 27 RT 01 RW 07, Desa Adipala, Kec. Adipala, Kab. Cilacap, Jawa Tengah',
+      phone: '081393191233',
       specialPrices: {
         'BC-25L': BigInt(73500),
         'BC-10L': BigInt(37000),
         'BC-5.5L': BigInt(21000),
+        'ZEO-01': BigInt(11000),
         'ZEO-02': BigInt(11000),
+        'ZEO-03': BigInt(11000),
         'ZEO-GRANUL': BigInt(21500),
       },
       promoHistories: {
@@ -510,10 +512,10 @@ export async function seedBentoCatData(superAdmin: { id: string }) {
     },
     {
       code: 'AULIA-BJN',
-      name: 'Aulia Petshop (Bp. Hamid / drh. Aulia Insani)',
-      contactName: 'Bp. Hamid',
-      address: 'Jl. Ahmad Yani No. 2 Jambean, Sukorejo, Kec. Bojonegoro, Jawa Timur',
-      phone: '081234567804',
+      name: 'Aulia Petshop & Praktek Dokter Hewan',
+      contactName: 'Drh. Aulia Insani',
+      address: 'Jl. Ahmad Yani No. 2A, Jambean, Sukorejo, Kec. Bojonegoro, Kab. Bojonegoro, Jawa Timur',
+      phone: '082132395055',
       specialPrices: {
         'BC-25L': BigInt(75500),
         'BC-10L': BigInt(38000),
@@ -527,10 +529,10 @@ export async function seedBentoCatData(superAdmin: { id: string }) {
     },
     {
       code: 'AULIA-TBN',
-      name: 'Aulia Petshop (Tuban)',
-      contactName: 'drh. Aulia Insani',
-      address: 'Jl. Raya Tuban, Kab. Tuban, Jawa Timur',
-      phone: '081234567808',
+      name: 'Aulia Petshop Tuban',
+      contactName: 'Bp. Hamid',
+      address: 'Kabupaten Tuban, Jawa Timur',
+      phone: '082144721568',
       specialPrices: {
         'BC-25L': BigInt(75500),
         'BC-10L': BigInt(38000),
@@ -544,10 +546,10 @@ export async function seedBentoCatData(superAdmin: { id: string }) {
     },
     {
       code: 'AURA-LMG',
-      name: 'Aura Petshop (Lamongan)',
-      contactName: 'Owner Aura Petshop',
-      address: 'Jl. Lamongan Raya, Kab. Lamongan, Jawa Timur',
-      phone: '081234567807',
+      name: 'Aura Petshop Lamongan',
+      contactName: 'Owner Aura Petshop (Emak Kucing)',
+      address: 'Kabupaten Lamongan, Jawa Timur',
+      phone: '085731008500',
       specialPrices: {
         'BC-25L': BigInt(75000),
         'BC-10L': BigInt(38000),
@@ -561,10 +563,10 @@ export async function seedBentoCatData(superAdmin: { id: string }) {
     },
     {
       code: 'GUKGUK-SMG',
-      name: 'Gukguk Meong (Ny. Noni & Ny. Maria)',
+      name: 'Gukgukmeong Petshop',
       contactName: 'Ny. Noni & Ny. Maria',
-      address: 'Kampung baris 505, Karangturi, Semarang Timur, Kota Semarang',
-      phone: '081234567805',
+      address: 'Jl. Kampung Baris 505, Karangturi, Kec. Semarang Timur, Kota Semarang, Jawa Tengah',
+      phone: '081228005505',
       specialPrices: {
         'BC-25L': BigInt(76500),
         'BC-10L': BigInt(38500),
@@ -578,9 +580,9 @@ export async function seedBentoCatData(superAdmin: { id: string }) {
     },
     {
       code: 'TIMIKA-PAP',
-      name: 'Pak Anwar (Meka Petshop Timika)',
+      name: 'Pak Anwar (Meka Petshop)',
       contactName: 'Pak Anwar',
-      address: 'Jl. Cenderawasih, Timika, Papua',
+      address: 'Jl. Cenderawasih, Timika, Mimika, Papua',
       phone: '085244972449',
       specialPrices: {
         'BC-25L': BigInt(72500),

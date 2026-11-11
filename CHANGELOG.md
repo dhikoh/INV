@@ -8,6 +8,21 @@ dan proyek ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- **Penyelarasan Presisi Harga Pasir Zeolite & Master Pelanggan Berbasis Arsip Riil**:
+  - Penyelarasan produk `ZEO-01` (Pasir Zeolite No 1 - Halus) agar identik dengan `ZEO-02` dan `ZEO-03` sesuai penegasan pengguna dan arsip kalkulator riil BentoCat:
+    - HPP / Modal (`costPrice`): Rp 9.500 per sak.
+    - Harga Jual Dasar (`basePrice`): Rp 11.000 per sak (dari sebelumnya Rp 20.500).
+    - Batas Minimal Deal (`minPrice`): Rp 10.000 per sak (dari sebelumnya Rp 18.000).
+  - Pemutakhiran menyeluruh profil master pelanggan 7 wilayah operasional pada `scripts/generate-bentocat-export.ts` dan `prisma/seed.ts` agar selaras 100% (*relate*) dengan berkas fisik faktur, buku order, dan database agen resmi BentoCat:
+    - **Cilacap (`CHERRY-CLP`)**: Toko `Cherry Petshop`, PIC: `Cherry Petshop (Adipala)`, Telp: `081393191233`, Alamat: `Jl. Mangga No. 27 RT 01 RW 07, Desa Adipala, Kec. Adipala, Kab. Cilacap, Jawa Tengah`.
+    - **Semarang (`GUKGUK-SMG`)**: Toko `Gukgukmeong Petshop`, PIC: `Ny. Noni & Ny. Maria`, Telp: `081228005505`, Alamat: `Jl. Kampung Baris 505, Karangturi, Kec. Semarang Timur, Kota Semarang, Jawa Tengah`.
+    - **Bojonegoro (`AULIA-BJN`)**: Toko `Aulia Petshop & Praktek Dokter Hewan`, PIC: `Drh. Aulia Insani`, Telp: `082132395055`, Alamat: `Jl. Ahmad Yani No. 2A, Jambean, Sukorejo, Kec. Bojonegoro, Kab. Bojonegoro, Jawa Timur`.
+    - **Lamongan (`AURA-LMG`)**: Toko `Aura Petshop Lamongan`, PIC: `Owner Aura Petshop (Emak Kucing)`, Telp: `085731008500`, Alamat: `Kabupaten Lamongan, Jawa Timur`.
+    - **Tuban (`AULIA-TBN`)**: Toko `Aulia Petshop Tuban`, PIC: `Bp. Hamid`, Telp: `082144721568`, Alamat: `Kabupaten Tuban, Jawa Timur` (Jaringan Drh. Aulia Insani).
+    - **Timika Papua (`TIMIKA-PAP`)**: Toko `Pak Anwar (Meka Petshop)`, PIC: `Pak Anwar`, Telp: `085244972449`, Alamat: `Jl. Cenderawasih, Timika, Mimika, Papua`.
+    - **Blitar (`VETMA-BLT`)**: Toko `Drh. Nela Dwi (Vetma Pet and Poultry Shop)`, PIC: `Drh. Nela Dwi`, Telp: `085695188823`, Alamat: `Perum Cemara Green View No. Ruko 1, Jl. Cemara, Kel. Tlumpu, Kec. Sukorejo, Kota Blitar, Jawa Timur 66124`.
+  - Regenerasi berkas ekspor transfer data resmi: `exports/omnicat-export-business-BENTOCAT.zip` dengan snapshot faktur statis terintegrasi data pelanggan baru.
+
 - **Fitur Deteksi & Proteksi Tabrakan Calon Pelanggan 2 Pintu**:
   - Modul domain `src/lib/domain/phone.ts`: Normalisasi telepon multi-format (`+62`, `62`, `08`) dan sanitasi nama petshop (`cleanPetshopName`).
   - Layanan deteksi tabrakan `src/lib/services/customerCollision.ts`:
