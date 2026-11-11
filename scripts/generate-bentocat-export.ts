@@ -60,8 +60,11 @@ async function main() {
     },
   ];
 
-  // 3. User (Dinia - Sales)
+  // 3. Users (Dinia - Sales Historis [Nonaktif] & BentoCat - Sales Baru [Aktif])
   const diniaId = 'usr_dinia_sales_01';
+  const bentoSalesId = 'usr_bentocat_sales_02';
+  const bentoHash = await argon2.hash('bismillahbento', OWASP_ARGON2_OPTIONS);
+
   const users = [
     {
       id: diniaId,
@@ -70,9 +73,22 @@ async function main() {
       name: 'Dinia',
       role: 'SALES',
       passwordHash: diniaHash,
-      isActive: true,
+      isActive: false, // Dinia sudah off / pindah tugas
       mustChangePassword: false,
       createdAt: new Date('2023-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-10-01T08:00:00.000Z'),
+      deletedAt: null,
+    },
+    {
+      id: bentoSalesId,
+      businessId,
+      username: 'bentocat',
+      name: 'BentoCat',
+      role: 'SALES',
+      passwordHash: bentoHash,
+      isActive: true, // Staf sales baru yang aktif membina seluruh toko
+      mustChangePassword: false,
+      createdAt: new Date('2026-10-01T08:00:00.000Z'),
       updatedAt: now,
       deletedAt: null,
     },
@@ -304,9 +320,9 @@ async function main() {
       billingAddress: 'Jl. Mangga No. 27 RT 01 RW 07, Desa Adipala, Kec. Adipala, Kab. Cilacap Jateng',
       phone: '081234567803',
       email: null,
-      assignedSalesId: diniaId,
+      assignedSalesId: bentoSalesId,
       pipelineStage: 'REPEAT',
-      notes: 'Pelanggan aktif repeat order wilayah Cilacap',
+      notes: 'Pelanggan aktif repeat order wilayah Cilacap (dialihkan dari Dinia ke BentoCat)',
       createdAt: new Date('2023-01-01T00:00:00.000Z'),
       updatedAt: now,
       deletedAt: null,
@@ -323,9 +339,9 @@ async function main() {
       billingAddress: 'Kampung baris 505, Karangturi, Semarang Timur, Kota Semarang',
       phone: '081234567805',
       email: null,
-      assignedSalesId: diniaId,
+      assignedSalesId: bentoSalesId,
       pipelineStage: 'REPEAT',
-      notes: 'Pelanggan aktif repeat order wilayah Semarang',
+      notes: 'Pelanggan aktif repeat order wilayah Semarang (dialihkan dari Dinia ke BentoCat)',
       createdAt: new Date('2023-01-01T00:00:00.000Z'),
       updatedAt: now,
       deletedAt: null,
@@ -342,9 +358,9 @@ async function main() {
       billingAddress: 'Jl Ahmad Yani, No.2 Jambean, Sukorejo, Kec. Bojonegoro',
       phone: '081234567804',
       email: null,
-      assignedSalesId: diniaId,
+      assignedSalesId: bentoSalesId,
       pipelineStage: 'REPEAT',
-      notes: 'Pelanggan aktif repeat order wilayah Bojonegoro',
+      notes: 'Pelanggan aktif repeat order wilayah Bojonegoro (dialihkan dari Dinia ke BentoCat)',
       createdAt: new Date('2023-01-01T00:00:00.000Z'),
       updatedAt: now,
       deletedAt: null,
@@ -361,9 +377,9 @@ async function main() {
       billingAddress: 'Jl. Lamongan Raya, Kab. Lamongan, Jawa Timur',
       phone: '081234567807',
       email: null,
-      assignedSalesId: diniaId,
+      assignedSalesId: bentoSalesId,
       pipelineStage: 'REPEAT',
-      notes: 'Pelanggan aktif repeat order wilayah Lamongan',
+      notes: 'Pelanggan aktif repeat order wilayah Lamongan (dialihkan dari Dinia ke BentoCat)',
       createdAt: new Date('2023-01-01T00:00:00.000Z'),
       updatedAt: now,
       deletedAt: null,
@@ -380,9 +396,9 @@ async function main() {
       billingAddress: 'Jl. Raya Tuban, Kab. Tuban, Jawa Timur',
       phone: '081234567808',
       email: null,
-      assignedSalesId: diniaId,
+      assignedSalesId: bentoSalesId,
       pipelineStage: 'REPEAT',
-      notes: 'Pelanggan aktif repeat order wilayah Tuban',
+      notes: 'Pelanggan aktif repeat order wilayah Tuban (dialihkan dari Dinia ke BentoCat)',
       createdAt: new Date('2023-01-01T00:00:00.000Z'),
       updatedAt: now,
       deletedAt: null,
@@ -399,9 +415,9 @@ async function main() {
       billingAddress: 'Jl. Cenderawasih, Timika, Papua',
       phone: '085244972449',
       email: null,
-      assignedSalesId: diniaId,
+      assignedSalesId: bentoSalesId,
       pipelineStage: 'REPEAT',
-      notes: 'Pelanggan aktif repeat order wilayah Timika, Papua',
+      notes: 'Pelanggan aktif repeat order wilayah Timika, Papua (dialihkan dari Dinia ke BentoCat)',
       createdAt: new Date('2023-01-01T00:00:00.000Z'),
       updatedAt: now,
       deletedAt: null,
@@ -418,9 +434,9 @@ async function main() {
       billingAddress: 'Jl. Cemara perum cemara No.ruko 1, Tlumpu, Kec. Sukorejo, Kota Blitar',
       phone: '081234567801',
       email: null,
-      assignedSalesId: diniaId,
+      assignedSalesId: bentoSalesId,
       pipelineStage: 'REPEAT',
-      notes: 'Pelanggan aktif repeat order wilayah Kota Blitar',
+      notes: 'Pelanggan aktif repeat order wilayah Kota Blitar (dialihkan dari Dinia ke BentoCat)',
       createdAt: new Date('2023-01-01T00:00:00.000Z'),
       updatedAt: now,
       deletedAt: null,
@@ -1122,7 +1138,7 @@ async function main() {
       businessId,
       customerId: cust.id,
       productId: null,
-      salesId: diniaId,
+      salesId: bentoSalesId,
       intervalDays: cust.intervalDays,
       lastOrderDate: lastDate,
       nextDueDate: nextDue,
@@ -1135,12 +1151,13 @@ async function main() {
     });
   }
 
-  // 14. Audit Log
+  // 14. Audit Log (Peralihan Sales dari Dinia ke BentoCat & Sejarah Mutasi)
+  const reassignDate = new Date('2026-10-01T08:00:00.000Z');
   const auditLogs = [
     {
       id: 'aud_init_01',
       businessId,
-      actorId: diniaId,
+      actorId: bentoSalesId,
       action: 'BUSINESS_EXPORT_PACKAGE_INITIALIZE',
       entityType: 'Business',
       entityId: businessId,
@@ -1159,6 +1176,46 @@ async function main() {
       newData: { count: orders.length, scope: '7 Cities Real PDF Invoices' },
       createdAt: now,
     },
+    {
+      id: 'aud_user_01',
+      businessId,
+      actorId: bentoSalesId,
+      action: 'USER_CREATE',
+      entityType: 'User',
+      entityId: bentoSalesId,
+      oldData: null,
+      newData: { username: 'bentocat', name: 'BentoCat', role: 'SALES', isActive: true },
+      createdAt: reassignDate,
+    },
+    {
+      id: 'aud_user_02',
+      businessId,
+      actorId: bentoSalesId,
+      action: 'USER_DEACTIVATE',
+      entityType: 'User',
+      entityId: diniaId,
+      oldData: { username: 'dinia', isActive: true },
+      newData: { username: 'dinia', isActive: false, reason: 'Mutasi staf / sales Dinia pindah tugas' },
+      createdAt: reassignDate,
+    },
+    ...customers.map((cust, idx) => ({
+      id: `aud_reassign_${String(idx + 1).padStart(2, '0')}`,
+      businessId,
+      actorId: bentoSalesId,
+      action: 'CUSTOMER_REASSIGN',
+      entityType: 'Customer',
+      entityId: cust.id,
+      oldData: {
+        assignedSalesId: diniaId,
+        assignedSalesName: 'Dinia',
+      },
+      newData: {
+        assignedSalesId: bentoSalesId,
+        assignedSalesName: 'BentoCat',
+        reason: 'Peralihan kepemilikan dan pembinaan pelanggan dari Dinia (off) ke staf sales baru BentoCat',
+      },
+      createdAt: reassignDate,
+    })),
   ];
 
   // 15. Kumpulkan Semua Tabel ke Dictionary Data
@@ -1230,7 +1287,7 @@ async function main() {
     appVersion: '1.0.0',
     lastMigration: '20261110000003_catalog_same_business_guard',
     exportedAt: now.toISOString(),
-    exportedBy: 'dinia',
+    exportedBy: 'bentocat',
     scope: 'business',
     businessIds: [businessId],
     businessCodes: [businessCode],

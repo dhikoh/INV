@@ -128,7 +128,7 @@ export async function seedBentoCatData(superAdmin: { id: string }) {
     logger.info('Rekening BCA 0901422817 a.n. DHIKO HERLAMBANG berhasil ditambahkan.');
   }
 
-  // 3. Akun Sales Dinia
+  // 3. Akun Sales Dinia (Historis, Nonaktif) & BentoCat (Sales Baru Aktif)
   const diniaUsername = 'dinia';
   const diniaPassword = 'bismillahbento';
   const diniaHash = await hashPassword(diniaPassword, diniaUsername);
@@ -145,22 +145,57 @@ export async function seedBentoCatData(superAdmin: { id: string }) {
         passwordHash: diniaHash,
         role: Role.SALES,
         businessId: business.id,
-        isActive: true,
+        isActive: false, // Dinia sudah pindah/off
         mustChangePassword: false,
       },
     });
-    logger.info('Akun sales Dinia berhasil dibuat (password: bismillahbento).');
+    logger.info('Akun sales historis Dinia berhasil dibuat (status nonaktif).');
   } else {
     dinia = await prisma.user.update({
       where: { id: dinia.id },
       data: {
         passwordHash: diniaHash,
         businessId: business.id,
+        isActive: false, // Dinia nonaktif
+        mustChangePassword: false,
+      },
+    });
+    logger.info('Akun sales Dinia diperbarui menjadi nonaktif (historis).');
+  }
+
+  const bentoUsername = 'bentocat';
+  const bentoPassword = 'bismillahbento';
+  const bentoHash = await hashPassword(bentoPassword, bentoUsername);
+
+  let bentocat = await prisma.user.findFirst({
+    where: { username: bentoUsername, deletedAt: null },
+  });
+
+  if (!bentocat) {
+    bentocat = await prisma.user.create({
+      data: {
+        username: bentoUsername,
+        name: 'BentoCat',
+        passwordHash: bentoHash,
+        role: Role.SALES,
+        businessId: business.id,
         isActive: true,
         mustChangePassword: false,
       },
     });
-    logger.info('Akun sales Dinia diperbarui.');
+    logger.info('Akun sales BentoCat berhasil dibuat dan aktif.');
+  } else {
+    bentocat = await prisma.user.update({
+      where: { id: bentocat.id },
+      data: {
+        name: 'BentoCat',
+        passwordHash: bentoHash,
+        businessId: business.id,
+        isActive: true,
+        mustChangePassword: false,
+      },
+    });
+    logger.info('Akun sales BentoCat diperbarui (aktif).');
   }
 
   // 4. Kategori Produk
@@ -579,16 +614,16 @@ export async function seedBentoCatData(superAdmin: { id: string }) {
         shippingAddress: c.address,
         billingAddress: c.address,
         phone: c.phone,
-        assignedSalesId: dinia.id,
+        assignedSalesId: bentocat.id,
         pipelineStage: PipelineStage.REPEAT,
-        notes: `Pelanggan aktif repeat order wilayah ${c.name}`,
+        notes: `Pelanggan aktif repeat order wilayah ${c.name} (dialihkan ke sales BentoCat)`,
       },
       update: {
         name: c.name,
         contactName: c.contactName,
         address: c.address,
         phone: c.phone,
-        assignedSalesId: dinia.id,
+        assignedSalesId: bentocat.id,
         pipelineStage: PipelineStage.REPEAT,
       },
     });
@@ -1289,13 +1324,21 @@ export async function seedBentoCatData(superAdmin: { id: string }) {
           data: {
             businessId: business.id,
             customerId: cust.id,
-            salesId: dinia.id,
+            salesId: bentocat.id,
             intervalDays: intDays,
             lastOrderDate: lastDate,
             nextDueDate: nextDue,
             status: 'ACTIVE',
             source: 'AUTO',
             note: `Pengingat siklus repeat order berkala (${intDays} hari) pelanggan ${cust.name}`,
+          },
+        });
+      } else {
+        await prisma.reminder.update({
+          where: { id: existingReminder.id },
+          data: {
+            salesId: bentocat.id,
+            intervalDays: intDays,
           },
         });
       }
