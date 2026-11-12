@@ -16,6 +16,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/States';
+import { formatDateId } from '@/lib/format/date';
 
 interface CustomerSummary {
   id: string;
@@ -306,7 +307,7 @@ export default function CatalogsPage() {
 
                 <div className="text-[11px] text-slate-400 flex items-center justify-between pt-1 border-t border-slate-100">
                   <span>Dibuat oleh: {catalog.ownerName}</span>
-                  <span>{new Date(catalog.updatedAt).toLocaleDateString('id-ID')}</span>
+                  <span>{formatDateId(catalog.updatedAt, 'compact')}</span>
                 </div>
               </div>
 

@@ -36,6 +36,7 @@ import { Skeleton, ErrorState } from '@/components/ui/States';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { ConfirmTypeDialog } from '@/components/ui/ConfirmTypeDialog';
 import { formatRupiah, formatPercentFromBps } from '@/lib/domain/money';
+import { formatDateId } from '@/lib/format/date';
 
 interface OrderItemDto {
   id: string;
@@ -1629,12 +1630,7 @@ export default function OrderDetailPage() {
   const items = order.items || [];
   const confirmTarget = order.orderNo ?? order.id;
 
-  const formattedDate = new Date(order.orderDate).toLocaleDateString('id-ID', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  });
+  const formattedDate = formatDateId(order.orderDate, 'full');
 
   return (
     <div className="w-full max-w-7xl mx-auto px-4 py-6 md:py-8 space-y-6">
@@ -2305,11 +2301,7 @@ export default function OrderDetailPage() {
             ) : (
               <div className="divide-y divide-slate-100">
                 {payments.map((p) => {
-                  const payDateFormatted = new Date(p.paidAt).toLocaleDateString('id-ID', {
-                    day: 'numeric',
-                    month: 'short',
-                    year: 'numeric',
-                  });
+                  const payDateFormatted = formatDateId(p.paidAt);
 
                   return (
                     <div
@@ -2768,7 +2760,7 @@ export default function OrderDetailPage() {
                         </span>
                         {inv.dueDate && (
                           <span>
-                            Jatuh Tempo: {new Date(inv.dueDate).toLocaleDateString('id-ID')}
+                            Jatuh Tempo: {formatDateId(inv.dueDate, 'compact')}
                           </span>
                         )}
                       </div>
@@ -2911,13 +2903,7 @@ export default function OrderDetailPage() {
                           </div>
                           <p className="text-xs text-slate-500 mt-0.5">
                             Diterbitkan pada{' '}
-                            {new Date(cn.createdAt).toLocaleDateString('id-ID', {
-                              day: 'numeric',
-                              month: 'short',
-                              year: 'numeric',
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            })}
+                            {formatDateId(cn.createdAt, 'dateTime')}
                           </p>
                         </div>
 
@@ -2971,7 +2957,7 @@ export default function OrderDetailPage() {
                         </div>
                         {isVoided && (
                           <div className="text-rose-600 italic">
-                            Dibatalkan pada {new Date(cn.voidedAt!).toLocaleDateString('id-ID')}
+                            Dibatalkan pada {formatDateId(cn.voidedAt!, 'compact')}
                           </div>
                         )}
                       </div>
@@ -3293,7 +3279,7 @@ export default function OrderDetailPage() {
                           <div>
                             <span className="font-medium text-slate-800 block">{c.label}</span>
                             <span className="text-[10px] text-slate-400">
-                              {new Date(c.createdAt).toLocaleDateString('id-ID')}
+                              {formatDateId(c.createdAt, 'compact')}
                             </span>
                           </div>
                           <div className="flex items-center gap-2">
@@ -3382,7 +3368,7 @@ export default function OrderDetailPage() {
 
                       {comm.status === 'PAID' && comm.paidAt && (
                         <div className="text-[10px] text-slate-500 pt-1">
-                          Dibayar pada {new Date(comm.paidAt).toLocaleDateString('id-ID')}
+                          Dibayar pada {formatDateId(comm.paidAt, 'compact')}
                           {comm.note ? ` (${comm.note})` : ''}
                         </div>
                       )}

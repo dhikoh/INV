@@ -44,7 +44,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       summary: `Ekspor data seluruh sistem (${result.manifest.businessCodes.length} usaha): ${totalRows} baris, ${(result.data.length / 1024).toFixed(1)} KB (upload: ${!tanpaBerkas ? 'ya' : 'tidak'})`,
     });
 
-    return new NextResponse(Buffer.from(result.data), {
+    return new NextResponse(new Uint8Array(Buffer.from(result.data)), {
       status: 200,
       headers: {
         'Content-Type': 'application/zip',

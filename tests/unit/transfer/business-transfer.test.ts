@@ -17,9 +17,9 @@ describe('Unit Transfer: API Impor Mode Usaha & RBAC (Bagian 10 Butir F)', () =>
     vi.restoreAllMocks();
     vi.spyOn(prisma, '$queryRaw').mockResolvedValue([
       { migration_name: dummyMigration },
-    ] as any);
+    ] as never);
     if (!prisma.shipment) {
-      (prisma as any).shipment = {};
+      (prisma as unknown as { shipment: Record<string, unknown> }).shipment = {};
     }
     prisma.shipment.findFirst = vi.fn().mockResolvedValue(null);
   });
@@ -78,11 +78,11 @@ describe('Unit Transfer: API Impor Mode Usaha & RBAC (Bagian 10 Butir F)', () =>
   });
 
   it('menolak impor melalui API jika berkas ZIP adalah scope system (mengarahkan ke CLI)', async () => {
-    const superAdminCtx: any = {
+    const superAdminCtx = {
       user: { id: 'admin_1', role: Role.SUPERADMIN, name: 'Super Admin', businessId: null },
       role: Role.SUPERADMIN,
       session: { id: 'sess_1', activeBusinessId: null },
-    };
+    } as unknown as contextModule.Ctx;
 
     vi.spyOn(contextModule, 'requireContext').mockResolvedValue(superAdminCtx);
 
@@ -158,7 +158,7 @@ describe('Unit Transfer: API Impor Mode Usaha & RBAC (Bagian 10 Butir F)', () =>
     vi.spyOn(prisma.shipment, 'findFirst').mockResolvedValue({
       id: 'shp_other',
       businessId: 'biz_other',
-    } as any);
+    } as never);
 
     const report = await importData(zip, {
       dryRun: true,
@@ -264,7 +264,7 @@ describe('Unit Transfer: API Impor Mode Usaha & RBAC (Bagian 10 Butir F)', () =>
       id: 'biz_01',
       code: 'TRB',
       name: 'Toko Terobos',
-    } as any);
+    } as never);
 
     const report = await importData(zip, {
       dryRun: true,
@@ -316,12 +316,14 @@ describe('Unit Transfer: API Impor Mode Usaha & RBAC (Bagian 10 Butir F)', () =>
       id: 'biz_01',
       code: 'TRB',
       name: 'Toko Terobos',
-    } as any);
+    } as never);
 
     // Mock query dan transaction untuk dry-run execution
     vi.spyOn(prisma.user, 'findMany').mockResolvedValue([]);
-    vi.spyOn(prisma, '$transaction').mockImplementation(async (cb: any) => {
-      const mockTx: any = {
+    vi.spyOn(prisma, '$transaction').mockImplementation((async (
+      cb: (tx: Record<string, unknown>) => Promise<unknown>
+    ) => {
+      const mockTx: Record<string, unknown> = {
         $executeRaw: vi.fn().mockResolvedValue(1),
         user: { findMany: vi.fn().mockResolvedValue([]), deleteMany: vi.fn() },
         session: { deleteMany: vi.fn() },
@@ -336,7 +338,7 @@ describe('Unit Transfer: API Impor Mode Usaha & RBAC (Bagian 10 Butir F)', () =>
         },
       };
       return await cb(mockTx);
-    });
+    }) as never);
 
     const report = await importData(zip, {
       dryRun: true,

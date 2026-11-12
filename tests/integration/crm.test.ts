@@ -2,7 +2,6 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { GET as getTimelineHandler } from '@/app/api/v1/customers/[id]/timeline/route';
 import {
-  GET as getInteractionsHandler,
   POST as createInteractionHandler,
 } from '@/app/api/v1/customers/[id]/interactions/route';
 import {
@@ -347,6 +346,7 @@ describe('T2.2: CRM Integration Tests', () => {
     businessId: businessA,
     ip: '127.0.0.1',
   };
+  void superAdminCtx;
 
   const sales1Ctx: contextModule.Ctx = {
     user: userSales1,

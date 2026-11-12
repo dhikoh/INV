@@ -16,6 +16,7 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import { AgingBucket } from '@/lib/domain/receivable';
+import { formatDateId } from '@/lib/format/date';
 
 interface CustomerInfo {
   id: string;
@@ -446,7 +447,7 @@ export default function ReceivablesPage() {
                         Jatuh Tempo:{' '}
                         <strong>
                           {item.dueDate
-                            ? new Date(item.dueDate).toLocaleDateString('id-ID')
+                            ? formatDateId(item.dueDate, 'compact')
                             : '-'}
                         </strong>
                       </div>

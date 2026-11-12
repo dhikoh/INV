@@ -17,6 +17,7 @@ import { Skeleton, EmptyState, ErrorState } from '@/components/ui/States';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { SortableHeader } from '@/components/ui/SortableHeader';
 import { formatRupiah } from '@/lib/domain/money';
+import { formatDateId } from '@/lib/format/date';
 
 interface InvoiceListItem {
   id: string;
@@ -356,11 +357,7 @@ export default function InvoicesPage() {
                         </td>
                         <td className="p-3 text-slate-600">
                           {inv.dueDate ? (
-                            new Date(inv.dueDate).toLocaleDateString('id-ID', {
-                              day: 'numeric',
-                              month: 'short',
-                              year: 'numeric',
-                            })
+                            formatDateId(inv.dueDate)
                           ) : (
                             <span className="text-slate-400">-</span>
                           )}
@@ -450,11 +447,7 @@ export default function InvoicesPage() {
                       <div className="flex justify-between">
                         <span className="text-slate-500">Jatuh Tempo:</span>
                         <span className="text-slate-700 font-mono">
-                          {new Date(inv.dueDate).toLocaleDateString('id-ID', {
-                            day: 'numeric',
-                            month: 'short',
-                            year: 'numeric',
-                          })}
+                          {formatDateId(inv.dueDate)}
                         </span>
                       </div>
                     )}

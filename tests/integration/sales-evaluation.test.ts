@@ -6,11 +6,9 @@ import {
   CommissionMode,
   CommissionStatus,
   PipelineStage,
-  ReminderStatus,
   DiscountSource,
 } from '@prisma/client';
 import * as contextModule from '@/lib/auth/context';
-import { assertNoSecretKeys } from '../helpers/leak';
 import { DomainError } from '@/lib/domain/money';
 
 // Handlers
@@ -104,23 +102,62 @@ interface MockCommissionEntry {
   note: string | null;
 }
 
+interface MockAuditLog {
+  [key: string]: unknown;
+}
+
+interface MockCustomerTask {
+  businessId: string;
+  assignedToId: string;
+  [key: string]: unknown;
+}
+
+interface MockCustomerInteraction {
+  businessId: string;
+  salesId: string;
+  [key: string]: unknown;
+}
+
+interface MockReminder {
+  businessId: string;
+  userId?: string;
+  status?: string;
+  [key: string]: unknown;
+}
+
+interface SalesEvalWhereFilter {
+  id?: string | { in?: string[] };
+  businessId?: string;
+  role?: Role;
+  deletedAt?: null | Date;
+  salesId?: string | { in?: string[] };
+  month?: string;
+  assignedSalesId?: string | { in?: string[] };
+  createdAt?: { gte?: Date; lte?: Date };
+  orderId?: string;
+  status?: CommissionStatus | string;
+  earnedAt?: { gte?: Date; lte?: Date };
+  assignedToId?: string | { in?: string[] };
+  userId?: string;
+}
+
 let mockUsers: MockUser[] = [];
 let mockSalesTargets: MockSalesTarget[] = [];
 let mockOwnerSalesNotes: MockOwnerSalesNote[] = [];
 let mockCustomers: MockCustomer[] = [];
 let mockOrders: MockOrder[] = [];
 let mockCommissionEntries: MockCommissionEntry[] = [];
-let mockAuditLogs: any[] = [];
-let mockCustomerTasks: any[] = [];
-let mockCustomerInteractions: any[] = [];
-let mockReminders: any[] = [];
+let mockAuditLogs: MockAuditLog[] = [];
+let mockCustomerTasks: MockCustomerTask[] = [];
+let mockCustomerInteractions: MockCustomerInteraction[] = [];
+let mockReminders: MockReminder[] = [];
 
 let idCounter = 1;
 
 vi.mock('@/lib/db', () => {
   const mockPrisma = {
     user: {
-      findFirst: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findFirst: vi.fn(async ({ where }: { where: SalesEvalWhereFilter }) => {
         return (
           mockUsers.find((u) => {
             if (where.id && u.id !== where.id) return false;
@@ -131,10 +168,10 @@ vi.mock('@/lib/db', () => {
           }) || null
         );
       }),
-      findUnique: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findUnique: vi.fn(async ({ where }: { where: SalesEvalWhereFilter }) => {
         return mockUsers.find((u) => u.id === where.id) || null;
       }),
-      findMany: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findMany: vi.fn(async ({ where }: { where: SalesEvalWhereFilter }) => {
         return mockUsers.filter((u) => {
           if (where.businessId && u.businessId !== where.businessId) return false;
           if (where.role && u.role !== where.role) return false;
@@ -145,7 +182,7 @@ vi.mock('@/lib/db', () => {
       }),
     },
     salesTarget: {
-      findFirst: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findFirst: vi.fn(async ({ where }: { where: SalesEvalWhereFilter }) => {
         return (
           mockSalesTargets.find((t) => {
             if (where.id && t.id !== where.id) return false;
@@ -156,43 +193,64 @@ vi.mock('@/lib/db', () => {
           }) || null
         );
       }),
-      findMany: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findMany: vi.fn(async ({ where }: { where: SalesEvalWhereFilter }) => {
         return mockSalesTargets.filter((t) => {
           if (where.businessId && t.businessId !== where.businessId) return false;
           if (where.month && t.month !== where.month) return false;
-          if (where.salesId?.in && !where.salesId.in.includes(t.salesId)) return false;
+          if (where.salesId && typeof where.salesId === 'object' && where.salesId.in && !where.salesId.in.includes(t.salesId))
+            return false;
           return true;
         });
       }),
-      create: vi.fn(async ({ data }: { data: any }) => {
-        const item: MockSalesTarget = {
-          id: `tgt_${idCounter++}`,
-          businessId: data.businessId,
-          salesId: data.salesId,
-          month: data.month,
-          targetRevenue: BigInt(data.targetRevenue),
-          targetProfit: BigInt(data.targetProfit),
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        };
-        mockSalesTargets.push(item);
-        return item;
-      }),
-      updateMany: vi.fn(async ({ where, data }: { where: any; data: any }) => {
-        let count = 0;
-        for (const t of mockSalesTargets) {
-          if (where.id && t.id !== where.id) continue;
-          if (where.businessId && t.businessId !== where.businessId) continue;
-          if (data.targetRevenue !== undefined) t.targetRevenue = BigInt(data.targetRevenue);
-          if (data.targetProfit !== undefined) t.targetProfit = BigInt(data.targetProfit);
-          t.updatedAt = new Date();
-          count++;
+      create: vi.fn(
+        async ({
+          data,
+        }: {
+          data: {
+            businessId: string;
+            salesId: string;
+            month: string;
+            targetRevenue: bigint | number;
+            targetProfit: bigint | number;
+          };
+        }) => {
+          const item: MockSalesTarget = {
+            id: `tgt_${idCounter++}`,
+            businessId: data.businessId,
+            salesId: data.salesId,
+            month: data.month,
+            targetRevenue: BigInt(data.targetRevenue),
+            targetProfit: BigInt(data.targetProfit),
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          };
+          mockSalesTargets.push(item);
+          return item;
         }
-        return { count };
-      }),
+      ),
+      updateMany: vi.fn(
+        async ({
+          where,
+          data,
+        }: {
+          where: SalesEvalWhereFilter;
+          data: { targetRevenue?: bigint | number; targetProfit?: bigint | number };
+        }) => {
+          let count = 0;
+          for (const t of mockSalesTargets) {
+            if (where.id && t.id !== where.id) continue;
+            if (where.businessId && t.businessId !== where.businessId) continue;
+            if (data.targetRevenue !== undefined) t.targetRevenue = BigInt(data.targetRevenue);
+            if (data.targetProfit !== undefined) t.targetProfit = BigInt(data.targetProfit);
+            t.updatedAt = new Date();
+            count++;
+          }
+          return { count };
+        }
+      ),
     },
     ownerSalesNote: {
-      findMany: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findMany: vi.fn(async ({ where }: { where: SalesEvalWhereFilter }) => {
         return mockOwnerSalesNotes
           .filter((n) => {
             if (where.businessId && n.businessId !== where.businessId) return false;
@@ -201,33 +259,46 @@ vi.mock('@/lib/db', () => {
           })
           .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
       }),
-      create: vi.fn(async ({ data }: { data: any }) => {
-        const item: MockOwnerSalesNote = {
-          id: `note_${idCounter++}`,
-          businessId: data.businessId,
-          salesId: data.salesId,
-          authorId: data.authorId,
-          note: data.note,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        };
-        mockOwnerSalesNotes.push(item);
-        return item;
-      }),
+      create: vi.fn(
+        async ({
+          data,
+        }: {
+          data: { businessId: string; salesId: string; authorId: string; note: string };
+        }) => {
+          const item: MockOwnerSalesNote = {
+            id: `note_${idCounter++}`,
+            businessId: data.businessId,
+            salesId: data.salesId,
+            authorId: data.authorId,
+            note: data.note,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          };
+          mockOwnerSalesNotes.push(item);
+          return item;
+        }
+      ),
     },
     customer: {
-      findMany: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findMany: vi.fn(async ({ where }: { where: SalesEvalWhereFilter }) => {
         return mockCustomers.filter((c) => {
           if (where.businessId && c.businessId !== where.businessId) return false;
-          if (where.assignedSalesId?.in && (!c.assignedSalesId || !where.assignedSalesId.in.includes(c.assignedSalesId))) return false;
-          if (typeof where.assignedSalesId === 'string' && c.assignedSalesId !== where.assignedSalesId) return false;
+          if (
+            where.assignedSalesId &&
+            typeof where.assignedSalesId === 'object' &&
+            where.assignedSalesId.in &&
+            (!c.assignedSalesId || !where.assignedSalesId.in.includes(c.assignedSalesId))
+          )
+            return false;
+          if (typeof where.assignedSalesId === 'string' && c.assignedSalesId !== where.assignedSalesId)
+            return false;
           if (where.deletedAt === null && c.deletedAt !== null) return false;
           return true;
         });
       }),
     },
     order: {
-      findFirst: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findFirst: vi.fn(async ({ where }: { where: SalesEvalWhereFilter }) => {
         return (
           mockOrders.find((o) => {
             if (where.id && o.id !== where.id) return false;
@@ -236,14 +307,26 @@ vi.mock('@/lib/db', () => {
           }) || null
         );
       }),
-      findMany: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findMany: vi.fn(async ({ where }: { where: SalesEvalWhereFilter }) => {
         return mockOrders
           .filter((o) => {
             if (where.businessId && o.businessId !== where.businessId) return false;
             if (where.deletedAt === null && o.deletedAt !== null) return false;
-            if (where.salesId?.in && !where.salesId.in.includes(o.salesId)) return false;
+            if (
+              where.salesId &&
+              typeof where.salesId === 'object' &&
+              where.salesId.in &&
+              !where.salesId.in.includes(o.salesId)
+            )
+              return false;
             if (typeof where.salesId === 'string' && o.salesId !== where.salesId) return false;
-            if (where.id?.in && !where.id.in.includes(o.id)) return false;
+            if (
+              where.id &&
+              typeof where.id === 'object' &&
+              where.id.in &&
+              !where.id.in.includes(o.id)
+            )
+              return false;
             if (where.createdAt?.gte && o.createdAt < where.createdAt.gte) return false;
             if (where.createdAt?.lte && o.createdAt > where.createdAt.lte) return false;
             return true;
@@ -261,7 +344,7 @@ vi.mock('@/lib/db', () => {
       }),
     },
     orderItem: {
-      findMany: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findMany: vi.fn(async ({ where }: { where: SalesEvalWhereFilter }) => {
         const ord = mockOrders.find((o) => o.id === where.orderId);
         return ord ? ord.items : [];
       }),
@@ -277,7 +360,7 @@ vi.mock('@/lib/db', () => {
       findMany: vi.fn(async () => []),
     },
     commissionEntry: {
-      findFirst: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findFirst: vi.fn(async ({ where }: { where: SalesEvalWhereFilter }) => {
         return (
           mockCommissionEntries.find((c) => {
             if (where.id && c.id !== where.id) return false;
@@ -286,26 +369,48 @@ vi.mock('@/lib/db', () => {
           }) || null
         );
       }),
-      findMany: vi.fn(async ({ where, skip, take }: any) => {
-        const filtered = mockCommissionEntries.filter((c) => {
-          if (where?.businessId && c.businessId !== where.businessId) return false;
-          if (where?.salesId?.in && !where.salesId.in.includes(c.salesId)) return false;
-          if (typeof where?.salesId === 'string' && c.salesId !== where.salesId) return false;
-          if (where?.status && c.status !== where.status) return false;
-          if (where?.earnedAt?.gte && c.earnedAt < where.earnedAt.gte) return false;
-          if (where?.earnedAt?.lte && c.earnedAt > where.earnedAt.lte) return false;
-          return true;
-        });
+      findMany: vi.fn(
+        async ({
+          where,
+          skip,
+          take,
+        }: {
+          where?: SalesEvalWhereFilter;
+          skip?: number;
+          take?: number;
+        }) => {
+          const filtered = mockCommissionEntries.filter((c) => {
+            if (where?.businessId && c.businessId !== where.businessId) return false;
+            if (
+              where?.salesId &&
+              typeof where.salesId === 'object' &&
+              where.salesId.in &&
+              !where.salesId.in.includes(c.salesId)
+            )
+              return false;
+            if (typeof where?.salesId === 'string' && c.salesId !== where.salesId) return false;
+            if (where?.status && c.status !== where.status) return false;
+            if (where?.earnedAt?.gte && c.earnedAt < where.earnedAt.gte) return false;
+            if (where?.earnedAt?.lte && c.earnedAt > where.earnedAt.lte) return false;
+            return true;
+          });
 
-        if (skip !== undefined && take !== undefined) {
-          return filtered.slice(skip, skip + take);
+          if (skip !== undefined && take !== undefined) {
+            return filtered.slice(skip, skip + take);
+          }
+          return filtered;
         }
-        return filtered;
-      }),
-      count: vi.fn(async ({ where }: any) => {
+      ),
+      count: vi.fn(async ({ where }: { where?: SalesEvalWhereFilter }) => {
         return mockCommissionEntries.filter((c) => {
           if (where?.businessId && c.businessId !== where.businessId) return false;
-          if (where?.salesId?.in && !where.salesId.in.includes(c.salesId)) return false;
+          if (
+            where?.salesId &&
+            typeof where.salesId === 'object' &&
+            where.salesId.in &&
+            !where.salesId.in.includes(c.salesId)
+          )
+            return false;
           if (typeof where?.salesId === 'string' && c.salesId !== where.salesId) return false;
           if (where?.status && c.status !== where.status) return false;
           if (where?.earnedAt?.gte && c.earnedAt < where.earnedAt.gte) return false;
@@ -313,41 +418,62 @@ vi.mock('@/lib/db', () => {
           return true;
         }).length;
       }),
-      updateMany: vi.fn(async ({ where, data }: { where: any; data: any }) => {
-        let count = 0;
-        for (const c of mockCommissionEntries) {
-          if (where.id && c.id !== where.id) continue;
-          if (where.businessId && c.businessId !== where.businessId) continue;
-          if (data.status) c.status = data.status;
-          if (data.paidAt !== undefined) c.paidAt = data.paidAt;
-          if (data.note !== undefined) c.note = data.note;
-          count++;
+      updateMany: vi.fn(
+        async ({
+          where,
+          data,
+        }: {
+          where: SalesEvalWhereFilter;
+          data: Partial<MockCommissionEntry>;
+        }) => {
+          let count = 0;
+          for (const c of mockCommissionEntries) {
+            if (where.id && c.id !== where.id) continue;
+            if (where.businessId && c.businessId !== where.businessId) continue;
+            if (data.status) c.status = data.status;
+            if (data.paidAt !== undefined) c.paidAt = data.paidAt;
+            if (data.note !== undefined) c.note = data.note;
+            count++;
+          }
+          return { count };
         }
-        return { count };
-      }),
+      ),
     },
     crmTask: {
-      findMany: vi.fn(async ({ where }: any) => {
+      findMany: vi.fn(async ({ where }: { where?: SalesEvalWhereFilter }) => {
         return mockCustomerTasks.filter((t) => {
           if (where?.businessId && t.businessId !== where.businessId) return false;
-          if (where?.assignedToId?.in && !where.assignedToId.in.includes(t.assignedToId)) return false;
-          if (where?.assignedToId && t.assignedToId !== where.assignedToId) return false;
+          if (
+            where?.assignedToId &&
+            typeof where.assignedToId === 'object' &&
+            where.assignedToId.in &&
+            !where.assignedToId.in.includes(t.assignedToId)
+          )
+            return false;
+          if (typeof where?.assignedToId === 'string' && t.assignedToId !== where.assignedToId)
+            return false;
           return true;
         });
       }),
     },
     crmInteraction: {
-      findMany: vi.fn(async ({ where }: any) => {
+      findMany: vi.fn(async ({ where }: { where?: SalesEvalWhereFilter }) => {
         return mockCustomerInteractions.filter((i) => {
           if (where?.businessId && i.businessId !== where.businessId) return false;
-          if (where?.salesId?.in && !where.salesId.in.includes(i.salesId)) return false;
-          if (where?.salesId && i.salesId !== where.salesId) return false;
+          if (
+            where?.salesId &&
+            typeof where.salesId === 'object' &&
+            where.salesId.in &&
+            !where.salesId.in.includes(i.salesId)
+          )
+            return false;
+          if (typeof where?.salesId === 'string' && i.salesId !== where.salesId) return false;
           return true;
         });
       }),
     },
     reminder: {
-      findMany: vi.fn(async ({ where }: any) => {
+      findMany: vi.fn(async ({ where }: { where?: SalesEvalWhereFilter }) => {
         return mockReminders.filter((r) => {
           if (where?.businessId && r.businessId !== where.businessId) return false;
           if (where?.userId && r.userId !== where.userId) return false;
@@ -357,12 +483,12 @@ vi.mock('@/lib/db', () => {
       }),
     },
     auditLog: {
-      create: vi.fn(async ({ data }: any) => {
+      create: vi.fn(async ({ data }: { data: MockAuditLog }) => {
         mockAuditLogs.push(data);
         return data;
       }),
     },
-    $transaction: vi.fn(async (cb: any) => {
+    $transaction: vi.fn(async (cb: (tx: unknown) => Promise<unknown>) => {
       return cb(mockPrisma);
     }),
   };
@@ -377,33 +503,16 @@ describe('T5.3: Evaluasi Sales, SalesTarget, OwnerSalesNote, Laporan Kinerja & K
   const SALES_1_ID = 'sales_eval_01';
   const SALES_2_ID = 'sales_eval_02';
 
-  const superAdminCtx = {
+  const superAdminCtx: contextModule.Ctx = {
     user: {
       id: SUPERADMIN_ID,
       name: 'Owner Usaha',
-      username: 'owner',
       role: Role.SUPERADMIN,
       businessId: BIZ_ID,
-      mustChangePassword: false,
     },
     role: Role.SUPERADMIN,
     businessId: BIZ_ID,
     sessionId: 'sess_sa',
-    ip: '127.0.0.1',
-  };
-
-  const salesCtx = {
-    user: {
-      id: SALES_1_ID,
-      name: 'Andi Sales',
-      username: 'andi',
-      role: Role.SALES,
-      businessId: BIZ_ID,
-      mustChangePassword: false,
-    },
-    role: Role.SALES,
-    businessId: BIZ_ID,
-    sessionId: 'sess_sales',
     ip: '127.0.0.1',
   };
 
@@ -547,7 +656,7 @@ describe('T5.3: Evaluasi Sales, SalesTarget, OwnerSalesNote, Laporan Kinerja & K
 
   describe('1. SalesTarget (Target Bulanan Sales)', () => {
     it('mengatur dan memperbarui target omzet & profit bulanan (PUT)', async () => {
-      vi.spyOn(contextModule, 'requireContext').mockResolvedValue(superAdminCtx as any);
+      vi.spyOn(contextModule, 'requireContext').mockResolvedValue(superAdminCtx);
 
       const req = new NextRequest(
         `${APP_URL}/api/v1/sales/${SALES_1_ID}/targets/2026-11`,
@@ -574,7 +683,7 @@ describe('T5.3: Evaluasi Sales, SalesTarget, OwnerSalesNote, Laporan Kinerja & K
     });
 
     it('mengambil target bulanan sales yang telah disimpan (GET)', async () => {
-      vi.spyOn(contextModule, 'requireContext').mockResolvedValue(superAdminCtx as any);
+      vi.spyOn(contextModule, 'requireContext').mockResolvedValue(superAdminCtx);
 
       mockSalesTargets.push({
         id: 'tgt_existing',
@@ -607,7 +716,7 @@ describe('T5.3: Evaluasi Sales, SalesTarget, OwnerSalesNote, Laporan Kinerja & K
     });
 
     it('menolak format bulan yang tidak valid (400 Bad Request)', async () => {
-      vi.spyOn(contextModule, 'requireContext').mockResolvedValue(superAdminCtx as any);
+      vi.spyOn(contextModule, 'requireContext').mockResolvedValue(superAdminCtx);
 
       const req = new NextRequest(
         `${APP_URL}/api/v1/sales/${SALES_1_ID}/targets/invalid-month`,
@@ -630,7 +739,7 @@ describe('T5.3: Evaluasi Sales, SalesTarget, OwnerSalesNote, Laporan Kinerja & K
 
   describe('2. OwnerSalesNote (Catatan Rahasia Pemilik Usaha)', () => {
     it('membuat catatan evaluasi rahasia pemilik usaha (POST)', async () => {
-      vi.spyOn(contextModule, 'requireContext').mockResolvedValue(superAdminCtx as any);
+      vi.spyOn(contextModule, 'requireContext').mockResolvedValue(superAdminCtx);
 
       const req = new NextRequest(`${APP_URL}/api/v1/sales/${SALES_1_ID}/notes`, {
         method: 'POST',
@@ -653,7 +762,7 @@ describe('T5.3: Evaluasi Sales, SalesTarget, OwnerSalesNote, Laporan Kinerja & K
     });
 
     it('mengambil riwayat catatan rahasia pemilik untuk staf sales (GET)', async () => {
-      vi.spyOn(contextModule, 'requireContext').mockResolvedValue(superAdminCtx as any);
+      vi.spyOn(contextModule, 'requireContext').mockResolvedValue(superAdminCtx);
 
       mockOwnerSalesNotes.push({
         id: 'note_1',
@@ -684,7 +793,7 @@ describe('T5.3: Evaluasi Sales, SalesTarget, OwnerSalesNote, Laporan Kinerja & K
 
   describe('3. GET /reports/sales-performance (Laporan Kinerja Sales)', () => {
     it('menghitung performa omzet, profit, konversi pipeline, dan komisi', async () => {
-      vi.spyOn(contextModule, 'requireContext').mockResolvedValue(superAdminCtx as any);
+      vi.spyOn(contextModule, 'requireContext').mockResolvedValue(superAdminCtx);
 
       mockSalesTargets.push({
         id: 'tgt_1',
@@ -714,7 +823,7 @@ describe('T5.3: Evaluasi Sales, SalesTarget, OwnerSalesNote, Laporan Kinerja & K
       expect(json.data.summary.totalRevenue).toBe(750000);
       expect(json.data.summary.totalProfit).toBe(250000);
 
-      const andi = json.data.items.find((i: any) => i.salesId === SALES_1_ID);
+      const andi = json.data.items.find((i: { salesId: string }) => i.salesId === SALES_1_ID);
       expect(andi).toBeDefined();
       expect(andi.revenue).toBe(750000);
       expect(andi.profit).toBe(250000);
@@ -729,7 +838,7 @@ describe('T5.3: Evaluasi Sales, SalesTarget, OwnerSalesNote, Laporan Kinerja & K
 
   describe('4. GET /reports/commissions & Penanda "Perlu Dikembalikan" (Seksi 18.1 nomor 35)', () => {
     it('memberikan tanda needsReturn = true untuk komisi REVERSED yang sebelumnya sudah PAID', async () => {
-      vi.spyOn(contextModule, 'requireContext').mockResolvedValue(superAdminCtx as any);
+      vi.spyOn(contextModule, 'requireContext').mockResolvedValue(superAdminCtx);
 
       const req = new NextRequest(`${APP_URL}/api/v1/reports/commissions`, {
         method: 'GET',
@@ -745,7 +854,7 @@ describe('T5.3: Evaluasi Sales, SalesTarget, OwnerSalesNote, Laporan Kinerja & K
       expect(json.data.summary.needsReturnCount).toBe(1);
 
       const needsReturnEntry = json.data.data.find(
-        (e: any) => e.id === 'comm_needs_return_1'
+        (e: { id: string }) => e.id === 'comm_needs_return_1'
       );
       expect(needsReturnEntry).toBeDefined();
       expect(needsReturnEntry.needsReturn).toBe(true);
@@ -753,7 +862,7 @@ describe('T5.3: Evaluasi Sales, SalesTarget, OwnerSalesNote, Laporan Kinerja & K
       expect(needsReturnEntry.paidAt).not.toBeNull();
 
       const earnedEntry = json.data.data.find(
-        (e: any) => e.id === 'comm_earned_1'
+        (e: { id: string }) => e.id === 'comm_earned_1'
       );
       expect(earnedEntry.needsReturn).toBe(false);
     });
@@ -761,7 +870,7 @@ describe('T5.3: Evaluasi Sales, SalesTarget, OwnerSalesNote, Laporan Kinerja & K
 
   describe('5. POST /commissions/:id/pay (Pembayaran Komisi)', () => {
     it('menandai status komisi menjadi PAID dan mencatat waktu bayar', async () => {
-      vi.spyOn(contextModule, 'requireContext').mockResolvedValue(superAdminCtx as any);
+      vi.spyOn(contextModule, 'requireContext').mockResolvedValue(superAdminCtx);
 
       const req = new NextRequest(
         `${APP_URL}/api/v1/commissions/comm_earned_1/pay`,
@@ -789,7 +898,7 @@ describe('T5.3: Evaluasi Sales, SalesTarget, OwnerSalesNote, Laporan Kinerja & K
     });
 
     it('menolak pembayaran jika komisi sudah berstatus REVERSED (409 Conflict)', async () => {
-      vi.spyOn(contextModule, 'requireContext').mockResolvedValue(superAdminCtx as any);
+      vi.spyOn(contextModule, 'requireContext').mockResolvedValue(superAdminCtx);
 
       const req = new NextRequest(
         `${APP_URL}/api/v1/commissions/comm_needs_return_1/pay`,

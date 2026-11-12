@@ -5,21 +5,18 @@ import {
   POST as createBusinessHandler,
 } from '@/app/api/v1/businesses/route';
 import {
-  GET as getBusinessDetailHandler,
   PATCH as updateBusinessHandler,
   DELETE as deleteBusinessHandler,
 } from '@/app/api/v1/businesses/[id]/route';
 import {
-  GET as getBankAccountsHandler,
   POST as createBankAccountHandler,
 } from '@/app/api/v1/businesses/[id]/bank-accounts/route';
 import {
-  GET as getBankAccountHandler,
   PATCH as updateBankAccountHandler,
   DELETE as deleteBankAccountHandler,
 } from '@/app/api/v1/bank-accounts/[id]/route';
 import { POST as uploadLogoHandler } from '@/app/api/v1/businesses/[id]/logo/route';
-import { Role } from '@prisma/client';
+import { Role, InvoiceTheme, CommissionMode, CommissionTrigger } from '@prisma/client';
 import * as contextModule from '@/lib/auth/context';
 
 interface MockBusiness {
@@ -32,7 +29,7 @@ interface MockBusiness {
   email: string | null;
   npwp: string | null;
   logoPath: string | null;
-  invoiceTheme: any;
+  invoiceTheme: InvoiceTheme | string;
   invoiceFooterNote: string | null;
   ppnEnabled: boolean;
   ppnRateBps: number;
@@ -41,10 +38,10 @@ interface MockBusiness {
   defaultDpBps: number;
   dueDays: number;
   defaultRepeatDays: number;
-  commissionMode: any;
+  commissionMode: CommissionMode | string;
   commissionRateBps: number;
   commissionFixedAmount: bigint;
-  commissionTrigger: any;
+  commissionTrigger: CommissionTrigger | string;
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -70,10 +67,23 @@ interface MockAuditLog {
   entityType: string;
   entityId: string;
   summary: string | null;
-  before: any;
-  after: any;
+  before: Record<string, unknown> | null;
+  after: Record<string, unknown> | null;
   reason: string | null;
   ip: string | null;
+}
+
+interface BusinessWhere {
+  id?: string | { not?: string };
+  code?: string;
+  deletedAt?: Date | null;
+}
+
+interface BankAccountWhere {
+  id?: string | { not?: string };
+  businessId?: string;
+  isDefault?: boolean;
+  deletedAt?: Date | null;
 }
 
 let businesses: MockBusiness[] = [];
@@ -101,18 +111,18 @@ vi.mock('@/lib/db', () => ({
           return null;
         }
       ),
-      findFirst: vi.fn(async ({ where }: { where: any }) => {
+      findFirst: vi.fn(async ({ where }: { where: BusinessWhere }) => {
         const found = businesses.find((b) => {
           if (where.id && typeof where.id === 'string' && b.id !== where.id)
             return false;
-          if (where.id?.not && b.id === where.id.not) return false;
+          if (typeof where.id === 'object' && where.id?.not && b.id === where.id.not) return false;
           if (where.code && b.code !== where.code) return false;
           if (where.deletedAt === null && b.deletedAt !== null) return false;
           return true;
         });
         return found ? { ...found } : null;
       }),
-      findMany: vi.fn(async ({ where }: { where: any }) => {
+      findMany: vi.fn(async ({ where }: { where?: BusinessWhere }) => {
         return businesses
           .filter((b) => {
             if (where?.deletedAt === null && b.deletedAt !== null) return false;
@@ -120,7 +130,7 @@ vi.mock('@/lib/db', () => ({
           })
           .map((b) => ({ ...b }));
       }),
-      create: vi.fn(async ({ data }: { data: any }) => {
+      create: vi.fn(async ({ data }: { data: Omit<MockBusiness, 'id' | 'createdAt' | 'updatedAt' | 'deletedAt'> }) => {
         const item: MockBusiness = {
           id: `biz_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
           ...data,
@@ -131,7 +141,7 @@ vi.mock('@/lib/db', () => ({
         businesses.push(item);
         return { ...item };
       }),
-      update: vi.fn(async ({ where, data }: { where: any; data: any }) => {
+      update: vi.fn(async ({ where, data }: { where: { id: string }; data: Partial<MockBusiness> }) => {
         const b = businesses.find((item) => item.id === where.id);
         if (!b) throw new Error('Business not found');
         Object.assign(b, data, { updatedAt: new Date() });
@@ -139,9 +149,9 @@ vi.mock('@/lib/db', () => ({
       }),
     },
     bankAccount: {
-      findFirst: vi.fn(async ({ where }: { where: any }) => {
+      findFirst: vi.fn(async ({ where }: { where: BankAccountWhere }) => {
         const found = bankAccounts.find((a) => {
-          if (where.id && a.id !== where.id) return false;
+          if (where.id && typeof where.id === 'string' && a.id !== where.id) return false;
           if (where.businessId && a.businessId !== where.businessId)
             return false;
           if (where.deletedAt === null && a.deletedAt !== null) return false;
@@ -149,7 +159,7 @@ vi.mock('@/lib/db', () => ({
         });
         return found ? { ...found } : null;
       }),
-      findMany: vi.fn(async ({ where }: { where: any }) => {
+      findMany: vi.fn(async ({ where }: { where?: BankAccountWhere }) => {
         return bankAccounts
           .filter((a) => {
             if (where?.businessId && a.businessId !== where.businessId)
@@ -159,7 +169,7 @@ vi.mock('@/lib/db', () => ({
           })
           .map((a) => ({ ...a }));
       }),
-      create: vi.fn(async ({ data }: { data: any }) => {
+      create: vi.fn(async ({ data }: { data: Omit<MockBankAccount, 'id' | 'deletedAt'> }) => {
         const item: MockBankAccount = {
           id: `bank_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
           ...data,
@@ -168,17 +178,17 @@ vi.mock('@/lib/db', () => ({
         bankAccounts.push(item);
         return { ...item };
       }),
-      update: vi.fn(async ({ where, data }: { where: any; data: any }) => {
+      update: vi.fn(async ({ where, data }: { where: { id: string }; data: Partial<MockBankAccount> }) => {
         const a = bankAccounts.find((item) => item.id === where.id);
         if (!a) throw new Error('Bank account not found');
         Object.assign(a, data);
         return { ...a };
       }),
-      updateMany: vi.fn(async ({ where, data }: { where: any; data: any }) => {
+      updateMany: vi.fn(async ({ where, data }: { where: BankAccountWhere; data: Partial<MockBankAccount> }) => {
         let count = 0;
         for (const a of bankAccounts) {
           if (where.businessId && a.businessId !== where.businessId) continue;
-          if (where.id?.not && a.id === where.id.not) continue;
+          if (typeof where.id === 'object' && where.id?.not && a.id === where.id.not) continue;
           if (where.isDefault !== undefined && a.isDefault !== where.isDefault)
             continue;
           if (where.deletedAt === null && a.deletedAt !== null) continue;
@@ -189,12 +199,12 @@ vi.mock('@/lib/db', () => ({
       }),
     },
     order: {
-      count: vi.fn(async ({ where }: { where: any }) => {
+      count: vi.fn(async ({ where }: { where: { businessId: string } }) => {
         return orderCountByBusiness[where.businessId] || 0;
       }),
     },
     auditLog: {
-      create: vi.fn(async ({ data }: { data: any }) => {
+      create: vi.fn(async ({ data }: { data: Omit<MockAuditLog, 'id'> }) => {
         const log: MockAuditLog = {
           id: `audit_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
           ...data,
@@ -203,7 +213,7 @@ vi.mock('@/lib/db', () => ({
         return log;
       }),
     },
-    $transaction: vi.fn(async (cb: any) => {
+    $transaction: vi.fn(async <T>(cb: (tx: unknown) => Promise<T>): Promise<T> => {
       // Execute the callback with mocked prisma
       const { prisma } = await import('@/lib/db');
       return cb(prisma);
@@ -249,7 +259,7 @@ describe('Integrasi Pengaturan Usaha, Rekening Bank, Berkas & Audit (T1.3)', () 
     vi.clearAllMocks();
 
     vi.spyOn(contextModule, 'requireContext').mockResolvedValue(
-      superAdminCtx as any
+      superAdminCtx as unknown as contextModule.Ctx
     );
   });
 
@@ -284,7 +294,7 @@ describe('Integrasi Pengaturan Usaha, Rekening Bank, Berkas & Audit (T1.3)', () 
       );
       expect(createAudit).toBeDefined();
       expect(createAudit?.actorId).toBe('super_admin_1');
-      expect(createAudit?.after.code).toBe('CAT');
+      expect(createAudit?.after?.code).toBe('CAT');
     });
 
     it('menolak pembuatan unit usaha bila kode duplikat (409 DUPLICATE)', async () => {
@@ -484,8 +494,8 @@ describe('Integrasi Pengaturan Usaha, Rekening Bank, Berkas & Audit (T1.3)', () 
         (a) => a.action === 'BUSINESS_UPDATE' && a.entityId === 'biz_lock'
       );
       expect(auditEntry).toBeDefined();
-      expect(auditEntry?.before.code).toBe('ORIGINAL');
-      expect(auditEntry?.after.code).toBe('NEWCODE');
+      expect(auditEntry?.before?.code).toBe('ORIGINAL');
+      expect(auditEntry?.after?.code).toBe('NEWCODE');
     });
 
     it('menolak soft delete unit usaha jika tidak ditemukan (404)', async () => {
@@ -507,7 +517,7 @@ describe('Integrasi Pengaturan Usaha, Rekening Bank, Berkas & Audit (T1.3)', () 
         ...superAdminCtx,
         businessId: 'biz_bank_test',
         session: { ...superAdminCtx.session, activeBusinessId: 'biz_bank_test' },
-      } as any);
+      } as unknown as contextModule.Ctx);
 
       businesses.push({
         id: 'biz_bank_test',

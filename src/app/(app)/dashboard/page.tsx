@@ -30,6 +30,7 @@ import {
   buildRepeatReminderWaMessage,
   buildWaUrl,
 } from '@/lib/domain/whatsapp';
+import { formatDateId } from '@/lib/format/date';
 
 // Types for Super Admin Dashboard DTO
 interface SuperAdminSummary {
@@ -1001,7 +1002,7 @@ function SalesView({ data }: { data: SalesDashboardData }) {
                     </div>
                     <div className="text-xs text-slate-500 mt-0.5">
                       Interval: {rem.intervalDays} hari • Order terakhir:{' '}
-                      {new Date(rem.lastOrderDate).toLocaleDateString('id-ID')}
+                      {formatDateId(rem.lastOrderDate, 'compact')}
                     </div>
                     {rem.note && (
                       <div className="text-xs text-slate-600 italic mt-0.5">

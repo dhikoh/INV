@@ -74,7 +74,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
     const result = await exportReport(ctx, query);
 
-    return new NextResponse(result.buffer, {
+    return new NextResponse(new Uint8Array(result.buffer), {
       status: 200,
       headers: {
         'Content-Type': result.contentType,

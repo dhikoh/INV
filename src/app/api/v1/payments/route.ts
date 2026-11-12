@@ -1,14 +1,13 @@
 import { withApi } from '@/lib/api/withApi';
+import { parsePaymentInput } from '@/lib/api/paymentInput';
 import { requireBusiness } from '@/lib/auth/context';
 import { prisma } from '@/lib/db';
-import { DomainError } from '@/lib/domain/money';
-import { saveFile } from '@/lib/files/fileService';
 import {
   createPayment,
   formatPaymentDto,
   PaymentDto,
 } from '@/lib/services/payment';
-import { PaymentMethod, PaymentStatus, Role } from '@prisma/client';
+import { PaymentStatus, Role } from '@prisma/client';
 
 export interface PendingBatchAllocationView {
   invoiceId: string;
@@ -62,77 +61,149 @@ export const GET = withApi(
 
     const batches =
       batchIds.length > 0 &&
-        typeof (prisma as { paymentBatch?: { findMany?: unknown } }).paymentBatch
-          ?.findMany === 'function'
+      typeof (prisma as { paymentBatch?: { findMany?: unknown } }).paymentBatch
+        ?.findMany === 'function'
         ? await prisma.paymentBatch.findMany({
-          where: { id: { in: batchIds }, businessId },
-          include: { allocations: true },
-        })
+            where: { id: { in: batchIds }, businessId },
+            include: { allocations: true },
+          })
         : [];
     const batchMap = new Map(batches.map((b) => [b.id, b]));
 
-    const results: PendingPaymentQueueItem[] = [];
+    const uniquePayments: typeof pendingPayments = [];
     const seenBatchIds = new Set<string>();
-
     for (const p of pendingPayments) {
       const pBatchId = (p as { batchId?: string | null }).batchId ?? null;
-      if (pBatchId && seenBatchIds.has(pBatchId)) {
-        continue;
-      }
       if (pBatchId) {
+        if (seenBatchIds.has(pBatchId)) continue;
         seenBatchIds.add(pBatchId);
       }
+      uniquePayments.push(p);
+    }
 
-      const order = await prisma.order.findFirst({
-        where: { id: p.orderId, businessId, deletedAt: null },
-        select: {
-          orderNo: true,
-          salesId: true,
-          customerId: true,
-        },
-      });
+    const paymentOrderIds = uniquePayments.map((p) => p.orderId);
+    const batchAllocationOrderIds = batches.flatMap((b) =>
+      b.allocations.map((a) => a.orderId)
+    );
+    const allOrderIds = Array.from(
+      new Set([...paymentOrderIds, ...batchAllocationOrderIds])
+    );
+    const allBatchInvoiceIds = Array.from(
+      new Set(batches.flatMap((b) => b.allocations.map((a) => a.invoiceId)))
+    );
 
-      let customerName = '-';
-      let salesName = '-';
+    const hasOrderFindMany =
+      typeof (prisma.order as { findMany?: unknown } | undefined)?.findMany ===
+      'function';
+    const orderRows =
+      allOrderIds.length > 0
+        ? hasOrderFindMany
+          ? await prisma.order.findMany({
+              where: { id: { in: allOrderIds }, businessId, deletedAt: null },
+              select: { id: true, orderNo: true, salesId: true, customerId: true },
+            })
+          : (
+              await Promise.all(
+                allOrderIds.map((id) =>
+                  prisma.order.findFirst({
+                    where: { id, businessId, deletedAt: null },
+                    select: {
+                      id: true,
+                      orderNo: true,
+                      salesId: true,
+                      customerId: true,
+                    },
+                  })
+                )
+              )
+            ).filter((o): o is NonNullable<typeof o> => Boolean(o))
+        : [];
+    const orderMap = new Map(orderRows.map((o) => [o.id, o]));
 
-      if (order) {
-        const cust = await prisma.customer.findFirst({
-          where: { id: order.customerId, businessId, deletedAt: null },
-          select: { name: true },
-        });
-        if (cust) customerName = cust.name;
+    const customerIds = Array.from(
+      new Set(
+        paymentOrderIds
+          .map((oid) => orderMap.get(oid)?.customerId)
+          .filter((id): id is string => Boolean(id))
+      )
+    );
+    const salesIds = Array.from(
+      new Set(
+        paymentOrderIds
+          .map((oid) => orderMap.get(oid)?.salesId)
+          .filter((id): id is string => Boolean(id))
+      )
+    );
 
-        const sales = await prisma.user.findFirst({
-          where: { id: order.salesId, deletedAt: null },
-          select: { name: true },
-        });
-        if (sales) salesName = sales.name;
-      }
+    const hasCustomerFindMany =
+      typeof (prisma.customer as { findMany?: unknown } | undefined)
+        ?.findMany === 'function';
+    const hasUserFindMany =
+      typeof (prisma.user as { findMany?: unknown } | undefined)?.findMany ===
+      'function';
+
+    const [customerRows, salesRows, batchInvoices] = await Promise.all([
+      customerIds.length > 0
+        ? hasCustomerFindMany
+          ? prisma.customer.findMany({
+              where: { id: { in: customerIds }, businessId, deletedAt: null },
+              select: { id: true, name: true },
+            })
+          : (
+              await Promise.all(
+                customerIds.map((id) =>
+                  prisma.customer.findFirst({
+                    where: { id, businessId, deletedAt: null },
+                    select: { id: true, name: true },
+                  })
+                )
+              )
+            ).filter((c): c is NonNullable<typeof c> => Boolean(c))
+        : Promise.resolve([]),
+      salesIds.length > 0
+        ? hasUserFindMany
+          ? prisma.user.findMany({
+              where: { id: { in: salesIds }, deletedAt: null },
+              select: { id: true, name: true },
+            })
+          : (
+              await Promise.all(
+                salesIds.map((id) =>
+                  prisma.user.findUnique({
+                    where: { id },
+                    select: { id: true, name: true },
+                  })
+                )
+              )
+            ).filter((u): u is NonNullable<typeof u> => Boolean(u))
+        : Promise.resolve([]),
+      allBatchInvoiceIds.length > 0
+        ? prisma.invoice.findMany({
+            where: {
+              businessId,
+              id: { in: allBatchInvoiceIds },
+              deletedAt: null,
+            },
+            select: { id: true, number: true },
+          })
+        : Promise.resolve([]),
+    ]);
+
+    const customerMap = new Map(customerRows.map((c) => [c.id, c.name]));
+    const salesMap = new Map(salesRows.map((u) => [u.id, u.name]));
+    const invNumMap = new Map(batchInvoices.map((i) => [i.id, i.number]));
+
+    const results: PendingPaymentQueueItem[] = uniquePayments.map((p) => {
+      const pBatchId = (p as { batchId?: string | null }).batchId ?? null;
+      const order = orderMap.get(p.orderId) ?? null;
+      const customerName = order
+        ? customerMap.get(order.customerId) ?? '-'
+        : '-';
+      const salesName = order ? salesMap.get(order.salesId) ?? '-' : '-';
 
       const batch = pBatchId ? batchMap.get(pBatchId) : undefined;
       if (batch) {
-        const batchInvoiceIds = batch.allocations.map((a) => a.invoiceId);
-        const batchOrderIds = Array.from(
-          new Set(batch.allocations.map((a) => a.orderId))
-        );
-        const [batchInvoices, batchOrders] = await Promise.all([
-          batchInvoiceIds.length > 0
-            ? prisma.invoice.findMany({
-              where: { businessId, id: { in: batchInvoiceIds }, deletedAt: null },
-              select: { id: true, number: true },
-            })
-            : [],
-          batchOrderIds.length > 0
-            ? prisma.order.findMany({
-              where: { businessId, id: { in: batchOrderIds }, deletedAt: null },
-              select: { id: true, orderNo: true },
-            })
-            : [],
-        ]);
-        const invNumMap = new Map(batchInvoices.map((i) => [i.id, i.number]));
-        const ordNoMap = new Map(batchOrders.map((o) => [o.id, o.orderNo]));
-
-        results.push({
+        return {
           ...formatPaymentDto(p),
           amount: Number(batch.totalPaid),
           orderNo: `${batch.allocations.length} Faktur Kolektif`,
@@ -148,20 +219,20 @@ export const GET = withApi(
             invoiceId: a.invoiceId,
             invoiceNumber: invNumMap.get(a.invoiceId) ?? a.invoiceId,
             orderId: a.orderId,
-            orderNo: ordNoMap.get(a.orderId) ?? null,
+            orderNo: orderMap.get(a.orderId)?.orderNo ?? null,
             amount: Number(a.amount),
           })),
-        });
-      } else {
-        results.push({
-          ...formatPaymentDto(p),
-          orderNo: order ? order.orderNo : null,
-          customerName,
-          salesName,
-          isBatch: false,
-        });
+        };
       }
-    }
+
+      return {
+        ...formatPaymentDto(p),
+        orderNo: order ? order.orderNo : null,
+        customerName,
+        salesName,
+        isBatch: false,
+      };
+    });
 
     return {
       status: 200,
@@ -182,139 +253,19 @@ export const POST = withApi(
   },
   async ({ ctx, req }): Promise<{ status: number; data: PaymentDto }> => {
     const businessId = requireBusiness(ctx);
-
-    const contentType = req.headers.get('content-type') || '';
-    let orderId: string;
-    let invoiceId: string | null = null;
-    let amount: number;
-    let method: PaymentMethod = PaymentMethod.TRANSFER;
-    let paidAt: Date = new Date();
-    let reference: string | null = null;
-    let notes: string | null = null;
-    let autoVerify = false;
-    let proofPath: string | null = null;
-
-    if (contentType.includes('multipart/form-data')) {
-      const formData = await req.formData().catch(() => {
-        throw new DomainError('BAD_REQUEST', 'Form data tidak valid', 400);
-      });
-
-      const rawOrderId = formData.get('orderId');
-      if (!rawOrderId || typeof rawOrderId !== 'string') {
-        throw new DomainError('VALIDATION_ERROR', 'orderId wajib diisi', 422);
-      }
-      orderId = rawOrderId.trim();
-
-      const rawAmount = formData.get('amount');
-      if (!rawAmount) {
-        throw new DomainError('VALIDATION_ERROR', 'Jumlah pembayaran wajib diisi', 422);
-      }
-      amount = Number(rawAmount);
-      if (isNaN(amount) || amount <= 0) {
-        throw new DomainError(
-          'VALIDATION_ERROR',
-          'Jumlah pembayaran harus berupa angka positif',
-          422
-        );
-      }
-
-      const rawInvoiceId = formData.get('invoiceId');
-      if (rawInvoiceId && typeof rawInvoiceId === 'string') {
-        invoiceId = rawInvoiceId.trim() || null;
-      }
-
-      const rawMethod = formData.get('method');
-      if (rawMethod && typeof rawMethod === 'string') {
-        if (!Object.values(PaymentMethod).includes(rawMethod as PaymentMethod)) {
-          throw new DomainError('VALIDATION_ERROR', 'Metode pembayaran tidak valid', 422);
-        }
-        method = rawMethod as PaymentMethod;
-      }
-
-      const rawPaidAt = formData.get('paidAt');
-      if (rawPaidAt && typeof rawPaidAt === 'string') {
-        const parsedDate = new Date(rawPaidAt);
-        if (isNaN(parsedDate.getTime())) {
-          throw new DomainError('VALIDATION_ERROR', 'Format tanggal paidAt tidak valid', 422);
-        }
-        paidAt = parsedDate;
-      }
-
-      const rawRef = formData.get('reference');
-      if (rawRef && typeof rawRef === 'string') {
-        reference = rawRef.trim() || null;
-      }
-
-      const rawNotes = formData.get('notes');
-      if (rawNotes && typeof rawNotes === 'string') {
-        notes = rawNotes.trim() || null;
-      }
-
-      const rawAutoVerify = formData.get('autoVerify');
-      if (rawAutoVerify === 'true' || rawAutoVerify === '1') {
-        autoVerify = true;
-      }
-
-      const file = formData.get('proof');
-      if (file && file instanceof Blob && file.size > 0) {
-        const arrayBuffer = await file.arrayBuffer();
-        const buffer = Buffer.from(arrayBuffer);
-        const saved = await saveFile({
-          businessId,
-          kind: 'proof',
-          buffer,
-        });
-        proofPath = saved.relativePath;
-      }
-    } else {
-      const body = await req.json().catch(() => {
-        throw new DomainError('BAD_REQUEST', 'Body JSON tidak valid', 400);
-      });
-
-      if (!body.orderId || typeof body.orderId !== 'string') {
-        throw new DomainError('VALIDATION_ERROR', 'orderId wajib diisi', 422);
-      }
-      orderId = body.orderId.trim();
-
-      if (!body.amount || typeof body.amount !== 'number' || body.amount <= 0) {
-        throw new DomainError(
-          'VALIDATION_ERROR',
-          'Jumlah pembayaran (amount) harus berupa angka positif',
-          422
-        );
-      }
-      amount = body.amount;
-      invoiceId = body.invoiceId || null;
-      if (body.method) {
-        if (!Object.values(PaymentMethod).includes(body.method)) {
-          throw new DomainError('VALIDATION_ERROR', 'Metode pembayaran tidak valid', 422);
-        }
-        method = body.method;
-      }
-      if (body.paidAt) {
-        const parsedDate = new Date(body.paidAt);
-        if (isNaN(parsedDate.getTime())) {
-          throw new DomainError('VALIDATION_ERROR', 'Format tanggal paidAt tidak valid', 422);
-        }
-        paidAt = parsedDate;
-      }
-      reference = body.reference || null;
-      notes = body.notes || null;
-      proofPath = body.proofPath || null;
-      autoVerify = Boolean(body.autoVerify);
-    }
+    const parsed = await parsePaymentInput(req, businessId);
 
     const payment = await prisma.$transaction(async (tx) => {
       return createPayment(tx, ctx, {
-        orderId,
-        invoiceId,
-        amount,
-        method,
-        paidAt,
-        reference,
-        proofPath,
-        notes,
-        autoVerify,
+        orderId: parsed.orderId,
+        invoiceId: parsed.invoiceId,
+        amount: parsed.amount,
+        method: parsed.method,
+        paidAt: parsed.paidAt,
+        reference: parsed.reference,
+        proofPath: parsed.proofPath,
+        notes: parsed.notes,
+        autoVerify: parsed.autoVerify,
       });
     });
 

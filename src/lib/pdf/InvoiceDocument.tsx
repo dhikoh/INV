@@ -4,6 +4,7 @@ import { getThemeTokens } from './themes';
 import { formatRupiah } from '../domain/money';
 import { terbilang } from '../domain/terbilang';
 import { resolvePaymentLegalNotice } from '../domain/paymentPolicy';
+import { formatDateId } from '@/lib/format/date';
 
 export interface InvoiceDocumentProps {
   snapshot: InvoiceSnapshot;
@@ -35,17 +36,9 @@ export function InvoiceDocument({
     snapshot.number || (isProforma ? 'PROFORMA / DRAF' : 'PRATINJAU DRAF');
   const resolvedLegalNotice = resolvePaymentLegalNotice(snapshot.legalNotice);
 
-  const formattedIssueDate = new Date(snapshot.issueDate).toLocaleDateString('id-ID', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  });
+  const formattedIssueDate = formatDateId(snapshot.issueDate, 'long');
 
-  const formattedDueDate = new Date(snapshot.dueDate).toLocaleDateString('id-ID', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  });
+  const formattedDueDate = formatDateId(snapshot.dueDate, 'long');
 
   return (
     <html lang="id">

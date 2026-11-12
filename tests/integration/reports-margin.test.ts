@@ -90,10 +90,22 @@ let mockOrderCosts: MockOrderCost[] = [];
 let mockCustomers: MockCustomer[] = [];
 let mockUsers: MockUser[] = [];
 
+interface MarginWhereFilter {
+  id?: string;
+  businessId?: string;
+  deletedAt?: null | Date;
+  status?: { in?: OrderStatus[] };
+  salesId?: string;
+  createdAt?: { gte?: Date; lte?: Date };
+  orderId?: { in?: string[] };
+  voidedAt?: null | Date;
+  role?: Role;
+}
+
 vi.mock('@/lib/db', () => {
   const mockPrisma = {
     order: {
-      findMany: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findMany: vi.fn(async ({ where }: { where: MarginWhereFilter }) => {
         return mockOrders
           .filter((o) => {
             if (where.businessId && o.businessId !== where.businessId) return false;
@@ -118,7 +130,7 @@ vi.mock('@/lib/db', () => {
       }),
     },
     creditNote: {
-      findMany: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findMany: vi.fn(async ({ where }: { where: MarginWhereFilter }) => {
         return mockCreditNotes.filter((cn) => {
           if (where.businessId && cn.businessId !== where.businessId) return false;
           if (where.orderId?.in && !where.orderId.in.includes(cn.orderId)) return false;
@@ -128,7 +140,7 @@ vi.mock('@/lib/db', () => {
       }),
     },
     shipment: {
-      findMany: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findMany: vi.fn(async ({ where }: { where: MarginWhereFilter }) => {
         return mockShipments.filter((sh) => {
           if (where.businessId && sh.businessId !== where.businessId) return false;
           if (where.orderId?.in && !where.orderId.in.includes(sh.orderId)) return false;
@@ -137,7 +149,7 @@ vi.mock('@/lib/db', () => {
       }),
     },
     orderCost: {
-      findMany: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findMany: vi.fn(async ({ where }: { where: MarginWhereFilter }) => {
         return mockOrderCosts.filter((oc) => {
           if (where.businessId && oc.businessId !== where.businessId) return false;
           if (where.orderId?.in && !where.orderId.in.includes(oc.orderId)) return false;
@@ -146,7 +158,7 @@ vi.mock('@/lib/db', () => {
       }),
     },
     user: {
-      findMany: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findMany: vi.fn(async ({ where }: { where: MarginWhereFilter }) => {
         return mockUsers.filter((u) => {
           if (where.businessId && u.businessId !== where.businessId) return false;
           if (where.role && u.role !== where.role) return false;
@@ -155,7 +167,7 @@ vi.mock('@/lib/db', () => {
       }),
     },
     business: {
-      findFirst: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findFirst: vi.fn(async ({ where }: { where: MarginWhereFilter }) => {
         return { id: where.id, name: 'Bento Pet Shop Pusat' };
       }),
     },
@@ -169,23 +181,23 @@ describe('T5.2: Laporan Margin & Profitabilitas Usaha (Seksi 7.4, 9.2, 17.3 nomo
   const SALES_1_ID = 'sales_margin_01';
   const SALES_2_ID = 'sales_margin_02';
 
-  const superAdminCtx = {
-    user: { id: SUPERADMIN_ID, name: 'Owner Toko', username: 'owner', role: Role.SUPERADMIN, businessId: BIZ_ID, mustChangePassword: false },
+  const superAdminCtx: contextModule.Ctx = {
+    user: { id: SUPERADMIN_ID, name: 'Owner Toko', role: Role.SUPERADMIN, businessId: BIZ_ID },
     role: Role.SUPERADMIN,
     businessId: BIZ_ID,
     sessionId: 'sess_sa',
     ip: '127.0.0.1',
   };
 
-  const salesCtx = {
-    user: { id: SALES_1_ID, name: 'Sales Doni', username: 'doni', role: Role.SALES, businessId: BIZ_ID, mustChangePassword: false },
+  const salesCtx: contextModule.Ctx = {
+    user: { id: SALES_1_ID, name: 'Sales Doni', role: Role.SALES, businessId: BIZ_ID },
     role: Role.SALES,
     businessId: BIZ_ID,
     sessionId: 'sess_sales',
     ip: '127.0.0.1',
   };
 
-  let activeCtx: any = superAdminCtx;
+  let activeCtx: contextModule.Ctx = superAdminCtx;
 
   beforeEach(() => {
     mockOrders = [];
@@ -202,7 +214,7 @@ describe('T5.2: Laporan Margin & Profitabilitas Usaha (Seksi 7.4, 9.2, 17.3 nomo
       }
       return activeCtx;
     });
-    vi.spyOn(contextModule, 'requireBusiness').mockImplementation(() => activeCtx.businessId);
+    vi.spyOn(contextModule, 'requireBusiness').mockImplementation(() => activeCtx.businessId!);
 
     // Setup Master Users & Customer
     mockUsers.push(
@@ -425,17 +437,20 @@ describe('T5.2: Laporan Margin & Profitabilitas Usaha (Seksi 7.4, 9.2, 17.3 nomo
       expect(summary.profit).toBe(790000);
 
       // BUKTI INVARIAN T5.2: Total profit laporan sama persis dengan jumlah profit per baris
-      const sumRowsProfit = items.reduce((acc: number, row: any) => acc + row.profit, 0);
+      const sumRowsProfit = items.reduce(
+        (acc: number, row: { profit: number }) => acc + row.profit,
+        0
+      );
       expect(summary.profit).toBe(sumRowsProfit);
 
       // BUKTI INVARIAN: Total profit = total profit order aktif - kerugian pembatalan
       const activeRowsProfit = items
-        .filter((r: any) => !r.isCancellationLoss)
-        .reduce((acc: number, row: any) => acc + row.profit, 0);
+        .filter((r: { isCancellationLoss?: boolean }) => !r.isCancellationLoss)
+        .reduce((acc: number, row: { profit: number }) => acc + row.profit, 0);
       expect(summary.profit).toBe(activeRowsProfit - summary.cancellationLoss);
 
       // Verifikasi baris kerugian pembatalan
-      const cancelRow = items.find((r: any) => r.orderId === 'ord_cancel_loss');
+      const cancelRow = items.find((r: { orderId: string }) => r.orderId === 'ord_cancel_loss');
       expect(cancelRow).toBeDefined();
       expect(cancelRow.isCancellationLoss).toBe(true);
       expect(cancelRow.profit).toBe(-50000);
@@ -455,7 +470,7 @@ describe('T5.2: Laporan Margin & Profitabilitas Usaha (Seksi 7.4, 9.2, 17.3 nomo
 
       expect(items).toHaveLength(2); // CAT-PREM & CAT-SNACK
 
-      const snackProduct = items.find((p: any) => p.sku === 'CAT-SNACK');
+      const snackProduct = items.find((p: { sku: string }) => p.sku === 'CAT-SNACK');
       expect(snackProduct).toBeDefined();
       expect(snackProduct.qtySold).toBe(20);
       expect(snackProduct.grossRevenue).toBe(2000000);
@@ -475,7 +490,7 @@ describe('T5.2: Laporan Margin & Profitabilitas Usaha (Seksi 7.4, 9.2, 17.3 nomo
       const { items } = json.data;
 
       // Sales 1 (ord_1 profit 300rb, ord_cancel_loss -50rb -> profit bersih 250rb)
-      const sales1 = items.find((s: any) => s.salesId === SALES_1_ID);
+      const sales1 = items.find((s: { salesId: string }) => s.salesId === SALES_1_ID);
       expect(sales1).toBeDefined();
       expect(sales1.orderCount).toBe(1);
       expect(sales1.revenue).toBe(1050000);
@@ -484,7 +499,7 @@ describe('T5.2: Laporan Margin & Profitabilitas Usaha (Seksi 7.4, 9.2, 17.3 nomo
       expect(sales1.profit).toBe(250000);
 
       // Sales 2 (ord_2 profit 540rb)
-      const sales2 = items.find((s: any) => s.salesId === SALES_2_ID);
+      const sales2 = items.find((s: { salesId: string }) => s.salesId === SALES_2_ID);
       expect(sales2).toBeDefined();
       expect(sales2.orderCount).toBe(1);
       expect(sales2.revenue).toBe(1800000);
@@ -493,7 +508,10 @@ describe('T5.2: Laporan Margin & Profitabilitas Usaha (Seksi 7.4, 9.2, 17.3 nomo
       expect(sales2.profit).toBe(540000);
 
       // Total profit sales sama dengan summary profit
-      const totalSalesProfit = items.reduce((acc: number, s: any) => acc + s.profit, 0);
+      const totalSalesProfit = items.reduce(
+        (acc: number, s: { profit: number }) => acc + s.profit,
+        0
+      );
       expect(totalSalesProfit).toBe(790000);
     });
 

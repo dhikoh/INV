@@ -7,7 +7,6 @@ import { POST as changePasswordHandler } from '@/app/api/v1/auth/change-password
 import { withApi } from '@/lib/api/withApi';
 import { hashPassword } from '@/lib/auth/password';
 import { Role } from '@prisma/client';
-import { prisma } from '@/lib/db';
 
 // Mock database store in-memory for testing route handlers end-to-end
 interface MockUser {

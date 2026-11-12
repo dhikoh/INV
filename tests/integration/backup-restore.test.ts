@@ -70,7 +70,7 @@ describe('T5.6: Uji Pemulihan Cadangan Database (Backup & Restore) & DocumentCou
       WHERE "businessId" = '${bizId}' AND "scope" = 'ORDER_SEQ' AND "scopeId" = '${customerId}';
     `);
     expect(checkRes.rows).toHaveLength(1);
-    expect((checkRes.rows[0] as any).lastSeq).toBe(5);
+    expect((checkRes.rows[0] as { lastSeq: number }).lastSeq).toBe(5);
 
     // 3. Simulasikan "Dump Backup": Snapshot data DocumentCounter
     const snapshotRows = checkRes.rows;
@@ -95,7 +95,7 @@ describe('T5.6: Uji Pemulihan Cadangan Database (Backup & Restore) & DocumentCou
 
     await freshDb.query(`
       INSERT INTO "DocumentCounter" ("id", "businessId", "scope", "scopeId", "lastSeq")
-      VALUES ('cnt_01', '${bizId}', 'ORDER_SEQ', '${customerId}', ${(snapshotRows[0] as any).lastSeq});
+      VALUES ('cnt_01', '${bizId}', 'ORDER_SEQ', '${customerId}', ${(snapshotRows[0] as { lastSeq: number }).lastSeq});
     `);
 
     // 5. Pembuktian Seksi 18.1 nomor 38:
@@ -108,7 +108,7 @@ describe('T5.6: Uji Pemulihan Cadangan Database (Backup & Restore) & DocumentCou
     `);
 
     expect(nextSeqRes.rows).toHaveLength(1);
-    const allocatedSeq = (nextSeqRes.rows[0] as any).lastSeq;
+    const allocatedSeq = (nextSeqRes.rows[0] as { lastSeq: number }).lastSeq;
     expect(allocatedSeq).toBe(6); // Berlanjut ke sequence 6 secara deterministik!
   });
 

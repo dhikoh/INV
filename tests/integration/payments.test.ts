@@ -1,23 +1,9 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { NextRequest } from 'next/server';
-import {
-  GET as getOrderPaymentsHandler,
-  POST as createOrderPaymentHandler,
-} from '@/app/api/v1/orders/[id]/payments/route';
-import {
-  GET as getPaymentsQueueHandler,
-  POST as createPaymentHandler,
-} from '@/app/api/v1/payments/route';
-import { POST as verifyPaymentHandler } from '@/app/api/v1/payments/[id]/verify/route';
-import { POST as rejectPaymentHandler } from '@/app/api/v1/payments/[id]/reject/route';
-import { POST as voidPaymentHandler } from '@/app/api/v1/payments/[id]/void/route';
 import {
   createPayment,
   verifyPayment,
   rejectPayment,
   voidPayment,
-  recalculateOrderPayments,
-  maybeComplete,
   TxClient,
 } from '@/lib/services/payment';
 import {
@@ -31,7 +17,6 @@ import {
   ShipStatus,
 } from '@prisma/client';
 import { DomainError } from '@/lib/domain/money';
-import * as contextModule from '@/lib/auth/context';
 import type { Ctx } from '@/lib/auth/context';
 
 interface MockBusiness {
@@ -220,7 +205,7 @@ vi.mock('@/lib/db', () => {
           if (k === 'rev' && typeof v === 'object' && v && 'increment' in v) {
             updated.rev += 1;
           } else {
-            (updated as any)[k] = v;
+            (updated as unknown as Record<string, unknown>)[k] = v;
           }
         }
         orders[idx] = updated;
@@ -443,7 +428,6 @@ vi.mock('@/lib/db', () => {
 });
 
 describe('Integrasi Pencatatan dan Verifikasi Pembayaran (T3.3, Seksi 7.12, 8.2, 8.4, Tes 17.3 no 8)', () => {
-  const APP_URL = 'http://localhost:3000';
   const BIZ_ID = 'biz_payment_1';
 
   const superAdminCtx: Ctx = {
@@ -601,9 +585,10 @@ describe('Integrasi Pencatatan dan Verifikasi Pembayaran (T3.3, Seksi 7.12, 8.2,
         method: PaymentMethod.TRANSFER,
         paidAt: new Date(),
       });
-    } catch (e: any) {
-      expect(e.code).toBe('OVERPAYMENT');
-      expect(e.status).toBe(422);
+    } catch (e: unknown) {
+      const err = e as DomainError;
+      expect(err.code).toBe('OVERPAYMENT');
+      expect(err.status).toBe(422);
     }
   });
 
@@ -628,9 +613,10 @@ describe('Integrasi Pencatatan dan Verifikasi Pembayaran (T3.3, Seksi 7.12, 8.2,
         method: PaymentMethod.TRANSFER,
         paidAt: new Date(),
       });
-    } catch (e: any) {
-      expect(e.code).toBe('OVERPAYMENT');
-      expect(e.status).toBe(422);
+    } catch (e: unknown) {
+      const err = e as DomainError;
+      expect(err.code).toBe('OVERPAYMENT');
+      expect(err.status).toBe(422);
     }
   });
 
@@ -652,9 +638,10 @@ describe('Integrasi Pencatatan dan Verifikasi Pembayaran (T3.3, Seksi 7.12, 8.2,
 
     try {
       await verifyPayment(tx, salesACtx, payment.id);
-    } catch (e: any) {
-      expect(e.code).toBe('FORBIDDEN');
-      expect(e.status).toBe(403);
+    } catch (e: unknown) {
+      const err = e as DomainError;
+      expect(err.code).toBe('FORBIDDEN');
+      expect(err.status).toBe(403);
     }
   });
 
@@ -844,9 +831,10 @@ describe('Integrasi Pencatatan dan Verifikasi Pembayaran (T3.3, Seksi 7.12, 8.2,
         method: PaymentMethod.TRANSFER,
         paidAt: new Date(),
       });
-    } catch (e: any) {
-      expect(e.code).toBe('ORDER_NOT_FOUND');
-      expect(e.status).toBe(404);
+    } catch (e: unknown) {
+      const err = e as DomainError;
+      expect(err.code).toBe('ORDER_NOT_FOUND');
+      expect(err.status).toBe(404);
     }
   });
 
@@ -886,9 +874,10 @@ describe('Integrasi Pencatatan dan Verifikasi Pembayaran (T3.3, Seksi 7.12, 8.2,
         method: PaymentMethod.TRANSFER,
         paidAt: new Date(),
       });
-    } catch (e: any) {
-      expect(e.code).toBe('INVALID_STATE');
-      expect(e.status).toBe(409);
+    } catch (e: unknown) {
+      const err = e as DomainError;
+      expect(err.code).toBe('INVALID_STATE');
+      expect(err.status).toBe(409);
     }
   });
 

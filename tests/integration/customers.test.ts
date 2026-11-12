@@ -355,6 +355,7 @@ describe('Manajemen Pelanggan & CRM (T2.1 & Seksi 16.2, 17.4 d, 18.1)', () => {
     businessId: 'biz_1',
     ip: '127.0.0.1',
   };
+  void sales2Ctx;
 
   let activeCtx: contextModule.Ctx = superAdminCtx;
 

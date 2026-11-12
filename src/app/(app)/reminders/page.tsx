@@ -18,6 +18,7 @@ import {
   Package,
 } from 'lucide-react';
 import { StatusBadge } from '@/components/ui/StatusBadge';
+import { formatDateId } from '@/lib/format/date';
 
 interface CustomerInfo {
   id: string;
@@ -375,7 +376,7 @@ export default function RemindersPage() {
                       <div>
                         Order Terakhir:{' '}
                         <strong>
-                          {new Date(reminder.lastOrderDate).toLocaleDateString('id-ID')}
+                          {formatDateId(reminder.lastOrderDate, 'compact')}
                         </strong>
                       </div>
                       <div>
@@ -389,7 +390,7 @@ export default function RemindersPage() {
                               : 'text-slate-800'
                           }
                         >
-                          {new Date(reminder.nextDueDate).toLocaleDateString('id-ID')}
+                          {formatDateId(reminder.nextDueDate, 'compact')}
                         </strong>
                       </div>
                     </div>
@@ -397,7 +398,7 @@ export default function RemindersPage() {
                     {reminder.snoozedUntil && (
                       <div className="text-[11px] text-amber-600 font-medium">
                         Ditunda sampai:{' '}
-                        {new Date(reminder.snoozedUntil).toLocaleDateString('id-ID')}
+                        {formatDateId(reminder.snoozedUntil, 'compact')}
                       </div>
                     )}
                   </div>

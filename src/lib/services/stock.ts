@@ -339,3 +339,177 @@ export async function opnameStock(
 
   return balanceAfter;
 }
+
+export interface ProductStockReconciliation {
+  productId: string;
+  productName: string;
+  recordedStockQty: number;
+  ledgerStockQty: number;
+  drift: number;
+  repaired: boolean;
+}
+
+/**
+ * Menghitung ulang saldo stok fisik dari buku besar append-only `StockMovement`
+ * dan membandingkannya dengan `Product.stockQty` (opsional melakukan sinkronisasi).
+ */
+export async function recalculateProductStock(
+  tx: Tx,
+  params: {
+    businessId: string;
+    productId: string;
+    repair?: boolean;
+    actorId?: string;
+    reason?: string;
+  }
+): Promise<ProductStockReconciliation> {
+  await lockProducts(tx, [params.productId]);
+
+  const product = await tx.product.findFirst({
+    where: { id: params.productId, businessId: params.businessId },
+    select: { id: true, name: true, stockQty: true },
+  });
+
+  if (!product) {
+    throw new DomainError('PRODUCT_NOT_FOUND', 'Produk tidak ditemukan', 404);
+  }
+
+  const agg = await tx.stockMovement.aggregate({
+    where: { businessId: params.businessId, productId: params.productId },
+    _sum: { qtyDelta: true },
+  });
+
+  const recordedStockQty = product.stockQty;
+  const ledgerStockQty = agg._sum.qtyDelta ?? 0;
+  const drift = ledgerStockQty - recordedStockQty;
+  let repaired = false;
+
+  if (params.repair && drift !== 0) {
+    await tx.product.updateMany({
+      where: { id: params.productId, businessId: params.businessId },
+      data: { stockQty: ledgerStockQty },
+    });
+
+    if (params.actorId) {
+      await tx.auditLog.create({
+        data: {
+          businessId: params.businessId,
+          actorId: params.actorId,
+          actorRole: Role.SUPERADMIN,
+          action: 'STOCK_RECONCILE',
+          entityType: 'Product',
+          entityId: params.productId,
+          summary: `Rekonsiliasi stok produk ${product.name}: tersimpan ${recordedStockQty} -> buku besar ${ledgerStockQty}`,
+          reason: params.reason?.trim() || 'Rekonsiliasi saldo stok dari StockMovement',
+        },
+      });
+    }
+    repaired = true;
+  }
+
+  return {
+    productId: product.id,
+    productName: product.name,
+    recordedStockQty,
+    ledgerStockQty,
+    drift,
+    repaired,
+  };
+}
+
+/**
+ * Rekonsiliasi batch seluruh produk aktif pada suatu unit usaha terhadap buku besar `StockMovement`.
+ */
+export async function reconcileBusinessStock(
+  tx: Tx,
+  businessId: string,
+  options?: { repair?: boolean; actorId?: string }
+): Promise<{
+  checkedCount: number;
+  driftedCount: number;
+  repairedCount: number;
+  discrepancies: ProductStockReconciliation[];
+}> {
+  const products = await tx.product.findMany({
+    where: { businessId, deletedAt: null },
+    select: { id: true, name: true, stockQty: true },
+  });
+
+  if (products.length === 0) {
+    return {
+      checkedCount: 0,
+      driftedCount: 0,
+      repairedCount: 0,
+      discrepancies: [],
+    };
+  }
+
+  const movementGroups = await tx.stockMovement.groupBy({
+    by: ['productId'],
+    where: { businessId },
+    _sum: { qtyDelta: true },
+  });
+
+  const ledgerMap = new Map<string, number>();
+  for (const g of movementGroups) {
+    ledgerMap.set(g.productId, g._sum.qtyDelta ?? 0);
+  }
+
+  const discrepancies: ProductStockReconciliation[] = [];
+  let repairedCount = 0;
+
+  const driftedIds = products
+    .filter((p) => (ledgerMap.get(p.id) ?? 0) !== p.stockQty)
+    .map((p) => p.id);
+
+  if (options?.repair && driftedIds.length > 0) {
+    await lockProducts(tx, driftedIds);
+  }
+
+  for (const p of products) {
+    const recordedStockQty = p.stockQty;
+    const ledgerStockQty = ledgerMap.get(p.id) ?? 0;
+    const drift = ledgerStockQty - recordedStockQty;
+    if (drift === 0) continue;
+
+    let repaired = false;
+    if (options?.repair) {
+      await tx.product.updateMany({
+        where: { id: p.id, businessId },
+        data: { stockQty: ledgerStockQty },
+      });
+      if (options.actorId) {
+        await tx.auditLog.create({
+          data: {
+            businessId,
+            actorId: options.actorId,
+            actorRole: Role.SUPERADMIN,
+            action: 'STOCK_RECONCILE',
+            entityType: 'Product',
+            entityId: p.id,
+            summary: `Rekonsiliasi batch stok ${p.name}: ${recordedStockQty} -> ${ledgerStockQty}`,
+            reason: 'Housekeeping rekonsiliasi saldo stok dari StockMovement',
+          },
+        });
+      }
+      repaired = true;
+      repairedCount++;
+    }
+
+    discrepancies.push({
+      productId: p.id,
+      productName: p.name,
+      recordedStockQty,
+      ledgerStockQty,
+      drift,
+      repaired,
+    });
+  }
+
+  return {
+    checkedCount: products.length,
+    driftedCount: discrepancies.length,
+    repairedCount,
+    discrepancies,
+  };
+}

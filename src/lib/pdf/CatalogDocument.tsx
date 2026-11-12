@@ -2,6 +2,7 @@ import React from 'react';
 import { InvoiceTheme } from '@prisma/client';
 import { getThemeTokens } from './themes';
 import { formatRupiah } from '../domain/money';
+import { formatDateId } from '@/lib/format/date';
 
 export interface CatalogPdfItem {
   no: number;
@@ -42,11 +43,7 @@ export function CatalogDocument({ data, logoDataUri }: CatalogDocumentProps) {
   const theme = getThemeTokens(data.business.invoiceTheme || InvoiceTheme.PROFESIONAL);
   const { business, customer, items, title, note, date } = data;
 
-  const formattedDate = new Date(date).toLocaleDateString('id-ID', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  });
+  const formattedDate = formatDateId(date, 'long');
 
   return (
     <html lang="id">

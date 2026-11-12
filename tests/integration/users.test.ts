@@ -5,7 +5,6 @@ import {
   POST as createUserHandler,
 } from '@/app/api/v1/users/route';
 import {
-  GET as getUserDetailHandler,
   PATCH as updateUserHandler,
   DELETE as deleteUserHandler,
 } from '@/app/api/v1/users/[id]/route';
@@ -14,7 +13,7 @@ import { POST as deactivateUserHandler } from '@/app/api/v1/users/[id]/deactivat
 import { POST as activateUserHandler } from '@/app/api/v1/users/[id]/activate/route';
 import { POST as generateTelegramLinkCodeHandler } from '@/app/api/v1/auth/telegram/link-code/route';
 import { DELETE as unlinkTelegramHandler } from '@/app/api/v1/auth/telegram/route';
-import { Role } from '@prisma/client';
+import { CommissionMode, Role } from '@prisma/client';
 import * as contextModule from '@/lib/auth/context';
 import { verifyPassword } from '@/lib/auth/password';
 
@@ -30,13 +29,19 @@ interface MockUser {
   telegramChatId: bigint | null;
   telegramLinkedAt: Date | null;
   telegramBlocked: boolean;
-  commissionMode: any;
+  commissionMode: CommissionMode | null;
   commissionRateBps: number | null;
   commissionFixedAmount: bigint | null;
   lastLoginAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
   deletedAt: Date | null;
+}
+
+function omitPasswordHash(user: MockUser): Omit<MockUser, 'passwordHash'> {
+  const safe: Partial<MockUser> = { ...user };
+  delete safe.passwordHash;
+  return safe as Omit<MockUser, 'passwordHash'>;
 }
 
 interface MockSession {
@@ -70,8 +75,8 @@ interface MockAuditLog {
   entityType: string;
   entityId: string;
   summary: string | null;
-  before: any;
-  after: any;
+  before: Record<string, unknown> | null;
+  after: Record<string, unknown> | null;
   reason: string | null;
   ip: string | null;
 }
@@ -97,58 +102,95 @@ vi.mock('@/lib/db', () => ({
         }
         return null;
       }),
-      findFirst: vi.fn(async ({ where }: { where: any }) => {
-        const u = users.find((item) => {
-          if (where.id && item.id !== where.id) return false;
-          if (where.username && item.username.toLowerCase() !== where.username.toLowerCase()) return false;
-          if (where.deletedAt === null && item.deletedAt !== null) return false;
-          return true;
-        });
-        return u ? { ...u } : null;
-      }),
-      findMany: vi.fn(async ({ where }: { where: any }) => {
-        return users
-          .filter((item) => {
+      findFirst: vi.fn(
+        async ({
+          where,
+        }: {
+          where: { id?: string; username?: string; deletedAt?: null | Date };
+        }) => {
+          const u = users.find((item) => {
+            if (where.id && item.id !== where.id) return false;
+            if (where.username && item.username.toLowerCase() !== where.username.toLowerCase())
+              return false;
             if (where.deletedAt === null && item.deletedAt !== null) return false;
-            if (where.businessId && item.businessId !== where.businessId) return false;
-            if (where.role && item.role !== where.role) return false;
-            if (where.isActive !== undefined && item.isActive !== where.isActive) return false;
             return true;
-          })
-          .map((u) => {
-            const { passwordHash: _, ...safe } = u;
-            return {
-              ...safe,
-              business: u.businessId ? { id: u.businessId, code: 'BIZ', name: 'Biz' } : null,
-            };
           });
-      }),
-      create: vi.fn(async ({ data }: { data: any }) => {
-        const item: MockUser = {
-          id: `usr_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-          ...data,
-          telegramChatId: null,
-          telegramLinkedAt: null,
-          telegramBlocked: false,
-          lastLoginAt: null,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          deletedAt: null,
-        };
-        users.push(item);
-        const { passwordHash: _, ...safe } = item;
-        return { ...safe };
-      }),
-      update: vi.fn(async ({ where, data }: { where: any; data: any }) => {
-        const u = users.find((item) => item.id === where.id);
-        if (!u) throw new Error('User not found');
-        Object.assign(u, data, { updatedAt: new Date() });
-        const { passwordHash: _, ...safe } = u;
-        return { ...safe };
-      }),
+          return u ? { ...u } : null;
+        }
+      ),
+      findMany: vi.fn(
+        async ({
+          where,
+        }: {
+          where: {
+            deletedAt?: null | Date;
+            businessId?: string;
+            role?: Role;
+            isActive?: boolean;
+          };
+        }) => {
+          return users
+            .filter((item) => {
+              if (where.deletedAt === null && item.deletedAt !== null) return false;
+              if (where.businessId && item.businessId !== where.businessId) return false;
+              if (where.role && item.role !== where.role) return false;
+              if (where.isActive !== undefined && item.isActive !== where.isActive) return false;
+              return true;
+            })
+            .map((u) => ({
+              ...omitPasswordHash(u),
+              business: u.businessId ? { id: u.businessId, code: 'BIZ', name: 'Biz' } : null,
+            }));
+        }
+      ),
+      create: vi.fn(
+        async ({
+          data,
+        }: {
+          data: Omit<
+            MockUser,
+            | 'id'
+            | 'telegramChatId'
+            | 'telegramLinkedAt'
+            | 'telegramBlocked'
+            | 'lastLoginAt'
+            | 'createdAt'
+            | 'updatedAt'
+            | 'deletedAt'
+          >;
+        }) => {
+          const item: MockUser = {
+            id: `usr_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+            ...data,
+            telegramChatId: null,
+            telegramLinkedAt: null,
+            telegramBlocked: false,
+            lastLoginAt: null,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            deletedAt: null,
+          };
+          users.push(item);
+          return omitPasswordHash(item);
+        }
+      ),
+      update: vi.fn(
+        async ({
+          where,
+          data,
+        }: {
+          where: { id: string };
+          data: Partial<MockUser>;
+        }) => {
+          const u = users.find((item) => item.id === where.id);
+          if (!u) throw new Error('User not found');
+          Object.assign(u, data, { updatedAt: new Date() });
+          return omitPasswordHash(u);
+        }
+      ),
     },
     business: {
-      findFirst: vi.fn(async ({ where }: { where: any }) => {
+      findFirst: vi.fn(async ({ where }: { where: { id?: string } }) => {
         if (where.id === 'biz_invalid') return null;
         return {
           id: where.id || 'biz_1',
@@ -159,41 +201,63 @@ vi.mock('@/lib/db', () => ({
       }),
     },
     session: {
-      updateMany: vi.fn(async ({ where, data }: { where: any; data: any }) => {
-        let count = 0;
-        for (const s of sessions) {
-          if (where.userId && s.userId !== where.userId) continue;
-          if (where.revokedAt === null && s.revokedAt !== null) continue;
-          Object.assign(s, data);
-          count++;
+      updateMany: vi.fn(
+        async ({
+          where,
+          data,
+        }: {
+          where: { userId?: string; revokedAt?: null | Date };
+          data: Partial<MockSession>;
+        }) => {
+          let count = 0;
+          for (const s of sessions) {
+            if (where.userId && s.userId !== where.userId) continue;
+            if (where.revokedAt === null && s.revokedAt !== null) continue;
+            Object.assign(s, data);
+            count++;
+          }
+          return { count };
         }
-        return { count };
-      }),
+      ),
     },
     telegramLinkCode: {
-      updateMany: vi.fn(async ({ where, data }: { where: any; data: any }) => {
-        let count = 0;
-        for (const code of linkCodes) {
-          if (where.userId && code.userId !== where.userId) continue;
-          if (where.usedAt === null && code.usedAt !== null) continue;
-          Object.assign(code, data);
-          count++;
+      updateMany: vi.fn(
+        async ({
+          where,
+          data,
+        }: {
+          where: { userId?: string; usedAt?: null | Date };
+          data: Partial<MockTelegramLinkCode>;
+        }) => {
+          let count = 0;
+          for (const code of linkCodes) {
+            if (where.userId && code.userId !== where.userId) continue;
+            if (where.usedAt === null && code.usedAt !== null) continue;
+            Object.assign(code, data);
+            count++;
+          }
+          return { count };
         }
-        return { count };
-      }),
-      create: vi.fn(async ({ data }: { data: any }) => {
-        const item: MockTelegramLinkCode = {
-          id: `tlc_${Date.now()}`,
-          ...data,
-          usedAt: null,
-          createdAt: new Date(),
-        };
-        linkCodes.push(item);
-        return { ...item };
-      }),
+      ),
+      create: vi.fn(
+        async ({
+          data,
+        }: {
+          data: Omit<MockTelegramLinkCode, 'id' | 'usedAt' | 'createdAt'>;
+        }) => {
+          const item: MockTelegramLinkCode = {
+            id: `tlc_${Date.now()}`,
+            ...data,
+            usedAt: null,
+            createdAt: new Date(),
+          };
+          linkCodes.push(item);
+          return { ...item };
+        }
+      ),
     },
     auditLog: {
-      create: vi.fn(async ({ data }: { data: any }) => {
+      create: vi.fn(async ({ data }: { data: Omit<MockAuditLog, 'id'> }) => {
         const log: MockAuditLog = {
           id: `audit_${Date.now()}`,
           ...data,
@@ -202,7 +266,7 @@ vi.mock('@/lib/db', () => ({
         return log;
       }),
     },
-    $transaction: vi.fn(async (cb: any) => {
+    $transaction: vi.fn(async (cb: (tx: unknown) => Promise<unknown>) => {
       const { prisma } = await import('@/lib/db');
       return cb(prisma);
     }),
@@ -212,10 +276,9 @@ vi.mock('@/lib/db', () => ({
 describe('Manajemen Pengguna Sales, Status Akun & Telegram Linking (T1.4)', () => {
   const APP_URL = 'http://localhost:3000';
 
-  const superAdminCtx = {
+  const superAdminCtx: contextModule.Ctx = {
     user: {
       id: 'super_admin_id',
-      username: 'owner',
       role: Role.SUPERADMIN,
       name: 'Owner BentoCat',
       businessId: null,
@@ -233,9 +296,7 @@ describe('Manajemen Pengguna Sales, Status Akun & Telegram Linking (T1.4)', () =
     auditLogs = [];
     vi.clearAllMocks();
 
-    vi.spyOn(contextModule, 'requireContext').mockResolvedValue(
-      superAdminCtx as any
-    );
+    vi.spyOn(contextModule, 'requireContext').mockResolvedValue(superAdminCtx);
 
     // Initial super admin
     users.push({

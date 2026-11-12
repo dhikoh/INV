@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { suggestInterval, daysUntil, wibDayIndex } from '@/lib/domain/reminder';
+import { suggestInterval, daysUntil } from '@/lib/domain/reminder';
 
 describe('Domain: reminder.ts (13.1, 17.2)', () => {
   it('suggestInterval mengambil median dari 4 selisih terakhir', () => {

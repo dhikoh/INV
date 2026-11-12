@@ -35,6 +35,7 @@ import { formatRupiah } from '@/lib/domain/money';
 import { buildWaUrl } from '@/lib/domain/whatsapp';
 import { MoneyInput } from '@/components/ui/MoneyInput';
 import { PercentInput } from '@/components/ui/PercentInput';
+import { formatDateId } from '@/lib/format/date';
 
 export type PipelineStage = 'LEAD' | 'PROSPECT' | 'DEAL' | 'REPEAT' | 'LOST';
 export type InteractionType = 'CALL' | 'VISIT' | 'WHATSAPP' | 'EMAIL' | 'OTHER';
@@ -1964,11 +1965,7 @@ export default function CustomerDetailPage() {
                       .map((tp) => (
                         <tr key={tp.orderItemId} className="hover:bg-slate-50/70">
                           <td className="py-2.5 pr-3 whitespace-nowrap text-slate-600">
-                            {new Date(tp.orderDate).toLocaleDateString('id-ID', {
-                              day: '2-digit',
-                              month: 'short',
-                              year: 'numeric',
-                            })}
+                            {formatDateId(tp.orderDate, 'shortPad')}
                           </td>
                           <td className="py-2.5 px-3 whitespace-nowrap">
                             <Link

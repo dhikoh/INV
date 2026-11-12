@@ -6,6 +6,7 @@ import {
   shipOrderStock,
   adjustStock,
   opnameStock,
+  type Tx,
 } from '@/lib/services/stock';
 import { StockMoveType } from '@prisma/client';
 import { DomainError } from '@/lib/domain/money';
@@ -55,9 +56,6 @@ let products: MockProduct[] = [];
 let orders: MockOrder[] = [];
 let stockMovements: MockStockMovement[] = [];
 let auditLogs: MockAuditLog[] = [];
-
-// Semaphore sederhana untuk simulasi kunci FOR UPDATE pada pengujian paralel
-let lockedIds = new Set<string>();
 
 const mockPrisma = {
   $queryRaw: vi.fn(async () => {
@@ -158,13 +156,14 @@ vi.mock('@/lib/db', () => ({
   prisma: mockPrisma,
 }));
 
+const tx = mockPrisma as unknown as Tx;
+
 describe('Manajemen Stok & Mutasi: stock.ts (Seksi 7.9 & Tes 17.3 nomor 7)', () => {
   const businessId = 'biz_stk_test';
   const adminId = 'user_admin_stk';
   const productId = 'prod_stk_01';
 
   beforeEach(() => {
-    lockedIds = new Set<string>();
     stockMovements = [];
     auditLogs = [];
 
@@ -198,7 +197,7 @@ describe('Manajemen Stok & Mutasi: stock.ts (Seksi 7.9 & Tes 17.3 nomor 7)', () 
   });
 
   it('moveStock mengubah stok fisik dan mencatat entri StockMovement', async () => {
-    const balance = await moveStock(mockPrisma as any, {
+    const balance = await moveStock(tx, {
       businessId,
       productId,
       type: StockMoveType.PO_RECEIPT,
@@ -221,7 +220,7 @@ describe('Manajemen Stok & Mutasi: stock.ts (Seksi 7.9 & Tes 17.3 nomor 7)', () 
 
   it('adjustStock menolak alasan kurang dari 5 karakter dan berhasil mencatat penyesuaian', async () => {
     await expect(
-      adjustStock(mockPrisma as any, {
+      adjustStock(tx, {
         businessId,
         productId,
         qtyDelta: -2,
@@ -230,7 +229,7 @@ describe('Manajemen Stok & Mutasi: stock.ts (Seksi 7.9 & Tes 17.3 nomor 7)', () 
       })
     ).rejects.toThrowError(DomainError);
 
-    const newBal = await adjustStock(mockPrisma as any, {
+    const newBal = await adjustStock(tx, {
       businessId,
       productId,
       qtyDelta: -2,
@@ -250,7 +249,7 @@ describe('Manajemen Stok & Mutasi: stock.ts (Seksi 7.9 & Tes 17.3 nomor 7)', () 
   });
 
   it('opnameStock menyesuaikan stok fisik sesuai hitungan riil', async () => {
-    const newBal = await opnameStock(mockPrisma as any, {
+    const newBal = await opnameStock(tx, {
       businessId,
       productId,
       countedQty: 14,
@@ -274,7 +273,7 @@ describe('Manajemen Stok & Mutasi: stock.ts (Seksi 7.9 & Tes 17.3 nomor 7)', () 
 
     // 1. Pesan 6 unit (stok 10, tersedia 10) -> Berhasil
     await reserveOrderStock(
-      mockPrisma as any,
+      tx,
       order,
       [{ productId, qty: 6 }],
       false // allowNegative = false
@@ -289,7 +288,7 @@ describe('Manajemen Stok & Mutasi: stock.ts (Seksi 7.9 & Tes 17.3 nomor 7)', () 
     const order2 = orders[1];
     await expect(
       reserveOrderStock(
-        mockPrisma as any,
+        tx,
         order2,
         [{ productId, qty: 5 }],
         false
@@ -298,7 +297,7 @@ describe('Manajemen Stok & Mutasi: stock.ts (Seksi 7.9 & Tes 17.3 nomor 7)', () 
 
     // 3. Order kedua dengan allowNegative=true -> Lolos, available menjadi minus
     await reserveOrderStock(
-      mockPrisma as any,
+      tx,
       order2,
       [{ productId, qty: 5 }],
       true // allowNegative = true
@@ -343,7 +342,7 @@ describe('Manajemen Stok & Mutasi: stock.ts (Seksi 7.9 & Tes 17.3 nomor 7)', () 
     const results = await Promise.allSettled([
       runInSerialTx(() =>
         reserveOrderStock(
-          mockPrisma as any,
+          tx,
           ordA,
           [{ productId: contestedProdId, qty: 5 }],
           false
@@ -351,7 +350,7 @@ describe('Manajemen Stok & Mutasi: stock.ts (Seksi 7.9 & Tes 17.3 nomor 7)', () 
       ),
       runInSerialTx(() =>
         reserveOrderStock(
-          mockPrisma as any,
+          tx,
           ordB,
           [{ productId: contestedProdId, qty: 5 }],
           false
@@ -379,19 +378,19 @@ describe('Manajemen Stok & Mutasi: stock.ts (Seksi 7.9 & Tes 17.3 nomor 7)', () 
     const order = orders[0];
 
     // 1. Reservasi 4 unit
-    await reserveOrderStock(mockPrisma as any, order, [{ productId, qty: 4 }], false);
+    await reserveOrderStock(tx, order, [{ productId, qty: 4 }], false);
     let prod = products.find((p) => p.id === productId);
     expect(prod?.reservedQty).toBe(4);
 
     // 2. Release reservasi (misal order dibatalkan sebelum dikirim)
-    await releaseOrderStock(mockPrisma as any, { ...order, stockReserved: true }, [{ productId, qty: 4 }]);
+    await releaseOrderStock(tx, { ...order, stockReserved: true }, [{ productId, qty: 4 }]);
     prod = products.find((p) => p.id === productId);
     expect(prod?.reservedQty).toBe(0);
 
     // 3. Reservasi ulang dan lakukan pengiriman (shipOrderStock)
-    await reserveOrderStock(mockPrisma as any, order, [{ productId, qty: 3 }], false);
+    await reserveOrderStock(tx, order, [{ productId, qty: 3 }], false);
     await shipOrderStock(
-      mockPrisma as any,
+      tx,
       { ...order, stockReserved: true },
       [{ productId, qty: 3 }],
       adminId

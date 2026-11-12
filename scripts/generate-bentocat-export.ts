@@ -1306,7 +1306,10 @@ async function main() {
     Product: products,
     ProductImage: [],
     PriceHistory: priceHistories,
-    Customer: customers.map(({ intervalDays, ...rest }) => rest),
+    Customer: customers.map(({ intervalDays, ...rest }) => {
+      void intervalDays;
+      return rest;
+    }),
     CustomerMinPrice: customerMinPrices,
     CustomerPromo: [],
     CrmInteraction: [],

@@ -139,26 +139,16 @@ import { GET as getAuditLogsHandler } from '@/app/api/v1/audit-logs/route';
 describe('Matriks Hak Akses Berbasis Tabel (Seksi 5.1 & 17.4 b)', () => {
   const APP_URL = 'http://localhost:3000';
 
-  const salesContext = {
-    user: {
-      id: 'sales_user_1',
-      role: Role.SALES,
-      name: 'Sales Lapangan',
-      businessId: 'biz_1',
-    },
-    sessionId: 'sess_sales_1',
-    role: Role.SALES,
-    businessId: 'biz_1',
-    ip: '127.0.0.1',
-  };
-
   interface PermissionTestCase {
     name: string;
     method: string;
     path: string;
-    handler: (req: NextRequest, route?: any) => Promise<NextResponse>;
-    params?: any;
-    body?: any;
+    handler: (
+      req: NextRequest,
+      route: { params: Promise<Record<string, string>> }
+    ) => Promise<NextResponse>;
+    params?: Record<string, string>;
+    body?: Record<string, unknown>;
   }
 
   const superAdminOnlyCases: PermissionTestCase[] = [
@@ -679,7 +669,8 @@ describe('Matriks Hak Akses Berbasis Tabel (Seksi 5.1 & 17.4 b)', () => {
       name: 'GET /api/v1/businesses/:id/invoice-preview',
       method: 'GET',
       path: '/api/v1/businesses/biz_1/invoice-preview',
-      handler: (req, r) => getInvoicePreviewHandler(req, r),
+      handler: (req, r) =>
+        getInvoicePreviewHandler(req, r as { params: Promise<{ id: string }> }),
       params: { id: 'biz_1' },
     },
     {
@@ -837,7 +828,7 @@ describe('Matriks Hak Akses Berbasis Tabel (Seksi 5.1 & 17.4 b)', () => {
           isActive: true,
           mustChangePassword: false,
           deletedAt: null,
-        } as any,
+        } as never,
       });
 
       const req = new NextRequest(`${APP_URL}${tc.path}`, {

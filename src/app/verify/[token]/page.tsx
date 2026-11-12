@@ -1,5 +1,6 @@
 import { resolvePublicVerifyDocument, PublicAuthenticityStatus, PublicDocumentType } from '@/lib/services/verify';
 import { formatRupiah } from '@/lib/domain/money';
+import { formatDateId } from '@/lib/format/date';
 
 export const dynamic = 'force-dynamic';
 
@@ -72,14 +73,6 @@ function getStatusBanner(status: PublicAuthenticityStatus) {
         pillText: 'VOID / BATAL',
       };
   }
-}
-
-function formatDateId(iso: string): string {
-  return new Date(iso).toLocaleDateString('id-ID', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  });
 }
 
 export default async function PublicVerifyPage({
@@ -172,8 +165,8 @@ export default async function PublicVerifyPage({
             <div>
               <p className="text-xs text-slate-500 font-medium">Tanggal Dokumen</p>
               <p className="font-semibold text-slate-800 mt-0.5">
-                {formatDateId(doc.issueDate)}
-                {doc.dueDate ? ` • Jatuh Tempo: ${formatDateId(doc.dueDate)}` : ''}
+                {formatDateId(doc.issueDate, 'long')}
+                {doc.dueDate ? ` • Jatuh Tempo: ${formatDateId(doc.dueDate, 'long')}` : ''}
               </p>
             </div>
           </div>
@@ -255,7 +248,7 @@ export default async function PublicVerifyPage({
                         {p.receiptNo || 'Kwitansi Terverifikasi'}
                       </span>
                       <span className="text-slate-500 ml-2">
-                        {formatDateId(p.paidAt)} • {METHOD_LABELS[p.method] ?? p.method}
+                        {formatDateId(p.paidAt, 'long')} • {METHOD_LABELS[p.method] ?? p.method}
                       </span>
                     </div>
                     <span className="font-mono font-bold text-emerald-700">

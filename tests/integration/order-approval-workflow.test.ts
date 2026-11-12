@@ -16,7 +16,6 @@ import {
   DiscountSource,
   DiscountType,
 } from '@prisma/client';
-import { DomainError } from '@/lib/domain/money';
 import * as contextModule from '@/lib/auth/context';
 import type { Ctx } from '@/lib/auth/context';
 

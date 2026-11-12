@@ -10,22 +10,14 @@ import {
   DELETE as deleteProductHandler,
 } from '@/app/api/v1/products/[id]/route';
 import { POST as uploadImagesHandler } from '@/app/api/v1/products/[id]/images/route';
-import {
-  PATCH as updateImageHandler,
-  DELETE as deleteImageHandler,
-} from '@/app/api/v1/products/[id]/images/[imageId]/route';
-import { GET as getPriceHistoryHandler } from '@/app/api/v1/products/[id]/price-history/route';
+import { PATCH as updateImageHandler } from '@/app/api/v1/products/[id]/images/[imageId]/route';
 import {
   GET as getCategoriesHandler,
   POST as createCategoryHandler,
 } from '@/app/api/v1/categories/route';
-import {
-  GET as getCategoryDetailHandler,
-  PATCH as updateCategoryHandler,
-  DELETE as deleteCategoryHandler,
-} from '@/app/api/v1/categories/[id]/route';
 import { Role, PriceField } from '@prisma/client';
 import * as contextModule from '@/lib/auth/context';
+import type { Ctx } from '@/lib/auth/context';
 import { assertNoSecretKeys } from '../helpers/leak';
 
 interface MockProduct {
@@ -96,13 +88,30 @@ let priceHistories: MockPriceHistory[] = [];
 let categories: MockCategory[] = [];
 let auditLogs: MockAuditLog[] = [];
 
+interface ProductWhere {
+  id?: string | { not?: string };
+  businessId?: string;
+  sku?: string;
+  categoryId?: string;
+  deletedAt?: null;
+  isActive?: boolean;
+  OR?: Array<{ name: { contains: string } }>;
+}
+
+interface CategoryWhere {
+  id?: string | { not?: string };
+  businessId?: string;
+  name?: { equals?: string };
+  deletedAt?: null;
+}
+
 vi.mock('@/lib/db', () => ({
   prisma: {
     product: {
-      findFirst: vi.fn(async ({ where }: { where: any }) => {
+      findFirst: vi.fn(async ({ where }: { where: ProductWhere }) => {
         const p = products.find((item) => {
           if (where.id && typeof where.id === 'string' && item.id !== where.id) return false;
-          if (where.id?.not && item.id === where.id.not) return false;
+          if (typeof where.id === 'object' && where.id.not && item.id === where.id.not) return false;
           if (where.businessId && item.businessId !== where.businessId) return false;
           if (where.sku && item.sku !== where.sku) return false;
           if (where.deletedAt === null && item.deletedAt !== null) return false;
@@ -119,7 +128,7 @@ vi.mock('@/lib/db', () => ({
             .sort((a, b) => (b.isPrimary ? 1 : 0) - (a.isPrimary ? 1 : 0) || a.sortOrder - b.sortOrder),
         };
       }),
-      findMany: vi.fn(async ({ where }: { where: any }) => {
+      findMany: vi.fn(async ({ where }: { where: ProductWhere }) => {
         return products
           .filter((item) => {
             if (where.businessId && item.businessId !== where.businessId) return false;
@@ -141,7 +150,7 @@ vi.mock('@/lib/db', () => ({
             images: productImages.filter((img) => img.productId === p.id),
           }));
       }),
-      create: vi.fn(async ({ data }: { data: any }) => {
+      create: vi.fn(async ({ data }: { data: Omit<MockProduct, 'id' | 'createdAt' | 'updatedAt' | 'deletedAt'> }) => {
         const item: MockProduct = {
           id: `prod_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
           ...data,
@@ -157,10 +166,10 @@ vi.mock('@/lib/db', () => ({
           images: [],
         };
       }),
-      update: vi.fn(async ({ where, data }: { where: any; data: any }) => {
+      update: vi.fn(async ({ where, data }: { where: { id: string }; data: Partial<MockProduct> }) => {
         const p = products.find((item) => item.id === where.id);
         if (!p) throw new Error('Product not found');
-        const cleanData: Record<string, any> = {};
+        const cleanData: Record<string, unknown> = {};
         for (const [key, val] of Object.entries(data)) {
           if (val !== undefined) cleanData[key] = val;
         }
@@ -174,11 +183,11 @@ vi.mock('@/lib/db', () => ({
       }),
     },
     category: {
-      findFirst: vi.fn(async ({ where }: { where: any }) => {
+      findFirst: vi.fn(async ({ where }: { where: CategoryWhere }) => {
         return (
           categories.find((c) => {
             if (where.id && typeof where.id === 'string' && c.id !== where.id) return false;
-            if (where.id?.not && c.id === where.id.not) return false;
+            if (typeof where.id === 'object' && where.id.not && c.id === where.id.not) return false;
             if (where.businessId && c.businessId !== where.businessId) return false;
             if (where.name?.equals && c.name.toLowerCase() !== where.name.equals.toLowerCase()) return false;
             if (where.deletedAt === null && c.deletedAt !== null) return false;
@@ -186,7 +195,7 @@ vi.mock('@/lib/db', () => ({
           }) || null
         );
       }),
-      findMany: vi.fn(async ({ where }: { where: any }) => {
+      findMany: vi.fn(async ({ where }: { where?: CategoryWhere }) => {
         return categories
           .filter((c) => {
             if (where?.businessId && c.businessId !== where.businessId) return false;
@@ -202,7 +211,7 @@ vi.mock('@/lib/db', () => ({
             },
           }));
       }),
-      create: vi.fn(async ({ data }: { data: any }) => {
+      create: vi.fn(async ({ data }: { data: Omit<MockCategory, 'id' | 'deletedAt'> }) => {
         const item: MockCategory = {
           id: `cat_${Date.now()}`,
           ...data,
@@ -211,10 +220,10 @@ vi.mock('@/lib/db', () => ({
         categories.push(item);
         return { ...item };
       }),
-      update: vi.fn(async ({ where, data }: { where: any; data: any }) => {
+      update: vi.fn(async ({ where, data }: { where: { id: string }; data: Partial<MockCategory> }) => {
         const c = categories.find((item) => item.id === where.id);
         if (!c) throw new Error('Category not found');
-        const cleanData: Record<string, any> = {};
+        const cleanData: Record<string, unknown> = {};
         for (const [key, val] of Object.entries(data)) {
           if (val !== undefined) cleanData[key] = val;
         }
@@ -223,7 +232,7 @@ vi.mock('@/lib/db', () => ({
       }),
     },
     productImage: {
-      findFirst: vi.fn(async ({ where }: { where: any }) => {
+      findFirst: vi.fn(async ({ where }: { where: { id?: string; productId?: string } }) => {
         return (
           productImages.find((img) => {
             if (where.id && img.id !== where.id) return false;
@@ -232,7 +241,7 @@ vi.mock('@/lib/db', () => ({
           }) || null
         );
       }),
-      create: vi.fn(async ({ data }: { data: any }) => {
+      create: vi.fn(async ({ data }: { data: Omit<MockProductImage, 'id'> }) => {
         const item: MockProductImage = {
           id: `img_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
           ...data,
@@ -240,13 +249,13 @@ vi.mock('@/lib/db', () => ({
         productImages.push(item);
         return { ...item };
       }),
-      update: vi.fn(async ({ where, data }: { where: any; data: any }) => {
+      update: vi.fn(async ({ where, data }: { where: { id: string }; data: Partial<MockProductImage> }) => {
         const img = productImages.find((item) => item.id === where.id);
         if (!img) throw new Error('Image not found');
         Object.assign(img, data);
         return { ...img };
       }),
-      updateMany: vi.fn(async ({ where, data }: { where: any; data: any }) => {
+      updateMany: vi.fn(async ({ where, data }: { where: { productId?: string; id?: { not?: string }; isPrimary?: boolean }; data: Partial<MockProductImage> }) => {
         let count = 0;
         for (const img of productImages) {
           if (where.productId && img.productId !== where.productId) continue;
@@ -257,7 +266,7 @@ vi.mock('@/lib/db', () => ({
         }
         return { count };
       }),
-      delete: vi.fn(async ({ where }: { where: any }) => {
+      delete: vi.fn(async ({ where }: { where: { id: string } }) => {
         const idx = productImages.findIndex((img) => img.id === where.id);
         if (idx !== -1) {
           const removed = productImages.splice(idx, 1)[0];
@@ -267,7 +276,7 @@ vi.mock('@/lib/db', () => ({
       }),
     },
     priceHistory: {
-      create: vi.fn(async ({ data }: { data: any }) => {
+      create: vi.fn(async ({ data }: { data: Omit<MockPriceHistory, 'id' | 'createdAt'> }) => {
         const item: MockPriceHistory = {
           id: `ph_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
           ...data,
@@ -276,7 +285,7 @@ vi.mock('@/lib/db', () => ({
         priceHistories.push(item);
         return item;
       }),
-      createMany: vi.fn(async ({ data }: { data: any[] }) => {
+      createMany: vi.fn(async ({ data }: { data: Array<Omit<MockPriceHistory, 'id' | 'createdAt'>> }) => {
         for (const d of data) {
           priceHistories.push({
             id: `ph_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
@@ -286,7 +295,7 @@ vi.mock('@/lib/db', () => ({
         }
         return { count: data.length };
       }),
-      findMany: vi.fn(async ({ where }: { where: any }) => {
+      findMany: vi.fn(async ({ where }: { where: { productId?: string; businessId?: string } }) => {
         return priceHistories.filter((h) => {
           if (where.productId && h.productId !== where.productId) return false;
           if (where.businessId && h.businessId !== where.businessId) return false;
@@ -298,7 +307,7 @@ vi.mock('@/lib/db', () => ({
       findFirst: vi.fn(async () => null),
     },
     auditLog: {
-      create: vi.fn(async ({ data }: { data: any }) => {
+      create: vi.fn(async ({ data }: { data: Omit<MockAuditLog, 'id'> }) => {
         const item: MockAuditLog = {
           id: `audit_${Date.now()}`,
           ...data,
@@ -307,17 +316,19 @@ vi.mock('@/lib/db', () => ({
         return item;
       }),
     },
-    $transaction: vi.fn(async (cb: any) => {
+    $transaction: vi.fn(async <T>(cb: (tx: unknown) => Promise<T>) => {
       const { prisma } = await import('@/lib/db');
       return cb(prisma);
     }),
   },
 }));
 
+type MockCtx = Ctx & { user: Ctx['user'] & { username: string } };
+
 describe('Katalog Produk & Kategori (T1.5 & Seksi 10.3)', () => {
   const APP_URL = 'http://localhost:3000';
 
-  const superAdminCtx = {
+  const superAdminCtx: MockCtx = {
     user: {
       id: 'super_admin_id',
       username: 'owner',
@@ -331,7 +342,7 @@ describe('Katalog Produk & Kategori (T1.5 & Seksi 10.3)', () => {
     ip: '127.0.0.1',
   };
 
-  const salesCtx = {
+  const salesCtx: MockCtx = {
     user: {
       id: 'sales_user_id',
       username: 'salesbudi',
@@ -354,7 +365,7 @@ describe('Katalog Produk & Kategori (T1.5 & Seksi 10.3)', () => {
     vi.clearAllMocks();
 
     vi.spyOn(contextModule, 'requireContext').mockResolvedValue(
-      superAdminCtx as any
+      superAdminCtx
     );
   });
 
@@ -569,7 +580,7 @@ describe('Katalog Produk & Kategori (T1.5 & Seksi 10.3)', () => {
 
     it('MEMASTIKAN respons GET /api/v1/products untuk Sales TIDAK membocorkan HPP/margin', async () => {
       vi.spyOn(contextModule, 'requireContext').mockResolvedValueOnce(
-        salesCtx as any
+        salesCtx
       );
 
       const req = new NextRequest(`${APP_URL}/api/v1/products`);
@@ -595,7 +606,7 @@ describe('Katalog Produk & Kategori (T1.5 & Seksi 10.3)', () => {
 
     it('MEMASTIKAN respons GET /api/v1/products/:id untuk Sales TIDAK membocorkan HPP/margin', async () => {
       vi.spyOn(contextModule, 'requireContext').mockResolvedValueOnce(
-        salesCtx as any
+        salesCtx
       );
 
       const req = new NextRequest(`${APP_URL}/api/v1/products/prod_leak_check`);

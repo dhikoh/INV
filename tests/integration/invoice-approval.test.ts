@@ -14,7 +14,6 @@ import {
   DiscountSource,
   DiscountType,
 } from '@prisma/client';
-import { DomainError } from '@/lib/domain/money';
 import { assertNoSecretKeys } from '../helpers/leak';
 import * as contextModule from '@/lib/auth/context';
 import type { Ctx } from '@/lib/auth/context';
@@ -194,7 +193,7 @@ let orderItems: MockOrderItem[] = [];
 let invoices: MockInvoice[] = [];
 let auditLogs: MockAuditLog[] = [];
 let notifications: MockNotification[] = [];
-let counters: Map<string, number> = new Map();
+const counters: Map<string, number> = new Map();
 
 vi.mock('@/lib/db', () => {
   const mockPrisma = {
@@ -706,7 +705,7 @@ describe('T3.2: Persetujuan, Penolakan, dan Alokasi Nomor Faktur (Invoice Approv
 
   describe('1. invoiceService.approve & Alokasi Nomor Resmi (Seksi 7.8, 8.2)', () => {
     it('berhasil menyetujui invoice DP: alokasi nomor resmi, transisi AWAITING_DP, reservasi stok, snapshot', async () => {
-      const { order, invoice } = setupPendingOrder();
+      const { invoice } = setupPendingOrder();
       const tx = (await import('@/lib/db')).prisma as unknown as TxClient;
 
       const res = await approveInvoice(tx, superAdminCtx, invoice.id);
@@ -735,7 +734,7 @@ describe('T3.2: Persetujuan, Penolakan, dan Alokasi Nomor Faktur (Invoice Approv
     });
 
     it('berhasil menyetujui invoice FINAL (tanpa DP, dpBps = 0) -> order AWAITING_FINAL_PAYMENT & nomor -LNS', async () => {
-      const { order, invoice } = setupPendingOrder({ dpBps: 0, dpAmount: BigInt(0) });
+      const { invoice } = setupPendingOrder({ dpBps: 0, dpAmount: BigInt(0) });
       const tx = (await import('@/lib/db')).prisma as unknown as TxClient;
 
       const res = await approveInvoice(tx, superAdminCtx, invoice.id);
@@ -814,7 +813,7 @@ describe('T3.2: Persetujuan, Penolakan, dan Alokasi Nomor Faktur (Invoice Approv
     });
 
     it('berhasil jika hasBelowMin = true dan overrideNote >= 5 karakter', async () => {
-      const { order, invoice } = setupPendingOrder({
+      const { invoice } = setupPendingOrder({
         hasBelowMin: true,
         belowMinReason: 'Diskon pembukaan cabang baru',
       });

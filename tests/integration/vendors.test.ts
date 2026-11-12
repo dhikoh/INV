@@ -47,77 +47,114 @@ let auditLogs: MockAuditLog[] = [];
 vi.mock('@/lib/db', () => ({
   prisma: {
     vendor: {
-      findFirst: vi.fn(async ({ where }: { where: any }) => {
-        return (
-          vendors.find((v) => {
-            if (where.id && typeof where.id === 'string' && v.id !== where.id) return false;
-            if (where.id?.not && v.id === where.id.not) return false;
-            if (where.businessId && v.businessId !== where.businessId) return false;
-            if (where.code && v.code !== where.code) return false;
-            if (where.deletedAt === null && v.deletedAt !== null) return false;
-            return true;
-          }) || null
-        );
-      }),
-      findMany: vi.fn(async ({ where }: { where: any }) => {
-        return vendors
-          .filter((v) => {
-            if (where.businessId && v.businessId !== where.businessId) return false;
-            if (where.deletedAt === null && v.deletedAt !== null) return false;
-            if (where.kind && v.kind !== where.kind) return false;
-            if (where.OR) {
-              const q = where.OR[0].code.contains.toLowerCase();
-              const mCode = v.code.toLowerCase().includes(q);
-              const mName = v.name.toLowerCase().includes(q);
-              const mPic = v.picName ? v.picName.toLowerCase().includes(q) : false;
-              if (!mCode && !mName && !mPic) return false;
-            }
-            return true;
-          })
-          .map((v) => ({
+      findFirst: vi.fn(
+        async ({
+          where,
+        }: {
+          where: {
+            id?: string | { not?: string };
+            businessId?: string;
+            code?: string;
+            deletedAt?: null | Date;
+          };
+        }) => {
+          return (
+            vendors.find((v) => {
+              if (where.id && typeof where.id === 'string' && v.id !== where.id) return false;
+              if (where.id && typeof where.id === 'object' && where.id.not && v.id === where.id.not)
+                return false;
+              if (where.businessId && v.businessId !== where.businessId) return false;
+              if (where.code && v.code !== where.code) return false;
+              if (where.deletedAt === null && v.deletedAt !== null) return false;
+              return true;
+            }) || null
+          );
+        }
+      ),
+      findMany: vi.fn(
+        async ({
+          where,
+        }: {
+          where: {
+            businessId?: string;
+            deletedAt?: null | Date;
+            kind?: VendorKind;
+            OR?: Array<{ code: { contains: string } }>;
+          };
+        }) => {
+          return vendors
+            .filter((v) => {
+              if (where.businessId && v.businessId !== where.businessId) return false;
+              if (where.deletedAt === null && v.deletedAt !== null) return false;
+              if (where.kind && v.kind !== where.kind) return false;
+              if (where.OR) {
+                const q = where.OR[0].code.contains.toLowerCase();
+                const mCode = v.code.toLowerCase().includes(q);
+                const mName = v.name.toLowerCase().includes(q);
+                const mPic = v.picName ? v.picName.toLowerCase().includes(q) : false;
+                if (!mCode && !mName && !mPic) return false;
+              }
+              return true;
+            })
+            .map((v) => ({
+              ...v,
+              _count: {
+                products: 0,
+                purchaseOrders: 0,
+              },
+            }));
+        }
+      ),
+      create: vi.fn(
+        async ({
+          data,
+        }: {
+          data: Omit<MockVendor, 'id' | 'createdAt' | 'updatedAt' | 'deletedAt'>;
+        }) => {
+          const item: MockVendor = {
+            id: `vnd_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+            ...data,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            deletedAt: null,
+          };
+          vendors.push(item);
+          return {
+            ...item,
+            _count: {
+              products: 0,
+              purchaseOrders: 0,
+            },
+          };
+        }
+      ),
+      update: vi.fn(
+        async ({
+          where,
+          data,
+        }: {
+          where: { id: string };
+          data: Partial<MockVendor>;
+        }) => {
+          const v = vendors.find((item) => item.id === where.id);
+          if (!v) throw new Error('Vendor not found');
+          const cleanData: Record<string, unknown> = {};
+          for (const [key, val] of Object.entries(data)) {
+            if (val !== undefined) cleanData[key] = val;
+          }
+          Object.assign(v, cleanData, { updatedAt: new Date() });
+          return {
             ...v,
             _count: {
               products: 0,
               purchaseOrders: 0,
             },
-          }));
-      }),
-      create: vi.fn(async ({ data }: { data: any }) => {
-        const item: MockVendor = {
-          id: `vnd_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-          ...data,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          deletedAt: null,
-        };
-        vendors.push(item);
-        return {
-          ...item,
-          _count: {
-            products: 0,
-            purchaseOrders: 0,
-          },
-        };
-      }),
-      update: vi.fn(async ({ where, data }: { where: any; data: any }) => {
-        const v = vendors.find((item) => item.id === where.id);
-        if (!v) throw new Error('Vendor not found');
-        const cleanData: Record<string, any> = {};
-        for (const [key, val] of Object.entries(data)) {
-          if (val !== undefined) cleanData[key] = val;
+          };
         }
-        Object.assign(v, cleanData, { updatedAt: new Date() });
-        return {
-          ...v,
-          _count: {
-            products: 0,
-            purchaseOrders: 0,
-          },
-        };
-      }),
+      ),
     },
     auditLog: {
-      create: vi.fn(async ({ data }: { data: any }) => {
+      create: vi.fn(async ({ data }: { data: Omit<MockAuditLog, 'id'> }) => {
         const item: MockAuditLog = {
           id: `audit_${Date.now()}`,
           ...data,
@@ -126,7 +163,7 @@ vi.mock('@/lib/db', () => ({
         return item;
       }),
     },
-    $transaction: vi.fn(async (cb: any) => {
+    $transaction: vi.fn(async (cb: (tx: unknown) => Promise<unknown>) => {
       const { prisma } = await import('@/lib/db');
       return cb(prisma);
     }),
@@ -136,10 +173,9 @@ vi.mock('@/lib/db', () => ({
 describe('Master Vendor & Supplier (T1.7)', () => {
   const APP_URL = 'http://localhost:3000';
 
-  const superAdminCtx = {
+  const superAdminCtx: contextModule.Ctx = {
     user: {
       id: 'super_admin_id',
-      username: 'owner',
       role: Role.SUPERADMIN,
       name: 'Super Administrator',
       businessId: null,
@@ -150,28 +186,12 @@ describe('Master Vendor & Supplier (T1.7)', () => {
     ip: '127.0.0.1',
   };
 
-  const salesCtx = {
-    user: {
-      id: 'sales_user_id',
-      username: 'salesbudi',
-      role: Role.SALES,
-      name: 'Sales Budi',
-      businessId: 'biz_1',
-    },
-    sessionId: 'sess_sales_1',
-    role: Role.SALES,
-    businessId: 'biz_1',
-    ip: '127.0.0.1',
-  };
-
   beforeEach(() => {
     vendors = [];
     auditLogs = [];
     vi.clearAllMocks();
 
-    vi.spyOn(contextModule, 'requireContext').mockResolvedValue(
-      superAdminCtx as any
-    );
+    vi.spyOn(contextModule, 'requireContext').mockResolvedValue(superAdminCtx);
   });
 
   describe('CRUD /api/v1/vendors', () => {
@@ -482,7 +502,7 @@ describe('Master Vendor & Supplier (T1.7)', () => {
           isActive: true,
           mustChangePassword: false,
           deletedAt: null,
-        } as any,
+        } as never,
       });
 
       const req = new NextRequest(`${APP_URL}/api/v1/vendors`, {

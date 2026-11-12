@@ -10,15 +10,19 @@ describe('T4.6: Integrasi PWA, Header SW, dan Proteksi Data Offline (Seksi 15.3 
 
       if (typeof nextConfig.headers === 'function') {
         const headersList = await nextConfig.headers();
-        const swHeaderConfig = headersList.find((h: any) => h.source === '/sw.js');
+        const swHeaderConfig = headersList.find(
+          (h: { source: string; headers?: Array<{ key: string; value: string }> }) =>
+            h.source === '/sw.js'
+        );
 
         expect(swHeaderConfig).toBeDefined();
 
         const swAllowed = swHeaderConfig?.headers?.find(
-          (hdr: any) => hdr.key === 'Service-Worker-Allowed'
+          (hdr: { key: string; value: string }) =>
+            hdr.key === 'Service-Worker-Allowed'
         );
         const cacheCtrl = swHeaderConfig?.headers?.find(
-          (hdr: any) => hdr.key === 'Cache-Control'
+          (hdr: { key: string; value: string }) => hdr.key === 'Cache-Control'
         );
 
         expect(swAllowed).toBeDefined();

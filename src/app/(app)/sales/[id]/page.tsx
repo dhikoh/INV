@@ -27,6 +27,7 @@ import {
   CommissionReportEntryDto,
   CommissionReportResult,
 } from '@/lib/services/salesEvaluation';
+import { formatDateId } from '@/lib/format/date';
 
 export default function SalesDetailEvaluationPage() {
   const params = useParams();
@@ -732,15 +733,15 @@ export default function SalesDetailEvaluationPage() {
                     </td>
 
                     <td className="px-4 py-3.5 text-xs text-slate-500">
-                      <div>Diperoleh: {new Date(c.earnedAt).toLocaleDateString('id-ID')}</div>
+                      <div>Diperoleh: {formatDateId(c.earnedAt, 'compact')}</div>
                       {c.paidAt && (
                         <div className="text-emerald-700 font-medium">
-                          Dibayar: {new Date(c.paidAt).toLocaleDateString('id-ID')}
+                          Dibayar: {formatDateId(c.paidAt, 'compact')}
                         </div>
                       )}
                       {c.reversedAt && (
                         <div className="text-red-600 font-medium">
-                          Batal: {new Date(c.reversedAt).toLocaleDateString('id-ID')}
+                          Batal: {formatDateId(c.reversedAt, 'compact')}
                         </div>
                       )}
                     </td>

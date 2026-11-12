@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   normalizeIndonesianPhone,
   cleanStoreName,
@@ -110,7 +110,7 @@ describe('4. Deteksi Tabrakan Calon Pelanggan (checkCustomerCollision)', () => {
   };
 
   it('PINTU 1: Menandai tabrakan jika nomor telepon sama (setelah normalisasi +62)', async () => {
-    const res = await checkCustomerCollision(fakePrisma as any, {
+    const res = await checkCustomerCollision(fakePrisma as never, {
       businessId: 'biz_01',
       name: 'Toko Kucing Baru Berbeda',
       phone: '+62 812-3456-7803', // Sama dengan Cherry Petshop
@@ -124,7 +124,7 @@ describe('4. Deteksi Tabrakan Calon Pelanggan (checkCustomerCollision)', () => {
   });
 
   it('PINTU 2: Menandai tabrakan jika Nama Toko Sama DAN Wilayah Kota Sama (meskipun HP beda)', async () => {
-    const res = await checkCustomerCollision(fakePrisma as any, {
+    const res = await checkCustomerCollision(fakePrisma as never, {
       businessId: 'biz_01',
       name: 'Cherry Pet Shop', // Mirip dengan Cherry Petshop
       phone: '089988776655',    // Nomor HP berbeda (misal no kasir)
@@ -140,7 +140,7 @@ describe('4. Deteksi Tabrakan Calon Pelanggan (checkCustomerCollision)', () => {
   it('SKENARIO LOLOS: Nama Toko Sama tapi Wilayah Kota Berbeda (dan No HP beda) LOLOS LANGSUNG', async () => {
     // Sahabat Petshop sudah ada di SEMARANG binaan Budi
     // Sales lain mendaftarkan Sahabat Petshop di BLITAR dengan nomor HP berbeda
-    const res = await checkCustomerCollision(fakePrisma as any, {
+    const res = await checkCustomerCollision(fakePrisma as never, {
       businessId: 'biz_01',
       name: 'Sahabat Petshop', // Nama sama persis
       phone: '087788990011',   // HP berbeda
@@ -152,7 +152,7 @@ describe('4. Deteksi Tabrakan Calon Pelanggan (checkCustomerCollision)', () => {
   });
 
   it('SKENARIO LOLOS: Toko baru dengan Nama & Nomor HP yang benar-benar unik', async () => {
-    const res = await checkCustomerCollision(fakePrisma as any, {
+    const res = await checkCustomerCollision(fakePrisma as never, {
       businessId: 'biz_01',
       name: 'Kucing Ceria Petshop',
       phone: '085566778899',
@@ -183,13 +183,13 @@ describe('5. Penjagaan Pembuatan Order untuk Toko Berstatus PENDING_VERIFIKASI_A
       businessId: 'biz_01',
       user: {
         id: 'sales_dinia',
-        role: 'SALES' as any,
+        role: 'SALES',
         businessId: 'biz_01',
       },
     };
 
     await expect(
-      buildOrderSnapshot(fakeTx as any, salesCtx as any, {
+      buildOrderSnapshot(fakeTx as never, salesCtx as never, {
         customerId: 'cust_pending',
         items: [{ productId: 'prd_01', qty: 10, unitPrice: 50000 }],
       })
@@ -245,12 +245,12 @@ describe('5. Penjagaan Pembuatan Order untuk Toko Berstatus PENDING_VERIFIKASI_A
       businessId: 'biz_01',
       user: {
         id: 'sales_dinia',
-        role: 'SALES' as any,
+        role: 'SALES',
         businessId: 'biz_01',
       },
     };
 
-    const snapshot = await buildOrderSnapshot(fakeTx as any, salesCtx as any, {
+    const snapshot = await buildOrderSnapshot(fakeTx as never, salesCtx as never, {
       customerId: 'cust_active',
       items: [{ productId: 'prd_01', qty: 10, unitPrice: 72000 }],
     });

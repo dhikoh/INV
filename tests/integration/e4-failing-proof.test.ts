@@ -49,7 +49,7 @@ describe('Audit Mandat: Verifikasi Perbaikan E4 & Tabel Settlement (AUD-INT-001)
 
     let createdInvoiceAmount: bigint | null = null;
 
-    const mockTx: any = {
+    const mockTx = {
       $queryRaw: vi.fn(async () => [{ id: 'ord_e4_test' }]),
       order: {
         findFirst: vi.fn(async () => orderData),
@@ -78,21 +78,27 @@ describe('Audit Mandat: Verifikasi Perbaikan E4 & Tabel Settlement (AUD-INT-001)
         findMany: vi.fn(async () => []),
       },
       invoice: {
-        findFirst: vi.fn(async ({ where }: { where: any }) => {
-          if (where?.type === InvoiceType.DP) {
-            return {
-              id: 'inv_dp_1',
-              type: InvoiceType.DP,
-              status: InvoiceStatus.APPROVED,
-              amount: 300000n,
-              paidAmount: 300000n,
-            };
+        findFirst: vi.fn(
+          async ({
+            where,
+          }: {
+            where?: { type?: InvoiceType; status?: InvoiceStatus };
+          }) => {
+            if (where?.type === InvoiceType.DP) {
+              return {
+                id: 'inv_dp_1',
+                type: InvoiceType.DP,
+                status: InvoiceStatus.APPROVED,
+                amount: 300000n,
+                paidAmount: 300000n,
+              };
+            }
+            if (where?.status === InvoiceStatus.PENDING_APPROVAL) {
+              return null; // Tidak ada invoice pending
+            }
+            return null;
           }
-          if (where?.status === InvoiceStatus.PENDING_APPROVAL) {
-            return null; // Tidak ada invoice pending
-          }
-          return null;
-        }),
+        ),
         findFirstOrThrow: vi.fn(async () => ({
           id: 'inv_final_1',
           type: InvoiceType.FINAL,
@@ -100,7 +106,7 @@ describe('Audit Mandat: Verifikasi Perbaikan E4 & Tabel Settlement (AUD-INT-001)
           amount: createdInvoiceAmount,
         })),
         count: vi.fn(async () => 0),
-        create: vi.fn(async ({ data }: { data: any }) => {
+        create: vi.fn(async ({ data }: { data: { amount: bigint } }) => {
           createdInvoiceAmount = data.amount;
           return { id: 'inv_final_1', ...data };
         }),
@@ -117,7 +123,7 @@ describe('Audit Mandat: Verifikasi Perbaikan E4 & Tabel Settlement (AUD-INT-001)
     };
 
     // Jalankan pembuatan invoice FINAL
-    await requestFinalOrder(mockTx, ctx, 'ord_e4_test');
+    await requestFinalOrder(mockTx as never, ctx, 'ord_e4_test');
 
     expect(createdInvoiceAmount).toBe(500000n);
   });
@@ -146,7 +152,7 @@ describe('Audit Mandat: Verifikasi Perbaikan E4 & Tabel Settlement (AUD-INT-001)
 
     let createdInvoiceAmount: bigint | null = null;
 
-    const mockTx: any = {
+    const mockTx = {
       $queryRaw: vi.fn(async () => [{ id: 'ord_e4_credit_test' }]),
       order: {
         findFirst: vi.fn(async () => orderData),
@@ -175,7 +181,7 @@ describe('Audit Mandat: Verifikasi Perbaikan E4 & Tabel Settlement (AUD-INT-001)
         findMany: vi.fn(async () => []),
       },
       invoice: {
-        findFirst: vi.fn(async ({ where }: { where: any }) => {
+        findFirst: vi.fn(async ({ where }: { where?: { type?: InvoiceType } }) => {
           if (where?.type === InvoiceType.DP) {
             return {
               id: 'inv_dp_1',
@@ -194,7 +200,7 @@ describe('Audit Mandat: Verifikasi Perbaikan E4 & Tabel Settlement (AUD-INT-001)
           amount: createdInvoiceAmount,
         })),
         count: vi.fn(async () => 0),
-        create: vi.fn(async ({ data }: { data: any }) => {
+        create: vi.fn(async ({ data }: { data: { amount: bigint } }) => {
           createdInvoiceAmount = data.amount;
           return { id: 'inv_final_1', ...data };
         }),
@@ -210,7 +216,7 @@ describe('Audit Mandat: Verifikasi Perbaikan E4 & Tabel Settlement (AUD-INT-001)
       },
     };
 
-    await requestFinalOrder(mockTx, ctx, 'ord_e4_credit_test');
+    await requestFinalOrder(mockTx as never, ctx, 'ord_e4_credit_test');
 
     // Pelunasan tetap Rp 700.000 karena kredit ditampung di customerCreditEntry
     expect(createdInvoiceAmount).toBe(700000n);

@@ -4,6 +4,7 @@ import { getThemeTokens } from './themes';
 import { formatRupiah } from '../domain/money';
 import { terbilang } from '../domain/terbilang';
 import { resolvePaymentLegalNotice } from '../domain/paymentPolicy';
+import { formatDateId } from '@/lib/format/date';
 
 export interface ReceiptDocumentData {
   receiptNo: string;
@@ -60,11 +61,7 @@ export function ReceiptDocument({
   const resolvedLegalNotice = resolvePaymentLegalNotice(receipt.legalNotice);
   const remainingDue = Math.max(0, receipt.orderGrandTotal - receipt.orderPaidTotal);
 
-  const formattedPaidAt = new Date(receipt.paidAt).toLocaleDateString('id-ID', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  });
+  const formattedPaidAt = formatDateId(receipt.paidAt, 'long');
 
   return (
     <html lang="id">

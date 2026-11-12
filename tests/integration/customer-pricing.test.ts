@@ -2,20 +2,16 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { GET as getPricingHandler } from '@/app/api/v1/customers/[id]/pricing/route';
 import {
-  GET as getMinPricesHandler,
   PUT as setMinPriceHandler,
   DELETE as deleteMinPriceHandler,
 } from '@/app/api/v1/customers/[id]/min-prices/route';
 import {
-  GET as getPromosHandler,
   POST as createPromoHandler,
 } from '@/app/api/v1/customers/[id]/promos/route';
 import {
-  GET as getPromoDetailHandler,
   PATCH as updatePromoHandler,
   DELETE as deletePromoHandler,
 } from '@/app/api/v1/customer-promos/[id]/route';
-import { GET as getPriceHistoryHandler } from '@/app/api/v1/customers/[id]/price-history/route';
 import { Role, PipelineStage, DiscountSource, DiscountType, PriceField } from '@prisma/client';
 import { DomainError } from '@/lib/domain/money';
 import * as contextModule from '@/lib/auth/context';

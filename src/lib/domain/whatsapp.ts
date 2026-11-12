@@ -1,4 +1,5 @@
 import { formatRupiah } from './money';
+import { formatDateId } from '@/lib/format/date';
 
 /**
  * Menormalkan nomor telepon Indonesia/internasional menjadi format digit WhatsApp (628...).
@@ -45,11 +46,7 @@ export function buildRepeatReminderWaMessage(params: {
   lastOrderDate?: string | Date | null;
 }): string {
   const lastStr = params.lastOrderDate
-    ? new Date(params.lastOrderDate).toLocaleDateString('id-ID', {
-        day: 'numeric',
-        month: 'short',
-        year: 'numeric',
-      })
+    ? formatDateId(params.lastOrderDate)
     : '-';
   return `Halo ${params.customerName}, kami ingin menyapa dan mengingatkan estimasi stok rutin Anda (siklus ${params.intervalDays} hari, order terakhir ${lastStr}). Apakah ada kebutuhan repeat order minggu ini? Terima kasih.`;
 }

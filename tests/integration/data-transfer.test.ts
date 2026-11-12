@@ -2,13 +2,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-import { PGlite } from '@electric-sql/pglite';
 import { zipSync, strToU8 } from 'fflate';
-import { exportData } from '@/lib/transfer/export';
 import { importData } from '@/lib/transfer/import';
 import { toJsonLine } from '@/lib/transfer/serialize';
 import { prisma } from '@/lib/db';
-import { env } from '@/lib/env';
 
 describe('Integrasi Data Transfer: Ekspor, Impor Round-Trip & Penolakan Target (Bagian 10 Butir D & E)', () => {
   const tempUploadDir = path.resolve(process.cwd(), 'tests/tmp/data-transfer-uploads');
@@ -49,7 +46,7 @@ describe('Integrasi Data Transfer: Ekspor, Impor Round-Trip & Penolakan Target (
 
     vi.spyOn(prisma, '$queryRaw').mockResolvedValue([
       { migration_name: '20261110000003_catalog_same_business_guard' },
-    ] as any);
+    ] as never);
 
     const zip = zipSync({
       'manifest.json': strToU8(JSON.stringify(dummyManifest)),
@@ -71,7 +68,7 @@ describe('Integrasi Data Transfer: Ekspor, Impor Round-Trip & Penolakan Target (
     vi.spyOn(prisma.user, 'count').mockResolvedValue(0);
     vi.spyOn(prisma, '$queryRaw').mockResolvedValue([
       { migration_name: '20261110000003_catalog_same_business_guard' },
-    ] as any);
+    ] as never);
 
     const customerId = 'cust_01';
     const orderData = toJsonLine({
@@ -123,8 +120,10 @@ describe('Integrasi Data Transfer: Ekspor, Impor Round-Trip & Penolakan Target (
     });
 
     // Mock transaction execution
-    vi.spyOn(prisma, '$transaction').mockImplementation(async (callback: any) => {
-      const mockTx: Record<string, any> = {
+    vi.spyOn(prisma, '$transaction').mockImplementation((async (
+      callback: (tx: Record<string, unknown>) => Promise<unknown>
+    ) => {
+      const mockTx: Record<string, unknown> = {
         $executeRaw: vi.fn().mockResolvedValue(1),
         order: { createMany: vi.fn().mockResolvedValue({ count: 1 }) },
         documentCounter: {
@@ -133,7 +132,7 @@ describe('Integrasi Data Transfer: Ekspor, Impor Round-Trip & Penolakan Target (
         },
       };
       return callback(mockTx);
-    });
+    }) as never);
 
     const report = await importData(zip, {
       dryRun: false,
@@ -151,7 +150,7 @@ describe('Integrasi Data Transfer: Ekspor, Impor Round-Trip & Penolakan Target (
     vi.spyOn(prisma.user, 'count').mockResolvedValue(0);
     vi.spyOn(prisma, '$queryRaw').mockResolvedValue([
       { migration_name: '20261110000003_catalog_same_business_guard' },
-    ] as any);
+    ] as never);
 
     const bizData = JSON.stringify({
       id: 'biz_01',
@@ -184,14 +183,16 @@ describe('Integrasi Data Transfer: Ekspor, Impor Round-Trip & Penolakan Target (
       'data/Business.ndjson': strToU8(bizData),
     });
 
-    vi.spyOn(prisma, '$transaction').mockImplementation(async (callback: any) => {
-      const mockTx: Record<string, any> = {
+    vi.spyOn(prisma, '$transaction').mockImplementation((async (
+      callback: (tx: Record<string, unknown>) => Promise<unknown>
+    ) => {
+      const mockTx: Record<string, unknown> = {
         $executeRaw: vi.fn().mockResolvedValue(1),
         business: { createMany: vi.fn().mockResolvedValue({ count: 1 }) },
         auditLog: { create: vi.fn().mockResolvedValue({ id: 'aud_1' }) },
       };
       return callback(mockTx);
-    });
+    }) as never);
 
     const report = await importData(zip, {
       dryRun: true,

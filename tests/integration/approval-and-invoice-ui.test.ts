@@ -8,24 +8,140 @@ import {
   InvoiceTheme,
 } from '@prisma/client';
 import * as contextModule from '@/lib/auth/context';
-import { DomainError } from '@/lib/domain/money';
 import { assertNoSecretKeys } from '../helpers/leak';
 import { GET as listInvoicesHandler } from '@/app/api/v1/invoices/route';
 import { GET as getInvoiceDetailHandler } from '@/app/api/v1/invoices/[id]/route';
-import { POST as approveInvoiceHandler } from '@/app/api/v1/invoices/[id]/approve/route';
 import { POST as rejectInvoiceHandler } from '@/app/api/v1/invoices/[id]/reject/route';
 import { GET as getInvoicePdfHandler } from '@/app/api/v1/invoices/[id]/pdf/route';
 
+interface MockBusiness {
+  id: string;
+  name: string;
+  legalName: string | null;
+  address: string | null;
+  phone: string | null;
+  email: string | null;
+  npwp: string | null;
+  logoPath: string | null;
+  invoiceTheme: InvoiceTheme;
+  allowNegativeStock: boolean;
+  ppnEnabled: boolean;
+  ppnRateBps: number;
+  [key: string]: unknown;
+}
+
+interface MockUser {
+  id: string;
+  businessId: string;
+  role: Role;
+  name: string;
+  username: string;
+  email: string;
+}
+
+interface MockCustomer {
+  id: string;
+  businessId: string;
+  code: string;
+  name: string;
+  phone: string | null;
+  address: string | null;
+  deletedAt: Date | null;
+}
+
+interface MockProduct {
+  id: string;
+  businessId: string;
+  reservedQty: number;
+  [key: string]: unknown;
+}
+
+interface MockOrder {
+  id: string;
+  businessId: string;
+  customerId: string;
+  salesId: string;
+  status: OrderStatus;
+  orderNo: string | null;
+  deletedAt: Date | null;
+  customer?: MockCustomer | null;
+  items?: MockOrderItem[];
+  sales?: MockUser | null;
+  [key: string]: unknown;
+}
+
+interface MockOrderItem {
+  id: string;
+  orderId: string;
+  businessId: string;
+  [key: string]: unknown;
+}
+
+interface MockInvoice {
+  id: string;
+  businessId: string;
+  orderId: string;
+  customerId?: string;
+  number: string | null;
+  type: InvoiceType;
+  status: InvoiceStatus;
+  rejectReason?: string | null;
+  deletedAt: Date | null;
+  business?: MockBusiness | null;
+  [key: string]: unknown;
+}
+
+interface MockBankAccount {
+  id: string;
+  businessId: string;
+  deletedAt: Date | null;
+  [key: string]: unknown;
+}
+
+interface CustomerOrClause {
+  name?: { contains: string };
+  code?: { contains: string };
+}
+
+interface InvoiceOrClause {
+  number?: { contains: string };
+  customerId?: { in: string[] };
+  orderId?: { in: string[] };
+}
+
+interface WhereFilter {
+  id?: string | { in?: string[] };
+  businessId?: string;
+  salesId?: string;
+  customerId?: string;
+  orderId?: string | { in?: string[] };
+  deletedAt?: Date | null;
+  status?: InvoiceStatus | OrderStatus | { in?: OrderStatus[]; not?: OrderStatus };
+  type?: InvoiceType;
+  orderNo?: { contains: string };
+  OR?: CustomerOrClause[];
+}
+
+interface InvoiceWhereFilter {
+  id?: string;
+  businessId?: string;
+  deletedAt?: Date | null;
+  status?: InvoiceStatus;
+  type?: InvoiceType;
+  orderId?: { in?: string[] };
+  OR?: InvoiceOrClause[];
+}
+
 // In-memory mock database collections
-let mockBusinesses: any[] = [];
-let mockUsers: any[] = [];
-let mockCustomers: any[] = [];
-let mockProducts: any[] = [];
-let mockOrders: any[] = [];
-let mockOrderItems: any[] = [];
-let mockInvoices: any[] = [];
-let mockBankAccounts: any[] = [];
-let mockAuditLogs: any[] = [];
+let mockBusinesses: MockBusiness[] = [];
+let mockUsers: MockUser[] = [];
+let mockCustomers: MockCustomer[] = [];
+let mockProducts: MockProduct[] = [];
+let mockOrders: MockOrder[] = [];
+let mockOrderItems: MockOrderItem[] = [];
+let mockInvoices: MockInvoice[] = [];
+let mockBankAccounts: MockBankAccount[] = [];
+const mockAuditLogs: Record<string, unknown>[] = [];
 
 let idCounter = 1;
 
@@ -35,7 +151,7 @@ vi.mock('@/lib/db', () => {
       findUnique: vi.fn(async ({ where }: { where: { id: string } }) => {
         return mockBusinesses.find((b) => b.id === where.id) || null;
       }),
-      findFirst: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findFirst: vi.fn(async ({ where }: { where: { id?: string } }) => {
         return mockBusinesses.find((b) => b.id === where.id) || null;
       }),
     },
@@ -43,22 +159,22 @@ vi.mock('@/lib/db', () => {
       findUnique: vi.fn(async ({ where }: { where: { id: string } }) => {
         return mockUsers.find((u) => u.id === where.id) || null;
       }),
-      findFirst: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findFirst: vi.fn(async ({ where }: { where: { id?: string } }) => {
         return mockUsers.find((u) => u.id === where.id) || null;
       }),
-      findMany: vi.fn(async ({ where }: { where?: Record<string, any> }) => {
+      findMany: vi.fn(async ({ where }: { where?: { id?: { in?: string[] } } }) => {
         if (where?.id?.in) {
-          return mockUsers.filter((u) => where.id.in.includes(u.id));
+          return mockUsers.filter((u) => where.id!.in!.includes(u.id));
         }
         return mockUsers;
       }),
     },
     customer: {
-      findMany: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findMany: vi.fn(async ({ where }: { where: WhereFilter }) => {
         return mockCustomers.filter((c) => {
           if (where.businessId && c.businessId !== where.businessId) return false;
           if (where.OR) {
-            const match = where.OR.some((clause: any) => {
+            const match = where.OR.some((clause) => {
               if (clause.name?.contains) {
                 return c.name.toLowerCase().includes(clause.name.contains.toLowerCase());
               }
@@ -74,17 +190,17 @@ vi.mock('@/lib/db', () => {
       }),
     },
     product: {
-      findMany: vi.fn(async ({ where }: { where?: Record<string, any> }) => {
+      findMany: vi.fn(async ({ where }: { where?: { businessId?: string; id?: { in?: string[] } } }) => {
         return mockProducts.filter((p) => {
           if (where?.businessId && p.businessId !== where.businessId) return false;
           if (where?.id?.in && !where.id.in.includes(p.id)) return false;
           return true;
         });
       }),
-      findFirst: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findFirst: vi.fn(async ({ where }: { where: { id?: string } }) => {
         return mockProducts.find((p) => p.id === where.id) || null;
       }),
-      updateMany: vi.fn(async ({ where, data }: { where: any; data: any }) => {
+      updateMany: vi.fn(async ({ where, data }: { where: { id?: string }; data: { reservedQty?: { increment?: number } } }) => {
         let count = 0;
         mockProducts.forEach((p) => {
           if (where.id === p.id) {
@@ -98,7 +214,7 @@ vi.mock('@/lib/db', () => {
       }),
     },
     order: {
-      findFirst: vi.fn(async ({ where, include }: { where: Record<string, any>; include?: any }) => {
+      findFirst: vi.fn(async ({ where, include }: { where: WhereFilter; include?: { customer?: boolean; items?: boolean; sales?: boolean } }) => {
         const found = mockOrders.find((o) => {
           if (where.id && o.id !== where.id) return false;
           if (where.businessId && o.businessId !== where.businessId) return false;
@@ -118,7 +234,7 @@ vi.mock('@/lib/db', () => {
         }
         return res;
       }),
-      findFirstOrThrow: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findFirstOrThrow: vi.fn(async ({ where }: { where: WhereFilter }) => {
         const found = mockOrders.find((o) => {
           if (where.id && o.id !== where.id) return false;
           if (where.businessId && o.businessId !== where.businessId) return false;
@@ -127,31 +243,31 @@ vi.mock('@/lib/db', () => {
         if (!found) throw new Error('Order not found');
         return found;
       }),
-      findMany: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findMany: vi.fn(async ({ where }: { where: WhereFilter }) => {
         return mockOrders.filter((o) => {
           if (where.businessId && o.businessId !== where.businessId) return false;
           if (where.salesId && o.salesId !== where.salesId) return false;
           if (where.customerId && o.customerId !== where.customerId) return false;
           if (where.deletedAt === null && o.deletedAt !== null) return false;
-          if (where.id?.in && !where.id.in.includes(o.id)) return false;
-          if (where.status?.in && !where.status.in.includes(o.status)) return false;
-          if (where.status?.not && o.status === where.status.not) return false;
+          if (typeof where.id === 'object' && where.id?.in && !where.id.in.includes(o.id)) return false;
+          if (typeof where.status === 'object' && where.status?.in && !where.status.in.includes(o.status)) return false;
+          if (typeof where.status === 'object' && where.status?.not && o.status === where.status.not) return false;
           if (where.orderNo?.contains) {
             return o.orderNo?.toLowerCase().includes(where.orderNo.contains.toLowerCase());
           }
           return true;
         });
       }),
-      count: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      count: vi.fn(async ({ where }: { where: WhereFilter }) => {
         return mockOrders.filter((o) => {
           if (where.businessId && o.businessId !== where.businessId) return false;
           if (where.customerId && o.customerId !== where.customerId) return false;
           if (where.deletedAt === null && o.deletedAt !== null) return false;
-          if (where.status?.not && o.status === where.status.not) return false;
+          if (typeof where.status === 'object' && where.status?.not && o.status === where.status.not) return false;
           return true;
         }).length;
       }),
-      updateMany: vi.fn(async ({ where, data }: { where: any; data: any }) => {
+      updateMany: vi.fn(async ({ where, data }: { where: { id?: string }; data: Partial<MockOrder> }) => {
         let count = 0;
         mockOrders.forEach((o) => {
           if (where.id === o.id) {
@@ -161,14 +277,14 @@ vi.mock('@/lib/db', () => {
         });
         return { count };
       }),
-      update: vi.fn(async ({ where, data }: { where: any; data: any }) => {
+      update: vi.fn(async ({ where, data }: { where: { id: string }; data: Partial<MockOrder> }) => {
         const found = mockOrders.find((o) => o.id === where.id);
         if (found) Object.assign(found, data);
         return found;
       }),
     },
     orderItem: {
-      findMany: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findMany: vi.fn(async ({ where }: { where: { orderId?: string; businessId?: string } }) => {
         return mockOrderItems.filter((i) => {
           if (where.orderId && i.orderId !== where.orderId) return false;
           if (where.businessId && i.businessId !== where.businessId) return false;
@@ -177,7 +293,7 @@ vi.mock('@/lib/db', () => {
       }),
     },
     invoice: {
-      findFirst: vi.fn(async ({ where, include }: { where: Record<string, any>; include?: any }) => {
+      findFirst: vi.fn(async ({ where, include }: { where: InvoiceWhereFilter; include?: { business?: boolean } }) => {
         const found = mockInvoices.find((inv) => {
           if (where.id && inv.id !== where.id) return false;
           if (where.businessId && inv.businessId !== where.businessId) return false;
@@ -191,7 +307,7 @@ vi.mock('@/lib/db', () => {
         }
         return res;
       }),
-      findFirstOrThrow: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findFirstOrThrow: vi.fn(async ({ where }: { where: InvoiceWhereFilter }) => {
         const found = mockInvoices.find((inv) => {
           if (where.id && inv.id !== where.id) return false;
           if (where.businessId && inv.businessId !== where.businessId) return false;
@@ -200,7 +316,7 @@ vi.mock('@/lib/db', () => {
         if (!found) throw new Error('Invoice not found');
         return found;
       }),
-      findMany: vi.fn(async ({ where, skip, take }: { where: any; skip?: number; take?: number }) => {
+      findMany: vi.fn(async ({ where, skip, take }: { where: InvoiceWhereFilter; skip?: number; take?: number }) => {
         let res = mockInvoices.filter((inv) => {
           if (where.businessId && inv.businessId !== where.businessId) return false;
           if (where.status && inv.status !== where.status) return false;
@@ -208,12 +324,12 @@ vi.mock('@/lib/db', () => {
           if (where.deletedAt === null && inv.deletedAt !== null) return false;
           if (where.orderId?.in && !where.orderId.in.includes(inv.orderId)) return false;
           if (where.OR) {
-            const match = where.OR.some((clause: any) => {
+            const match = where.OR.some((clause) => {
               if (clause.number?.contains) {
                 return inv.number?.toLowerCase().includes(clause.number.contains.toLowerCase());
               }
               if (clause.customerId?.in) {
-                return clause.customerId.in.includes(inv.customerId);
+                return inv.customerId ? clause.customerId.in.includes(inv.customerId) : false;
               }
               if (clause.orderId?.in) {
                 return clause.orderId.in.includes(inv.orderId);
@@ -228,7 +344,7 @@ vi.mock('@/lib/db', () => {
         if (take) res = res.slice(0, take);
         return res;
       }),
-      count: vi.fn(async ({ where }: { where: any }) => {
+      count: vi.fn(async ({ where }: { where: InvoiceWhereFilter }) => {
         return mockInvoices.filter((inv) => {
           if (where.businessId && inv.businessId !== where.businessId) return false;
           if (where.status && inv.status !== where.status) return false;
@@ -238,7 +354,7 @@ vi.mock('@/lib/db', () => {
           return true;
         }).length;
       }),
-      updateMany: vi.fn(async ({ where, data }: { where: any; data: any }) => {
+      updateMany: vi.fn(async ({ where, data }: { where: { id?: string }; data: Partial<MockInvoice> }) => {
         let count = 0;
         mockInvoices.forEach((inv) => {
           if (where.id === inv.id) {
@@ -248,14 +364,14 @@ vi.mock('@/lib/db', () => {
         });
         return { count };
       }),
-      update: vi.fn(async ({ where, data }: { where: any; data: any }) => {
+      update: vi.fn(async ({ where, data }: { where: { id: string }; data: Partial<MockInvoice> }) => {
         const found = mockInvoices.find((inv) => inv.id === where.id);
         if (found) Object.assign(found, data);
         return found;
       }),
     },
     bankAccount: {
-      findMany: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findMany: vi.fn(async ({ where }: { where: { businessId?: string; deletedAt?: Date | null } }) => {
         return mockBankAccounts.filter((b) => {
           if (where.businessId && b.businessId !== where.businessId) return false;
           if (where.deletedAt === null && b.deletedAt !== null) return false;
@@ -276,7 +392,7 @@ vi.mock('@/lib/db', () => {
       findFirst: vi.fn(async () => null),
     },
     auditLog: {
-      create: vi.fn(async ({ data }: { data: any }) => {
+      create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
         mockAuditLogs.push(data);
         return { id: `audit_${idCounter++}`, ...data };
       }),
@@ -286,10 +402,10 @@ vi.mock('@/lib/db', () => {
     },
     counter: {
       findUnique: vi.fn(async () => null),
-      create: vi.fn(async ({ data }: any) => ({ ...data, seq: 1 })),
-      update: vi.fn(async ({ data }: any) => ({ seq: 2 })),
+      create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => ({ ...data, seq: 1 })),
+      update: vi.fn(async () => ({ seq: 2 })),
     },
-    $queryRaw: vi.fn(async (strings: any, ...values: any[]) => {
+    $queryRaw: vi.fn(async (strings: unknown, ...values: unknown[]) => {
       const sql = Array.isArray(strings) ? strings.join('?') : String(strings);
       if (sql.includes('SELECT "id" FROM "Order"')) {
         const orderId = values[0];
@@ -298,7 +414,7 @@ vi.mock('@/lib/db', () => {
       }
       return [];
     }),
-    $transaction: vi.fn(async (callback: any) => callback(mockPrisma)),
+    $transaction: vi.fn(async <T>(callback: (tx: unknown) => Promise<T>): Promise<T> => callback(mockPrisma)),
   };
 
   return { prisma: mockPrisma };
@@ -559,7 +675,7 @@ describe('T3.8: UI Persetujuan, Invoice, dan Alur Pelunasan Terpadu', () => {
       vi.spyOn(contextModule, 'requireContext').mockResolvedValueOnce({
         user: { id: superAdminId, role: Role.SUPERADMIN, businessId },
         businessId,
-      } as any);
+      } as never);
 
       const req = new NextRequest('http://localhost:3000/api/v1/invoices?page=1&limit=20');
       const res = await listInvoicesHandler(req, { params: Promise.resolve({}) });
@@ -575,7 +691,7 @@ describe('T3.8: UI Persetujuan, Invoice, dan Alur Pelunasan Terpadu', () => {
       vi.spyOn(contextModule, 'requireContext').mockResolvedValueOnce({
         user: { id: salesId1, role: Role.SALES, businessId },
         businessId,
-      } as any);
+      } as never);
 
       const req = new NextRequest('http://localhost:3000/api/v1/invoices');
       const res = await listInvoicesHandler(req, { params: Promise.resolve({}) });
@@ -592,7 +708,7 @@ describe('T3.8: UI Persetujuan, Invoice, dan Alur Pelunasan Terpadu', () => {
       vi.spyOn(contextModule, 'requireContext').mockResolvedValueOnce({
         user: { id: superAdminId, role: Role.SUPERADMIN, businessId },
         businessId,
-      } as any);
+      } as never);
 
       const req = new NextRequest(
         'http://localhost:3000/api/v1/invoices?status=APPROVED&type=DP'
@@ -612,7 +728,7 @@ describe('T3.8: UI Persetujuan, Invoice, dan Alur Pelunasan Terpadu', () => {
       vi.spyOn(contextModule, 'requireContext').mockResolvedValueOnce({
         user: { id: superAdminId, role: Role.SUPERADMIN, businessId },
         businessId,
-      } as any);
+      } as never);
 
       const req = new NextRequest('http://localhost:3000/api/v1/invoices/inv_001');
       const res = await getInvoiceDetailHandler(req, {
@@ -638,7 +754,7 @@ describe('T3.8: UI Persetujuan, Invoice, dan Alur Pelunasan Terpadu', () => {
       vi.spyOn(contextModule, 'requireContext').mockResolvedValueOnce({
         user: { id: salesId1, role: Role.SALES, businessId },
         businessId,
-      } as any);
+      } as never);
 
       const req = new NextRequest('http://localhost:3000/api/v1/invoices/inv_001');
       const res = await getInvoiceDetailHandler(req, {
@@ -657,7 +773,7 @@ describe('T3.8: UI Persetujuan, Invoice, dan Alur Pelunasan Terpadu', () => {
 
       // Pastikan zero secret keys leakage pada respons sales
       assertNoSecretKeys(inv);
-      inv.order.items.forEach((item: any) => {
+      inv.order.items.forEach((item: Record<string, unknown>) => {
         expect(item.costPrice).toBeUndefined();
         expect(item.floorPrice).toBeUndefined();
       });
@@ -667,7 +783,7 @@ describe('T3.8: UI Persetujuan, Invoice, dan Alur Pelunasan Terpadu', () => {
       vi.spyOn(contextModule, 'requireContext').mockResolvedValueOnce({
         user: { id: salesId1, role: Role.SALES, businessId },
         businessId,
-      } as any);
+      } as never);
 
       const req = new NextRequest('http://localhost:3000/api/v1/invoices/inv_002');
       const res = await getInvoiceDetailHandler(req, {
@@ -680,7 +796,7 @@ describe('T3.8: UI Persetujuan, Invoice, dan Alur Pelunasan Terpadu', () => {
       vi.spyOn(contextModule, 'requireContext').mockResolvedValueOnce({
         user: { id: superAdminId, role: Role.SUPERADMIN, businessId },
         businessId,
-      } as any);
+      } as never);
 
       const req = new NextRequest('http://localhost:3000/api/v1/invoices/non_existent');
       const res = await getInvoiceDetailHandler(req, {
@@ -695,7 +811,7 @@ describe('T3.8: UI Persetujuan, Invoice, dan Alur Pelunasan Terpadu', () => {
       vi.spyOn(contextModule, 'requireContext').mockResolvedValueOnce({
         user: { id: salesId1, role: Role.SALES, businessId },
         businessId,
-      } as any);
+      } as never);
 
       const req = new NextRequest('http://localhost:3000/api/v1/invoices/inv_001/pdf');
       const res = await getInvoicePdfHandler(req, {
@@ -710,7 +826,7 @@ describe('T3.8: UI Persetujuan, Invoice, dan Alur Pelunasan Terpadu', () => {
       vi.spyOn(contextModule, 'requireContext').mockResolvedValueOnce({
         user: { id: salesId2, role: Role.SALES, businessId },
         businessId,
-      } as any);
+      } as never);
 
       const req = new NextRequest('http://localhost:3000/api/v1/invoices/inv_002/pdf');
       const res = await getInvoicePdfHandler(req, {
@@ -724,7 +840,7 @@ describe('T3.8: UI Persetujuan, Invoice, dan Alur Pelunasan Terpadu', () => {
       vi.spyOn(contextModule, 'requireContext').mockResolvedValueOnce({
         user: { id: superAdminId, role: Role.SUPERADMIN, businessId },
         businessId,
-      } as any);
+      } as never);
 
       const req = new NextRequest('http://localhost:3000/api/v1/invoices/inv_001/pdf?preview=1');
       const res = await getInvoicePdfHandler(req, {
@@ -740,7 +856,7 @@ describe('T3.8: UI Persetujuan, Invoice, dan Alur Pelunasan Terpadu', () => {
       vi.spyOn(contextModule, 'requireContext').mockResolvedValueOnce({
         user: { id: superAdminId, role: Role.SUPERADMIN, businessId },
         businessId,
-      } as any);
+      } as never);
 
       const req = new NextRequest('http://localhost:3000/api/v1/invoices/inv_001/reject', {
         method: 'POST',
@@ -758,7 +874,7 @@ describe('T3.8: UI Persetujuan, Invoice, dan Alur Pelunasan Terpadu', () => {
       vi.spyOn(contextModule, 'requireContext').mockResolvedValueOnce({
         user: { id: superAdminId, role: Role.SUPERADMIN, businessId },
         businessId,
-      } as any);
+      } as never);
 
       const req = new NextRequest('http://localhost:3000/api/v1/invoices/inv_001/reject', {
         method: 'POST',
@@ -774,9 +890,9 @@ describe('T3.8: UI Persetujuan, Invoice, dan Alur Pelunasan Terpadu', () => {
       const inv = mockInvoices.find((i) => i.id === 'inv_001');
       const ord = mockOrders.find((o) => o.id === 'order_001');
 
-      expect(inv.status).toBe(InvoiceStatus.REJECTED);
-      expect(inv.rejectReason).toBe('Harga kemurahan, harap sesuaikan harga normal');
-      expect(ord.status).toBe(OrderStatus.REVISION_REQUIRED);
+      expect(inv?.status).toBe(InvoiceStatus.REJECTED);
+      expect(inv?.rejectReason).toBe('Harga kemurahan, harap sesuaikan harga normal');
+      expect(ord?.status).toBe(OrderStatus.REVISION_REQUIRED);
     });
   });
 });

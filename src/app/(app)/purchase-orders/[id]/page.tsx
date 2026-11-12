@@ -24,6 +24,7 @@ import { Skeleton, ErrorState } from '@/components/ui/States';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { MoneyInput } from '@/components/ui/MoneyInput';
 import { formatRupiah } from '@/lib/domain/money';
+import { formatDateId } from '@/lib/format/date';
 
 interface PoItem {
   id: string;
@@ -570,22 +571,14 @@ export default function PurchaseOrderDetailPage() {
             <div>
               <div className="text-slate-400">Tanggal Pesan</div>
               <div className="font-medium text-slate-900 text-sm">
-                {new Date(po.orderDate).toLocaleDateString('id-ID', {
-                  day: 'numeric',
-                  month: 'long',
-                  year: 'numeric',
-                })}
+                {formatDateId(po.orderDate, 'long')}
               </div>
             </div>
             <div>
               <div className="text-slate-400">Perkiraan Tiba</div>
               <div className="font-medium text-slate-900 text-sm">
                 {po.expectedDate
-                  ? new Date(po.expectedDate).toLocaleDateString('id-ID', {
-                      day: 'numeric',
-                      month: 'long',
-                      year: 'numeric',
-                    })
+                  ? formatDateId(po.expectedDate, 'long')
                   : 'Tidak ditentukan'}
               </div>
             </div>

@@ -1,4 +1,5 @@
 import React from 'react';
+import { formatDateId } from '@/lib/format/date';
 
 export interface DeliveryNoteData {
   deliveryNo: string;
@@ -52,11 +53,7 @@ export function DeliveryNoteDocument({
   const { business, customer, logistics, items } = data;
 
   const formattedShipDate = data.shippedAt
-    ? new Date(data.shippedAt).toLocaleDateString('id-ID', {
-        day: 'numeric',
-        month: 'long',
-        year: 'numeric',
-      })
+    ? formatDateId(data.shippedAt, 'long')
     : '-';
 
   return (

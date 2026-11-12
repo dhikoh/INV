@@ -531,11 +531,12 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
 | **Fase 4** | `v0.5.0`     | Bot Telegram, Mini App, pengingat repeat order, katalog PWA             | **SELESAI** (`v0.5.0`) |
 | **Fase 5** | `v1.0.0`     | Dashboard profit, evaluasi sales, pengerasan keamanan, Go-Live          | **SELESAI** (`v1.0.0`) |
 | **Fase 8** | `v1.0.1`     | Remediasi menyeluruh audit: migrasi Docker, patch Next.js RCE, TMA approval, formula retur | **SELESAI & GO** (`v1.0.1`) |
+| **Fase 9** | `v1.1.0`     | Proforma Order & anti-fraud pembayaran, QR publik `/verify/[token]` & kwitansi `VERIFIED`, revisi item `IN_PROCESS`, pengiriman parsial multi-kloter, pembayaran kolektif multi-faktur, penutupan backlog audit (`AUD-PERF-001`, `AUD-DUP-002/003/004`), & ESLint 0 error/warning menyeluruh | **SELESAI** (`v1.1.0`) |
 
 ---
 
 ## 12. Masalah terbuka
 
-Seluruh masalah kritis (S1) dan tinggi (S2) hasil audit independen telah tuntas diperbaiki dan diverifikasi pada Fase 8 (lihat [docs/audit/LAPORAN-12-perbaikan-dan-reverifikasi.md](audit/LAPORAN-12-perbaikan-dan-reverifikasi.md)).
-Tersisa 7 catatan non-blocker minor untuk backlog pemeliharaan berkala pasca-peluncuran yang didokumentasikan pada:
+Seluruh masalah kritis (S1) dan tinggi (S2) maupun backlog kode non-blocker (`AUD-PERF-001`, `AUD-DUP-002`, `AUD-DUP-003`, `AUD-DUP-004`) telah tuntas diperbaiki dan diverifikasi (lihat [docs/audit/LAPORAN-12-perbaikan-dan-reverifikasi.md](audit/LAPORAN-12-perbaikan-dan-reverifikasi.md) dan [docs/audit/REGISTER.md](audit/REGISTER.md)).
+Tersisa **1** catatan non-blocker infrastruktur host lokal (`AUD-OPS-002`: PostgreSQL tes lokal port `5433` tidak aktif di lingkungan Windows tanpa Docker, sedangkan seluruh suite integrasi berjalan terverifikasi menggunakan PGlite WASM / mock):
 [docs/audit/REGISTER.md](audit/REGISTER.md)

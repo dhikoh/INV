@@ -4,20 +4,15 @@ import {
   Role,
   OrderStatus,
   InvoiceStatus,
-  PaymentStatus,
   ReminderStatus,
   ReminderSource,
 } from '@prisma/client';
-import {
-  suggestInterval,
-  daysUntil,
-  wibDayIndex,
-} from '@/lib/domain/reminder';
+import { prisma as prismaMock } from '@/lib/db';
+import { wibDayIndex } from '@/lib/domain/reminder';
 import {
   getAgingBucket,
   getDaysOverdue,
   calculateReceivableBalance,
-  AgingBucket,
 } from '@/lib/domain/receivable';
 import {
   updateRemindersForCompletedOrder,
@@ -27,7 +22,6 @@ import {
   scanCrmTasks,
   scanOwnerDigest,
   runHousekeeping,
-  formatWibDate,
 } from '@/lib/services/reminder';
 import {
   GET as getRemindersHandler,
@@ -43,35 +37,191 @@ import type { Ctx } from '@/lib/auth/context';
 import { assertNoSecretKeys } from '../helpers/leak';
 import { DomainError } from '@/lib/domain/money';
 
+interface MockReminder {
+  id: string;
+  businessId: string;
+  customerId: string;
+  productId?: string | null;
+  salesId: string;
+  intervalDays?: number;
+  lastOrderDate?: Date | null;
+  nextDueDate?: Date;
+  status: ReminderStatus;
+  source?: ReminderSource;
+  snoozedUntil?: Date | null;
+  lastNotifiedAt?: Date | null;
+  escalatedAt?: Date | null;
+  note?: string | null;
+  customer?: MockCustomer;
+  createdAt?: Date;
+  updatedAt?: Date;
+  [key: string]: unknown;
+}
+
+interface MockOrder {
+  id: string;
+  businessId?: string;
+  customerId?: string;
+  salesId?: string;
+  status: OrderStatus;
+  createdAt?: Date;
+  deletedAt: Date | null;
+  items?: Array<{ productId: string; [key: string]: unknown }>;
+  customer?: { id: string; name: string; [key: string]: unknown };
+  [key: string]: unknown;
+}
+
+interface MockCustomer {
+  id: string;
+  businessId: string;
+  code: string;
+  name: string;
+  phone: string | null;
+  address: string | null;
+  assignedSalesId: string | null;
+  deletedAt: Date | null;
+  business?: { id: string; name: string; defaultRepeatDays: number };
+}
+
+interface MockProduct {
+  id: string;
+  businessId: string;
+  name: string;
+  sku: string;
+  unit: string;
+  stockQty: number;
+  deletedAt: Date | null;
+}
+
+interface MockInvoice {
+  id: string;
+  businessId: string;
+  orderId: string;
+  customerId?: string;
+  number: string;
+  amount: bigint;
+  paidAmount: bigint;
+  status: InvoiceStatus;
+  dueDate: Date;
+  deletedAt: Date | null;
+  [key: string]: unknown;
+}
+
+interface MockPayment {
+  id: string;
+  businessId: string;
+  status: string;
+}
+
+interface MockCrmTask {
+  id: string;
+  businessId: string;
+  assignedToId: string;
+  title: string;
+  dueAt: Date;
+  doneAt: Date | null;
+  customer?: { name: string };
+}
+
+interface MockUser {
+  id: string;
+  username: string;
+  name: string;
+  role: Role;
+  businessId: string | null;
+  isActive: boolean;
+  deletedAt: Date | null;
+}
+
+interface MockBusiness {
+  id: string;
+  name: string;
+  defaultRepeatDays: number;
+}
+
+interface MockNotification {
+  id: string;
+  dedupeKey: string;
+  type?: string;
+  createdAt: Date;
+  readAt: Date | null;
+  telegramSentAt: Date | null;
+  telegramError: string | null;
+  [key: string]: unknown;
+}
+
+interface MockSession {
+  id: string;
+  expiresAt: Date;
+  revokedAt: Date | null;
+}
+
+interface MockLoginAttempt {
+  id: string;
+  createdAt: Date;
+}
+
+interface MockTelegramLinkCode {
+  id: string;
+  expiresAt: Date;
+  usedAt: Date | null;
+}
+
+interface OrCondition {
+  snoozedUntil?: null | { lte?: Date };
+  expiresAt?: { lt?: Date };
+  revokedAt?: { lt?: Date };
+  usedAt?: { lt?: Date };
+}
+
+interface ReminderWhereFilter {
+  id?: string | { in?: string[] };
+  businessId?: string;
+  salesId?: string;
+  customerId?: string;
+  productId?: string;
+  status?: ReminderStatus | OrderStatus | InvoiceStatus | string | { not?: OrderStatus };
+  OR?: OrCondition[];
+  createdAt?: { gt?: Date; lt?: Date };
+  deletedAt?: null | Date;
+  items?: { some?: { productId?: string } };
+  stockQty?: { lte?: number };
+  orderId?: { in?: string[] };
+  doneAt?: null | Date;
+  role?: Role;
+  isActive?: boolean;
+}
+
 // Mock DB in-memory stores
-let mockReminders: any[] = [];
-let mockOrders: any[] = [];
-let mockCustomers: any[] = [];
-let mockProducts: any[] = [];
-let mockInvoices: any[] = [];
-let mockPayments: any[] = [];
-let mockCrmTasks: any[] = [];
-let mockUsers: any[] = [];
-let mockBusinesses: any[] = [];
-let mockNotifications: any[] = [];
-let mockSessions: any[] = [];
-let mockLoginAttempts: any[] = [];
-let mockTelegramLinkCodes: any[] = [];
+let mockReminders: MockReminder[] = [];
+let mockOrders: MockOrder[] = [];
+let mockCustomers: MockCustomer[] = [];
+let mockProducts: MockProduct[] = [];
+let mockInvoices: MockInvoice[] = [];
+let mockPayments: MockPayment[] = [];
+let mockCrmTasks: MockCrmTask[] = [];
+let mockUsers: MockUser[] = [];
+let mockBusinesses: MockBusiness[] = [];
+let mockNotifications: MockNotification[] = [];
+let mockSessions: MockSession[] = [];
+let mockLoginAttempts: MockLoginAttempt[] = [];
+let mockTelegramLinkCodes: MockTelegramLinkCode[] = [];
 
 vi.mock('@/lib/db', () => ({
   prisma: {
-    $transaction: vi.fn(async (cb: (tx: any) => any) => cb(prismaMock)),
+    $transaction: vi.fn(async (cb: (tx: unknown) => Promise<unknown>) => cb(prismaMock)),
     reminder: {
-      findMany: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findMany: vi.fn(async ({ where }: { where: ReminderWhereFilter }) => {
         return mockReminders.filter((r) => {
           if (where.businessId && r.businessId !== where.businessId) return false;
           if (where.salesId && r.salesId !== where.salesId) return false;
           if (where.customerId && r.customerId !== where.customerId) return false;
           if (where.status && r.status !== where.status) return false;
           if (where.OR) {
-            const matchesOr = where.OR.some((cond: any) => {
+            const matchesOr = where.OR.some((cond) => {
               if (cond.snoozedUntil === null) return !r.snoozedUntil;
-              if (cond.snoozedUntil?.lte) return r.snoozedUntil && r.snoozedUntil <= cond.snoozedUntil.lte;
+              if (cond.snoozedUntil && typeof cond.snoozedUntil === 'object' && cond.snoozedUntil.lte)
+                return r.snoozedUntil && r.snoozedUntil <= cond.snoozedUntil.lte;
               return false;
             });
             if (!matchesOr) return false;
@@ -79,7 +229,7 @@ vi.mock('@/lib/db', () => ({
           return true;
         });
       }),
-      findFirst: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findFirst: vi.fn(async ({ where }: { where: ReminderWhereFilter }) => {
         return (
           mockReminders.find((r) => {
             if (where.id && r.id !== where.id) return false;
@@ -90,9 +240,14 @@ vi.mock('@/lib/db', () => ({
           }) || null
         );
       }),
-      create: vi.fn(async ({ data }: { data: any }) => {
-        const item = {
+      create: vi.fn(async ({ data }: { data: Partial<MockReminder> }) => {
+        const item: MockReminder = {
           id: `rem_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+          businessId: '',
+          customerId: '',
+          productId: null,
+          salesId: '',
+          status: ReminderStatus.ACTIVE,
           snoozedUntil: null,
           lastNotifiedAt: null,
           escalatedAt: null,
@@ -104,48 +259,57 @@ vi.mock('@/lib/db', () => ({
         mockReminders.push(item);
         return item;
       }),
-      update: vi.fn(async ({ where, data }: { where: { id: string }; data: any }) => {
+      update: vi.fn(async ({ where, data }: { where: { id: string }; data: Partial<MockReminder> }) => {
         const item = mockReminders.find((r) => r.id === where.id);
         if (item) {
           Object.assign(item, data, { updatedAt: new Date() });
         }
         return item;
       }),
-      updateMany: vi.fn(async ({ where, data }: { where: Record<string, any>; data: any }) => {
-        let count = 0;
-        mockReminders.forEach((r) => {
-          if (where.id && r.id !== where.id) return;
-          if (where.customerId && r.customerId !== where.customerId) return;
-          if (where.businessId && r.businessId !== where.businessId) return;
-          Object.assign(r, data, { updatedAt: new Date() });
-          count++;
-        });
-        return { count };
-      }),
+      updateMany: vi.fn(
+        async ({ where, data }: { where: ReminderWhereFilter; data: Partial<MockReminder> }) => {
+          let count = 0;
+          mockReminders.forEach((r) => {
+            if (where.id && r.id !== where.id) return;
+            if (where.customerId && r.customerId !== where.customerId) return;
+            if (where.businessId && r.businessId !== where.businessId) return;
+            Object.assign(r, data, { updatedAt: new Date() });
+            count++;
+          });
+          return { count };
+        }
+      ),
     },
     order: {
       findUnique: vi.fn(async ({ where }: { where: { id: string } }) => {
         return mockOrders.find((o) => o.id === where.id) || null;
       }),
-      findFirst: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findFirst: vi.fn(async ({ where }: { where: ReminderWhereFilter }) => {
         return (
           mockOrders.find((o) => {
             if (where.id && o.id !== where.id) return false;
             if (where.customerId && o.customerId !== where.customerId) return false;
-            if (where.createdAt?.gt && o.createdAt <= where.createdAt.gt) return false;
-            if (where.status?.not && o.status === where.status.not) return false;
+            if (where.createdAt?.gt && o.createdAt && o.createdAt <= where.createdAt.gt) return false;
+            if (
+              where.status &&
+              typeof where.status === 'object' &&
+              where.status.not &&
+              o.status === where.status.not
+            )
+              return false;
             if (where.deletedAt === null && o.deletedAt !== null) return false;
             if (where.items?.some?.productId) {
-              const hasProd = o.items?.some((i: any) => i.productId === where.items.some.productId);
+              const hasProd = o.items?.some((i) => i.productId === where.items?.some?.productId);
               if (!hasProd) return false;
             }
             return true;
           }) || null
         );
       }),
-      findMany: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findMany: vi.fn(async ({ where }: { where: ReminderWhereFilter }) => {
         return mockOrders.filter((o) => {
-          if (where.id?.in && !where.id.in.includes(o.id)) return false;
+          if (where.id && typeof where.id === 'object' && where.id.in && !where.id.in.includes(o.id))
+            return false;
           if (where.businessId && o.businessId !== where.businessId) return false;
           if (where.salesId && o.salesId !== where.salesId) return false;
           if (where.customerId && o.customerId !== where.customerId) return false;
@@ -158,7 +322,7 @@ vi.mock('@/lib/db', () => ({
           }
           if (where.deletedAt === null && o.deletedAt !== null) return false;
           if (where.items?.some?.productId) {
-            const hasProd = o.items?.some((i: any) => i.productId === where.items.some.productId);
+            const hasProd = o.items?.some((i) => i.productId === where.items?.some?.productId);
             if (!hasProd) return false;
           }
           return true;
@@ -169,7 +333,7 @@ vi.mock('@/lib/db', () => ({
       findUnique: vi.fn(async ({ where }: { where: { id: string } }) => {
         return mockCustomers.find((c) => c.id === where.id) || null;
       }),
-      findFirst: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findFirst: vi.fn(async ({ where }: { where: ReminderWhereFilter }) => {
         return (
           mockCustomers.find((c) => {
             if (where.id && c.id !== where.id) return false;
@@ -184,7 +348,7 @@ vi.mock('@/lib/db', () => ({
       findUnique: vi.fn(async ({ where }: { where: { id: string } }) => {
         return mockProducts.find((p) => p.id === where.id) || null;
       }),
-      findFirst: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findFirst: vi.fn(async ({ where }: { where: ReminderWhereFilter }) => {
         return (
           mockProducts.find((p) => {
             if (where.id && p.id !== where.id) return false;
@@ -192,14 +356,15 @@ vi.mock('@/lib/db', () => ({
           }) || null
         );
       }),
-      findMany: vi.fn(async ({ where }: { where?: Record<string, any> }) => {
+      findMany: vi.fn(async ({ where }: { where?: ReminderWhereFilter }) => {
         if (!where) return mockProducts;
         return mockProducts.filter((p) => {
-          if (where.id?.in && !where.id.in.includes(p.id)) return false;
+          if (where.id && typeof where.id === 'object' && where.id.in && !where.id.in.includes(p.id))
+            return false;
           return true;
         });
       }),
-      count: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      count: vi.fn(async ({ where }: { where: ReminderWhereFilter }) => {
         return mockProducts.filter((p) => {
           if (where.businessId && p.businessId !== where.businessId) return false;
           if (where.stockQty?.lte !== undefined && p.stockQty > where.stockQty.lte) return false;
@@ -208,7 +373,7 @@ vi.mock('@/lib/db', () => ({
       }),
     },
     invoice: {
-      findMany: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findMany: vi.fn(async ({ where }: { where: ReminderWhereFilter }) => {
         return mockInvoices.filter((inv) => {
           if (where.businessId && inv.businessId !== where.businessId) return false;
           if (where.status && inv.status !== where.status) return false;
@@ -218,7 +383,7 @@ vi.mock('@/lib/db', () => ({
           return true;
         });
       }),
-      count: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      count: vi.fn(async ({ where }: { where: ReminderWhereFilter }) => {
         return mockInvoices.filter((inv) => {
           if (where.businessId && inv.businessId !== where.businessId) return false;
           if (where.status && inv.status !== where.status) return false;
@@ -228,7 +393,7 @@ vi.mock('@/lib/db', () => ({
       }),
     },
     payment: {
-      count: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      count: vi.fn(async ({ where }: { where: ReminderWhereFilter }) => {
         return mockPayments.filter((p) => {
           if (where.businessId && p.businessId !== where.businessId) return false;
           if (where.status && p.status !== where.status) return false;
@@ -237,7 +402,7 @@ vi.mock('@/lib/db', () => ({
       }),
     },
     crmTask: {
-      findMany: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findMany: vi.fn(async ({ where }: { where: ReminderWhereFilter }) => {
         return mockCrmTasks.filter((t) => {
           if (where.doneAt === null && t.doneAt !== null) return false;
           return true;
@@ -245,9 +410,10 @@ vi.mock('@/lib/db', () => ({
       }),
     },
     user: {
-      findMany: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findMany: vi.fn(async ({ where }: { where: ReminderWhereFilter }) => {
         return mockUsers.filter((u) => {
-          if (where.id?.in && !where.id.in.includes(u.id)) return false;
+          if (where.id && typeof where.id === 'object' && where.id.in && !where.id.in.includes(u.id))
+            return false;
           if (where.businessId && u.businessId !== where.businessId) return false;
           if (where.role && u.role !== where.role) return false;
           if (where.isActive !== undefined && u.isActive !== where.isActive) return false;
@@ -258,7 +424,7 @@ vi.mock('@/lib/db', () => ({
       findUnique: vi.fn(async ({ where }: { where: { id: string } }) => {
         return mockUsers.find((u) => u.id === where.id) || null;
       }),
-      findFirst: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findFirst: vi.fn(async ({ where }: { where: ReminderWhereFilter }) => {
         return (
           mockUsers.find((u) => {
             if (where.id && u.id !== where.id) return false;
@@ -277,9 +443,10 @@ vi.mock('@/lib/db', () => ({
       findUnique: vi.fn(async ({ where }: { where: { dedupeKey: string } }) => {
         return mockNotifications.find((n) => n.dedupeKey === where.dedupeKey) || null;
       }),
-      create: vi.fn(async ({ data }: { data: any }) => {
-        const notif = {
+      create: vi.fn(async ({ data }: { data: Partial<MockNotification> }) => {
+        const notif: MockNotification = {
           id: `notif_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+          dedupeKey: '',
           createdAt: new Date(),
           readAt: null,
           telegramSentAt: null,
@@ -291,11 +458,11 @@ vi.mock('@/lib/db', () => ({
       }),
     },
     session: {
-      deleteMany: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      deleteMany: vi.fn(async ({ where }: { where: ReminderWhereFilter }) => {
         const initial = mockSessions.length;
         mockSessions = mockSessions.filter((s) => {
           if (where.OR) {
-            const matches = where.OR.some((cond: any) => {
+            const matches = where.OR.some((cond) => {
               if (cond.expiresAt?.lt && s.expiresAt < cond.expiresAt.lt) return true;
               if (cond.revokedAt?.lt && s.revokedAt && s.revokedAt < cond.revokedAt.lt) return true;
               return false;
@@ -308,7 +475,7 @@ vi.mock('@/lib/db', () => ({
       }),
     },
     loginAttempt: {
-      deleteMany: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      deleteMany: vi.fn(async ({ where }: { where: ReminderWhereFilter }) => {
         const initial = mockLoginAttempts.length;
         mockLoginAttempts = mockLoginAttempts.filter((a) => {
           if (where.createdAt?.lt && a.createdAt < where.createdAt.lt) return false;
@@ -318,11 +485,11 @@ vi.mock('@/lib/db', () => ({
       }),
     },
     telegramLinkCode: {
-      deleteMany: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      deleteMany: vi.fn(async ({ where }: { where: ReminderWhereFilter }) => {
         const initial = mockTelegramLinkCodes.length;
         mockTelegramLinkCodes = mockTelegramLinkCodes.filter((c) => {
           if (where.OR) {
-            const matches = where.OR.some((cond: any) => {
+            const matches = where.OR.some((cond) => {
               if (cond.usedAt?.lt && c.usedAt && c.usedAt < cond.usedAt.lt) return true;
               if (cond.expiresAt?.lt && c.expiresAt < cond.expiresAt.lt) return true;
               return false;
@@ -337,11 +504,8 @@ vi.mock('@/lib/db', () => ({
   },
 }));
 
-const prismaMock = (await vi.importMock('@/lib/db') as any).prisma;
-
 describe('T4.4: Pengingat Otomatis Siklus Repeat Order, Job Background 13.2, dan Piutang (Seksi 13 & 17.3 nomor 15)', () => {
   const BIZ_ID = 'biz_omnicat_01';
-  const OTHER_BIZ_ID = 'biz_other_02';
 
   const superAdminUser = {
     id: 'usr_admin',
@@ -536,7 +700,7 @@ describe('T4.4: Pengingat Otomatis Siklus Repeat Order, Job Background 13.2, dan
       expect(rem.source).toBe(ReminderSource.AUTO);
       expect(rem.status).toBe(ReminderStatus.ACTIVE);
       // nextDueDate = lastOrderDate (d3) + 30 hari
-      expect(wibDayIndex(rem.nextDueDate) - wibDayIndex(d3)).toBe(30);
+      expect(wibDayIndex(rem.nextDueDate!) - wibDayIndex(d3)).toBe(30);
     });
 
     it('mempertahankan interval MANUAL saat order baru selesai', async () => {
@@ -580,7 +744,7 @@ describe('T4.4: Pengingat Otomatis Siklus Repeat Order, Job Background 13.2, dan
       expect(rem.source).toBe(ReminderSource.MANUAL);
       expect(rem.lastOrderDate).toEqual(dNew);
       // Tanggal jatuh tempo bertambah 14 hari dari order baru
-      expect(wibDayIndex(rem.nextDueDate) - wibDayIndex(dNew)).toBe(14);
+      expect(wibDayIndex(rem.nextDueDate!) - wibDayIndex(dNew)).toBe(14);
     });
 
     it('rebuildRemindersForCustomer membatalkan pengingat jika semua order COMPLETED produk tersebut dibatalkan', async () => {
@@ -701,12 +865,12 @@ describe('T4.4: Pengingat Otomatis Siklus Repeat Order, Job Background 13.2, dan
       // Notifikasi eskalasi ditujukan ke Super Admin
       const escNotif = mockNotifications.find((n) => n.type === 'REPEAT_ESCALATION');
       expect(escNotif).toBeTruthy();
-      expect(escNotif.userId).toBe(superAdminUser.id);
-      expect(escNotif.title).toContain('Eskalasi');
+      expect(escNotif!.userId).toBe(superAdminUser.id);
+      expect(escNotif!.title).toContain('Eskalasi');
 
       // Reminder ditandai sudah dieskalasikan
       const updatedRem = mockReminders.find((r) => r.id === 'rem_escalate');
-      expect(updatedRem.escalatedAt).toBeTruthy();
+      expect(updatedRem!.escalatedAt).toBeTruthy();
     });
 
     it('tidak mengirim notifikasi bila sudah ada order baru setelah lastOrderDate', async () => {
@@ -947,7 +1111,7 @@ describe('T4.4: Pengingat Otomatis Siklus Repeat Order, Job Background 13.2, dan
       expect(json.ok).toBe(true);
 
       const del = mockReminders.find((r) => r.id === 'rem_del');
-      expect(del.status).toBe(ReminderStatus.CANCELLED);
+      expect(del!.status).toBe(ReminderStatus.CANCELLED);
     });
   });
 

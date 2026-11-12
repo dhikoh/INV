@@ -20,6 +20,7 @@ import { Skeleton, ErrorState } from '@/components/ui/States';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { formatRupiah, formatPercentFromBps } from '@/lib/domain/money';
 import { buildInvoiceWaMessage, buildWaShareUrl } from '@/lib/domain/whatsapp';
+import { formatDateId } from '@/lib/format/date';
 
 interface InvoiceDetailResponse {
   id: string;
@@ -470,21 +471,13 @@ export default function InvoiceDetailPage() {
               </h2>
               <div className="text-xs text-slate-500 mt-1">
                 Dibuat pada:{' '}
-                {new Date(data.createdAt).toLocaleDateString('id-ID', {
-                  day: 'numeric',
-                  month: 'long',
-                  year: 'numeric',
-                })}
+                {formatDateId(data.createdAt, 'long')}
               </div>
               {data.dueDate && (
                 <div className="text-xs text-slate-700 mt-0.5">
                   Jatuh Tempo:{' '}
                   <strong className="font-mono">
-                    {new Date(data.dueDate).toLocaleDateString('id-ID', {
-                      day: 'numeric',
-                      month: 'long',
-                      year: 'numeric',
-                    })}
+                    {formatDateId(data.dueDate, 'long')}
                   </strong>
                 </div>
               )}
@@ -654,13 +647,7 @@ export default function InvoiceDetailPage() {
                 <div className="absolute -left-[21px] top-0.5 w-3 h-3 rounded-full bg-blue-600 border-2 border-white" />
                 <div className="font-semibold text-slate-900">Faktur Diajukan</div>
                 <div className="text-slate-500 text-[11px]">
-                  {new Date(data.createdAt).toLocaleDateString('id-ID', {
-                    day: 'numeric',
-                    month: 'short',
-                    year: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}
+                  {formatDateId(data.createdAt, 'dateTime')}
                 </div>
               </div>
 
@@ -688,24 +675,12 @@ export default function InvoiceDetailPage() {
                 </div>
                 {data.approvedAt && (
                   <div className="text-slate-500 text-[11px]">
-                    {new Date(data.approvedAt).toLocaleDateString('id-ID', {
-                      day: 'numeric',
-                      month: 'short',
-                      year: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
+                    {formatDateId(data.approvedAt, 'dateTime')}
                   </div>
                 )}
                 {data.rejectedAt && (
                   <div className="text-slate-500 text-[11px]">
-                    {new Date(data.rejectedAt).toLocaleDateString('id-ID', {
-                      day: 'numeric',
-                      month: 'short',
-                      year: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
+                    {formatDateId(data.rejectedAt, 'dateTime')}
                   </div>
                 )}
               </div>
@@ -752,11 +727,7 @@ export default function InvoiceDetailPage() {
                       <span>{p.method}</span>
                       <span>•</span>
                       <span>
-                        {new Date(p.paidAt).toLocaleDateString('id-ID', {
-                          day: 'numeric',
-                          month: 'short',
-                          year: 'numeric',
-                        })}
+                        {formatDateId(p.paidAt)}
                       </span>
                     </div>
                     {p.receiptNo && (

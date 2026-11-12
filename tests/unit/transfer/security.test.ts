@@ -11,10 +11,10 @@ describe('Unit Transfer: Keamanan Impor Data (Bagian 10 Butir C)', () => {
     vi.restoreAllMocks();
     vi.spyOn(prisma, '$queryRaw').mockResolvedValue([
       { migration_name: dummyMigration },
-    ] as any);
+    ] as never);
   });
 
-  function createValidBaseManifest(overrides: Record<string, any> = {}) {
+  function createValidBaseManifest(overrides: Record<string, unknown> = {}) {
     return {
       format: 'omnicat-export',
       formatVersion: 1,
@@ -126,7 +126,7 @@ describe('Unit Transfer: Keamanan Impor Data (Bagian 10 Butir C)', () => {
     // Database target mengembalikan migrasi yang lebih baru
     vi.spyOn(prisma, '$queryRaw').mockResolvedValue([
       { migration_name: dummyMigration },
-    ] as any);
+    ] as never);
 
     const zip = zipSync({
       'manifest.json': strToU8(JSON.stringify(manifest)),

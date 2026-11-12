@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NextRequest } from 'next/server';
-import { Role } from '@prisma/client';
 import { unzipSync, strFromU8 } from 'fflate';
 import { exportData } from '@/lib/transfer/export';
 import { prisma } from '@/lib/db';
@@ -25,10 +24,12 @@ describe('Unit Transfer: Ekspor Data & Route Handler RBAC (Bagian 10 Butir D Sis
       deletedAt: null,
     };
 
-    vi.spyOn(prisma.business, 'findFirst').mockResolvedValue(mockBiz as any);
+    vi.spyOn(prisma.business, 'findFirst').mockResolvedValue(mockBiz as never);
 
-    vi.spyOn(prisma, '$transaction').mockImplementation(async (callback: any) => {
-      const mockTx: Record<string, any> = {
+    vi.spyOn(prisma, '$transaction').mockImplementation((async (
+      callback: (tx: Record<string, unknown>) => Promise<unknown>
+    ) => {
+      const mockTx: Record<string, unknown> = {
         $queryRaw: vi.fn().mockResolvedValue([
           { migration_name: '20261110000003_catalog_same_business_guard' },
         ]),
@@ -48,7 +49,7 @@ describe('Unit Transfer: Ekspor Data & Route Handler RBAC (Bagian 10 Butir D Sis
       }
 
       return callback(mockTx);
-    });
+    }) as never);
 
     const result = await exportData({
       scope: 'business',
@@ -77,12 +78,6 @@ describe('Unit Transfer: Ekspor Data & Route Handler RBAC (Bagian 10 Butir D Sis
   });
 
   it('menolak akses pengguna dengan peran SALES (403 Forbidden)', async () => {
-    const salesCtx: any = {
-      user: { id: 'sales_1', role: Role.SALES, businessId: 'biz_001' },
-      role: Role.SALES,
-      session: { id: 'sess_1', activeBusinessId: 'biz_001' },
-    };
-
     vi.spyOn(contextModule, 'requireContext').mockRejectedValue({
       status: 403,
       message: 'Akses ditolak: role tidak memiliki izin untuk resource ini',

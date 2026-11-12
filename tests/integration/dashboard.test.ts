@@ -10,6 +10,7 @@ import {
   CommissionMode,
 } from '@prisma/client';
 import * as contextModule from '@/lib/auth/context';
+import type { Ctx } from '@/lib/auth/context';
 import { assertNoSecretKeys } from '../helpers/leak';
 import { DomainError } from '@/lib/domain/money';
 import { GET as getDashboardHandler } from '@/app/api/v1/dashboard/route';
@@ -153,10 +154,84 @@ let mockCommissions: MockCommissionEntry[] = [];
 let mockUsers: MockUser[] = [];
 
 // Mock DB
+interface OrderWhere {
+  businessId?: string;
+  deletedAt?: null;
+  id?: { in?: string[] };
+  salesId?: string;
+  status?: OrderStatus | { in?: OrderStatus[] };
+  createdAt?: { gte?: Date; lte?: Date };
+}
+
+interface PaymentWhere {
+  businessId?: string;
+  status?: PaymentStatus;
+}
+
+interface ProductWhere {
+  businessId?: string;
+  isActive?: boolean;
+  deletedAt?: null;
+}
+
+interface CustomerWhere {
+  businessId?: string;
+  deletedAt?: null;
+  assignedSalesId?: string | null;
+}
+
+interface InvoiceWhere {
+  businessId?: string;
+  deletedAt?: null;
+  status?: InvoiceStatus | { notIn?: InvoiceStatus[] };
+  dueDate?: { lt?: Date; lte?: Date };
+  customerId?: { in?: string[] };
+  order?: { salesId?: string };
+}
+
+interface ReminderOrCondition {
+  nextDueDate?: { lte?: Date };
+  snoozedUntil?: { lte?: Date };
+}
+
+interface ReminderWhere {
+  businessId?: string;
+  salesId?: string;
+  status?: ReminderStatus;
+  OR?: ReminderOrCondition[];
+}
+
+interface CrmTaskWhere {
+  businessId?: string;
+  assignedToId?: string;
+  doneAt?: null;
+  dueAt?: { lte?: Date };
+}
+
+interface SalesTargetWhere {
+  businessId?: string;
+  salesId?: string;
+  month?: string;
+}
+
+interface CommissionWhere {
+  businessId?: string;
+  salesId?: string;
+  status?: { in?: CommissionStatus[] };
+  earnedAt?: { gte?: Date; lte?: Date };
+}
+
+interface UserWhere {
+  businessId?: string;
+  role?: Role;
+  isActive?: boolean;
+  deletedAt?: null;
+}
+
 vi.mock('@/lib/db', () => {
   const mockPrisma = {
     order: {
-      count: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      count: vi.fn(async ({ where }: { where: OrderWhere }) => {
         return mockOrders.filter((o) => {
           if (where.businessId && o.businessId !== where.businessId) return false;
           if (where.deletedAt === null && o.deletedAt !== null) return false;
@@ -171,7 +246,7 @@ vi.mock('@/lib/db', () => {
           return true;
         }).length;
       }),
-      findMany: vi.fn(async ({ where, select, take }: { where: Record<string, any>; select?: Record<string, any>; take?: number }) => {
+      findMany: vi.fn(async ({ where, take }: { where: OrderWhere; select?: Record<string, unknown>; take?: number }) => {
         const filtered = mockOrders.filter((o) => {
           if (where.businessId && o.businessId !== where.businessId) return false;
           if (where.deletedAt === null && o.deletedAt !== null) return false;
@@ -202,14 +277,14 @@ vi.mock('@/lib/db', () => {
       }),
     },
     payment: {
-      count: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      count: vi.fn(async ({ where }: { where: PaymentWhere }) => {
         return mockPayments.filter((p) => {
           if (where.businessId && p.businessId !== where.businessId) return false;
           if (where.status && p.status !== where.status) return false;
           return true;
         }).length;
       }),
-      findMany: vi.fn(async ({ where, take }: { where: Record<string, any>; take?: number }) => {
+      findMany: vi.fn(async ({ where, take }: { where: PaymentWhere; take?: number }) => {
         const filtered = mockPayments.filter((p) => {
           if (where.businessId && p.businessId !== where.businessId) return false;
           if (where.status && p.status !== where.status) return false;
@@ -231,7 +306,7 @@ vi.mock('@/lib/db', () => {
       }),
     },
     product: {
-      findMany: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findMany: vi.fn(async ({ where }: { where: ProductWhere }) => {
         return mockProducts.filter((p) => {
           if (where.businessId && p.businessId !== where.businessId) return false;
           if (where.isActive !== undefined && p.isActive !== where.isActive) return false;
@@ -241,7 +316,7 @@ vi.mock('@/lib/db', () => {
       }),
     },
     customer: {
-      findMany: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findMany: vi.fn(async ({ where }: { where: CustomerWhere }) => {
         return mockCustomers.filter((c) => {
           if (where.businessId && c.businessId !== where.businessId) return false;
           if (where.deletedAt === null && c.deletedAt !== null) return false;
@@ -249,7 +324,7 @@ vi.mock('@/lib/db', () => {
           return true;
         });
       }),
-      count: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      count: vi.fn(async ({ where }: { where: CustomerWhere }) => {
         return mockCustomers.filter((c) => {
           if (where.businessId && c.businessId !== where.businessId) return false;
           if (where.deletedAt === null && c.deletedAt !== null) return false;
@@ -260,12 +335,17 @@ vi.mock('@/lib/db', () => {
       }),
     },
     invoice: {
-      findMany: vi.fn(async ({ where, take }: { where: Record<string, any>; take?: number }) => {
+      findMany: vi.fn(async ({ where, take }: { where: InvoiceWhere; take?: number }) => {
         const filtered = mockInvoices.filter((inv) => {
           if (where.businessId && inv.businessId !== where.businessId) return false;
           if (where.deletedAt === null && inv.deletedAt !== null) return false;
-          if (where.status && inv.status !== where.status) return false;
-          if (where.status?.notIn && where.status.notIn.includes(inv.status)) return false;
+          if (where.status) {
+            if (typeof where.status === 'string') {
+              if (inv.status !== where.status) return false;
+            } else if (where.status.notIn && where.status.notIn.includes(inv.status)) {
+              return false;
+            }
+          }
           if (where.dueDate?.lt && (!inv.dueDate || inv.dueDate >= where.dueDate.lt)) return false;
           if (where.dueDate?.lte && (!inv.dueDate || inv.dueDate > where.dueDate.lte)) return false;
           if (where.customerId?.in && !where.customerId.in.includes(inv.customerId)) return false;
@@ -295,13 +375,13 @@ vi.mock('@/lib/db', () => {
       }),
     },
     reminder: {
-      findMany: vi.fn(async ({ where, take }: { where: Record<string, any>; take?: number }) => {
+      findMany: vi.fn(async ({ where, take }: { where: ReminderWhere; take?: number }) => {
         const filtered = mockReminders.filter((r) => {
           if (where.businessId && r.businessId !== where.businessId) return false;
           if (where.salesId && r.salesId !== where.salesId) return false;
           if (where.status && r.status !== where.status) return false;
           if (where.OR) {
-            const matches = where.OR.some((cond: any) => {
+            const matches = where.OR.some((cond: ReminderOrCondition) => {
               if (cond.nextDueDate?.lte && r.nextDueDate <= cond.nextDueDate.lte) return true;
               if (cond.snoozedUntil?.lte && r.snoozedUntil && r.snoozedUntil <= cond.snoozedUntil.lte) return true;
               return false;
@@ -321,7 +401,7 @@ vi.mock('@/lib/db', () => {
       }),
     },
     crmTask: {
-      findMany: vi.fn(async ({ where, take }: { where: Record<string, any>; take?: number }) => {
+      findMany: vi.fn(async ({ where, take }: { where: CrmTaskWhere; take?: number }) => {
         const filtered = mockCrmTasks.filter((t) => {
           if (where.businessId && t.businessId !== where.businessId) return false;
           if (where.assignedToId && t.assignedToId !== where.assignedToId) return false;
@@ -340,7 +420,7 @@ vi.mock('@/lib/db', () => {
       }),
     },
     salesTarget: {
-      findFirst: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findFirst: vi.fn(async ({ where }: { where: SalesTargetWhere }) => {
         return (
           mockSalesTargets.find((st) => {
             if (where.businessId && st.businessId !== where.businessId) return false;
@@ -352,7 +432,7 @@ vi.mock('@/lib/db', () => {
       }),
     },
     commissionEntry: {
-      aggregate: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      aggregate: vi.fn(async ({ where }: { where: CommissionWhere }) => {
         const filtered = mockCommissions.filter((c) => {
           if (where.businessId && c.businessId !== where.businessId) return false;
           if (where.salesId && c.salesId !== where.salesId) return false;
@@ -370,7 +450,7 @@ vi.mock('@/lib/db', () => {
       }),
     },
     user: {
-      findMany: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findMany: vi.fn(async ({ where }: { where: UserWhere }) => {
         return mockUsers.filter((u) => {
           if (where.businessId && u.businessId !== where.businessId) return false;
           if (where.role && u.role !== where.role) return false;
@@ -384,13 +464,18 @@ vi.mock('@/lib/db', () => {
   return { prisma: mockPrisma };
 });
 
+type MockAuthCtx = Ctx & {
+  businessId: string;
+  user: Ctx['user'] & { username: string; mustChangePassword: boolean };
+};
+
 describe('T5.1: Operasional Dashboard Bisnis (Seksi 11 & 17.3 nomor 21)', () => {
   const BIZ_ID = 'biz_dash_01';
   const SALES_1_ID = 'sales_usr_01';
   const SALES_2_ID = 'sales_usr_02';
   const SUPERADMIN_ID = 'sa_usr_01';
 
-  const superAdminCtx = {
+  const superAdminCtx: MockAuthCtx = {
     user: { id: SUPERADMIN_ID, name: 'Pak Boss', username: 'owner', role: Role.SUPERADMIN, businessId: BIZ_ID, mustChangePassword: false },
     role: Role.SUPERADMIN,
     businessId: BIZ_ID,
@@ -398,7 +483,7 @@ describe('T5.1: Operasional Dashboard Bisnis (Seksi 11 & 17.3 nomor 21)', () => 
     ip: '127.0.0.1',
   };
 
-  const sales1Ctx = {
+  const sales1Ctx: MockAuthCtx = {
     user: { id: SALES_1_ID, name: 'Sales Budi', username: 'budi', role: Role.SALES, businessId: BIZ_ID, mustChangePassword: false },
     role: Role.SALES,
     businessId: BIZ_ID,
@@ -406,7 +491,7 @@ describe('T5.1: Operasional Dashboard Bisnis (Seksi 11 & 17.3 nomor 21)', () => 
     ip: '127.0.0.1',
   };
 
-  const sales2Ctx = {
+  const sales2Ctx: MockAuthCtx = {
     user: { id: SALES_2_ID, name: 'Sales Siti', username: 'siti', role: Role.SALES, businessId: BIZ_ID, mustChangePassword: false },
     role: Role.SALES,
     businessId: BIZ_ID,
@@ -414,7 +499,7 @@ describe('T5.1: Operasional Dashboard Bisnis (Seksi 11 & 17.3 nomor 21)', () => 
     ip: '127.0.0.1',
   };
 
-  let activeCtx: any = superAdminCtx;
+  let activeCtx: MockAuthCtx = superAdminCtx;
 
   beforeEach(() => {
     mockOrders = [];

@@ -3,10 +3,7 @@ import { NextRequest } from 'next/server';
 import { POST as createFromProductsHandler } from '@/app/api/v1/catalogs/from-products/route';
 import {
   GET as getCatalogHandler,
-  PATCH as updateCatalogHandler,
-  DELETE as deleteCatalogHandler,
 } from '@/app/api/v1/catalogs/[id]/route';
-import { POST as syncCatalogHandler } from '@/app/api/v1/catalogs/[id]/sync/route';
 import { Role } from '@prisma/client';
 import * as contextModule from '@/lib/auth/context';
 
@@ -67,13 +64,13 @@ let mockCatalogItems: MockCatalogItem[] = [];
 let mockProducts: MockProduct[] = [];
 let mockCustomers: MockCustomer[] = [];
 let mockCustomerMinPrices: MockCustomerMinPrice[] = [];
-let mockAuditLogs: Array<any> = [];
+let mockAuditLogs: Array<Record<string, unknown>> = [];
 
 vi.mock('@/lib/db', () => {
   const mockPrisma = {
-    $transaction: vi.fn(async (cb: (tx: any) => Promise<any>) => cb(mockPrisma)),
+    $transaction: vi.fn(async <T>(cb: (tx: never) => Promise<T>): Promise<T> => cb(mockPrisma as never)),
     customer: {
-      findFirst: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findFirst: vi.fn(async ({ where }: { where: { id?: string; businessId?: string; assignedSalesId?: string; deletedAt?: Date | null } }) => {
         return (
           mockCustomers.find((c) => {
             if (where.id && c.id !== where.id) return false;
@@ -86,14 +83,14 @@ vi.mock('@/lib/db', () => {
       }),
     },
     user: {
-      findUnique: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findUnique: vi.fn(async ({ where }: { where: { id: string } }) => {
         if (where.id === 'sales_a1') return { id: 'sales_a1', name: 'Sales A1' };
         if (where.id === 'sales_a2') return { id: 'sales_a2', name: 'Sales A2' };
         return { id: where.id, name: 'User' };
       }),
     },
     product: {
-      count: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      count: vi.fn(async ({ where }: { where: { businessId?: string; deletedAt?: Date | null; isActive?: boolean; id?: { notIn?: string[] } } }) => {
         return mockProducts.filter((p) => {
           if (where.businessId && p.businessId !== where.businessId) return false;
           if (where.deletedAt === null && p.deletedAt !== null) return false;
@@ -102,7 +99,7 @@ vi.mock('@/lib/db', () => {
           return true;
         }).length;
       }),
-      findMany: vi.fn(async ({ where, take }: { where: Record<string, any>; take?: number }) => {
+      findMany: vi.fn(async ({ where, take }: { where: { businessId?: string; deletedAt?: Date | null; isActive?: boolean; id?: { in?: string[]; notIn?: string[] } }; take?: number }) => {
         const filtered = mockProducts.filter((p) => {
           if (where.businessId && p.businessId !== where.businessId) return false;
           if (where.deletedAt === null && p.deletedAt !== null) return false;
@@ -115,7 +112,7 @@ vi.mock('@/lib/db', () => {
       }),
     },
     customerMinPrice: {
-      findMany: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findMany: vi.fn(async ({ where }: { where: { businessId?: string; customerId?: string; productId?: { in?: string[] } } }) => {
         return mockCustomerMinPrices.filter((m) => {
           if (where.businessId && m.businessId !== where.businessId) return false;
           if (where.customerId && m.customerId !== where.customerId) return false;
@@ -125,7 +122,7 @@ vi.mock('@/lib/db', () => {
       }),
     },
     catalog: {
-      create: vi.fn(async ({ data }: { data: any }) => {
+      create: vi.fn(async ({ data }: { data: { businessId: string; ownerId: string; customerId?: string | null; title: string; note?: string | null } }) => {
         const newCat: MockCatalog = {
           id: `cat_${Date.now()}_${Math.random().toString(36).substring(7)}`,
           businessId: data.businessId,
@@ -140,7 +137,7 @@ vi.mock('@/lib/db', () => {
         mockCatalogs.push(newCat);
         return newCat;
       }),
-      findFirst: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findFirst: vi.fn(async ({ where }: { where: { id?: string; businessId?: string; ownerId?: string; deletedAt?: Date | null } }) => {
         const c = mockCatalogs.find((cat) => {
           if (where.id && cat.id !== where.id) return false;
           if (where.businessId && cat.businessId !== where.businessId) return false;
@@ -154,7 +151,7 @@ vi.mock('@/lib/db', () => {
           items: mockCatalogItems.filter((i) => i.catalogId === c.id),
         };
       }),
-      updateMany: vi.fn(async ({ where, data }: { where: Record<string, any>; data: any }) => {
+      updateMany: vi.fn(async ({ where, data }: { where: { id?: string; businessId?: string }; data: { deletedAt?: Date | null; title?: string } }) => {
         let count = 0;
         mockCatalogs.forEach((c) => {
           if (where.id && c.id !== where.id) return;
@@ -167,7 +164,7 @@ vi.mock('@/lib/db', () => {
       }),
     },
     catalogItem: {
-      createMany: vi.fn(async ({ data }: { data: any[] }) => {
+      createMany: vi.fn(async ({ data }: { data: Array<{ catalogId: string; productId: string; price: bigint | number; sortOrder?: number }> }) => {
         data.forEach((d, idx) => {
           mockCatalogItems.push({
             id: `item_${Date.now()}_${idx}`,
@@ -179,7 +176,7 @@ vi.mock('@/lib/db', () => {
         });
         return { count: data.length };
       }),
-      update: vi.fn(async ({ where, data }: { where: Record<string, any>; data: any }) => {
+      update: vi.fn(async ({ where, data }: { where: { id: string }; data: { price?: bigint | number } }) => {
         const item = mockCatalogItems.find((i) => i.id === where.id);
         if (item) {
           if (data.price !== undefined) item.price = BigInt(data.price);
@@ -188,7 +185,7 @@ vi.mock('@/lib/db', () => {
       }),
     },
     auditLog: {
-      create: vi.fn(async ({ data }: { data: any }) => {
+      create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
         mockAuditLogs.push(data);
         return { id: `audit_${Date.now()}`, ...data };
       }),
@@ -340,7 +337,7 @@ describe('T-A17: POST /api/v1/catalogs/from-products (Addendum v2 Seksi 13.6 & 1
     });
 
     const res = await createFromProductsHandler(req, { params: Promise.resolve({}) });
-    const json = await res.json();
+    await res.json();
 
     expect(res.status).toBe(201);
     expect(mockCatalogItems[0].productId).toBe('prod_a1');

@@ -13,6 +13,7 @@ import {
 import { approveInvoice } from '@/lib/services/invoice';
 import { verifyPayment } from '@/lib/services/payment';
 import type { Ctx } from '@/lib/auth/context';
+import { formatDateId } from '@/lib/format/date';
 
 // Gunakan token dari environment, atau token pengujian aman jika belum diatur
 const botToken =
@@ -185,11 +186,7 @@ bot.command('me', async (ctx) => {
   }
 
   const linkedDate = user.telegramLinkedAt
-    ? user.telegramLinkedAt.toLocaleDateString('id-ID', {
-        day: 'numeric',
-        month: 'long',
-        year: 'numeric',
-      })
+    ? formatDateId(user.telegramLinkedAt, 'long')
     : '-';
 
   const text =

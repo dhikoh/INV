@@ -11,15 +11,74 @@ import { env } from '@/lib/env';
 import * as contextModule from '@/lib/auth/context';
 import { assertNoSecretKeys } from '../helpers/leak';
 
-let mockUsers: any[] = [];
-let mockCreditNotes: any[] = [];
-let mockOrders: any[] = [];
-let mockAuditLogs: any[] = [];
+interface MockUser {
+  id: string;
+  role: Role;
+  name: string;
+  businessId: string | null;
+  isActive: boolean;
+  deletedAt: Date | null;
+}
+
+interface MockCreditNote {
+  id: string;
+  businessId: string;
+  orderId: string;
+  number: string;
+  settlement: string;
+  reason: string;
+  amountExPpn: bigint;
+  ppnAmount: bigint;
+  total: bigint;
+  cogsReversed: bigint;
+  createdAt: Date;
+  voidedAt: Date | null;
+  business: Record<string, unknown>;
+  items: Array<{
+    id: string;
+    orderItemId: string;
+    qty: number;
+    restock: boolean;
+    creditAmount: bigint;
+  }>;
+}
+
+interface MockOrder {
+  id: string;
+  orderNo: string;
+  businessId: string;
+  salesId: string;
+  deletedAt: Date | null;
+  customer: {
+    code: string;
+    name: string;
+    contactName: string | null;
+    address: string | null;
+    phone: string | null;
+  };
+  items: Array<{
+    id: string;
+    sku: string;
+    productName: string;
+    unit: string;
+  }>;
+}
+
+interface MockAuditLog {
+  action?: string;
+  summary?: string;
+  [key: string]: unknown;
+}
+
+let mockUsers: MockUser[] = [];
+let mockCreditNotes: MockCreditNote[] = [];
+let mockOrders: MockOrder[] = [];
+let mockAuditLogs: MockAuditLog[] = [];
 
 vi.mock('@/lib/db', () => ({
   prisma: {
     user: {
-      findFirst: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findFirst: vi.fn(async ({ where }: { where: { id?: string; isActive?: boolean; deletedAt?: Date | null } }) => {
         return (
           mockUsers.find((u) => {
             if (where.id && u.id !== where.id) return false;
@@ -31,7 +90,7 @@ vi.mock('@/lib/db', () => ({
       }),
     },
     creditNote: {
-      findFirst: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findFirst: vi.fn(async ({ where }: { where: { id?: string; businessId?: string } }) => {
         return (
           mockCreditNotes.find((c) => {
             if (where.id && c.id !== where.id) return false;
@@ -42,7 +101,7 @@ vi.mock('@/lib/db', () => ({
       }),
     },
     order: {
-      findFirst: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findFirst: vi.fn(async ({ where }: { where: { id?: string; businessId?: string; deletedAt?: Date | null } }) => {
         return (
           mockOrders.find((o) => {
             if (where.id && o.id !== where.id) return false;
@@ -54,7 +113,7 @@ vi.mock('@/lib/db', () => ({
       }),
     },
     auditLog: {
-      create: vi.fn(async ({ data }: { data: any }) => {
+      create: vi.fn(async ({ data }: { data: MockAuditLog }) => {
         mockAuditLogs.push(data);
         return data;
       }),
@@ -63,7 +122,7 @@ vi.mock('@/lib/db', () => ({
 }));
 
 vi.mock('@/lib/pdf/engine', async (importOriginal) => {
-  const actual: any = await importOriginal();
+  const actual = await importOriginal<typeof import('@/lib/pdf/engine')>();
   return {
     ...actual,
     renderReactToPdf: vi.fn(async () => Buffer.from('%PDF-1.4 mock credit note pdf')),
@@ -291,7 +350,7 @@ describe('Integrasi Cetak PDF Nota Kredit (Direct Route, Token dl/[token], & Ant
   });
 
   it('GET /api/v1/credit-notes/[id]/pdf berhasil mengembalikan biner %PDF- & audit log untuk SuperAdmin dan Sales pemilik order', async () => {
-    vi.spyOn(contextModule, 'requireContext').mockResolvedValueOnce(superAdminCtx as any);
+    vi.spyOn(contextModule, 'requireContext').mockResolvedValueOnce(superAdminCtx);
 
     const req = new NextRequest('http://localhost:3000/api/v1/credit-notes/cn_active_1/pdf');
     const res = await getCreditNotePdfHandler(req, {
@@ -308,7 +367,7 @@ describe('Integrasi Cetak PDF Nota Kredit (Direct Route, Token dl/[token], & Ant
     expect(mockAuditLogs[0].action).toBe('CREDIT_NOTE_PRINT');
 
     // Mode print HTML fallback (?format=html) juga harus memuat HTML bersih bebas HPP
-    vi.spyOn(contextModule, 'requireContext').mockResolvedValueOnce(sales1Ctx as any);
+    vi.spyOn(contextModule, 'requireContext').mockResolvedValueOnce(sales1Ctx);
     const htmlReq = new NextRequest(
       'http://localhost:3000/api/v1/credit-notes/cn_active_1/pdf?format=html'
     );
@@ -323,7 +382,7 @@ describe('Integrasi Cetak PDF Nota Kredit (Direct Route, Token dl/[token], & Ant
   });
 
   it('menolak akses Sales lain (403 FORBIDDEN) dan mengisolasi tenant lain (404 NOT_FOUND)', async () => {
-    vi.spyOn(contextModule, 'requireContext').mockResolvedValueOnce(sales2Ctx as any);
+    vi.spyOn(contextModule, 'requireContext').mockResolvedValueOnce(sales2Ctx);
     const reqIdor = new NextRequest('http://localhost:3000/api/v1/credit-notes/cn_active_1/pdf');
     const resIdor = await getCreditNotePdfHandler(reqIdor, {
       params: Promise.resolve({ id: 'cn_active_1' }),
@@ -332,7 +391,7 @@ describe('Integrasi Cetak PDF Nota Kredit (Direct Route, Token dl/[token], & Ant
     const idorJson = await resIdor.json();
     expect(idorJson.error.code).toBe('FORBIDDEN');
 
-    vi.spyOn(contextModule, 'requireContext').mockResolvedValueOnce(superAdminCtx as any);
+    vi.spyOn(contextModule, 'requireContext').mockResolvedValueOnce(superAdminCtx);
     const reqCrossTenant = new NextRequest('http://localhost:3000/api/v1/credit-notes/cn_other_biz/pdf');
     const resCrossTenant = await getCreditNotePdfHandler(reqCrossTenant, {
       params: Promise.resolve({ id: 'cn_other_biz' }),
@@ -364,7 +423,7 @@ describe('Integrasi Cetak PDF Nota Kredit (Direct Route, Token dl/[token], & Ant
     expect(res.headers.get('Content-Disposition')).toContain('CN-2026-05-0001.pdf');
     const buf = Buffer.from(await res.arrayBuffer());
     expect(buf.subarray(0, 5).toString()).toBe('%PDF-');
-    expect(mockAuditLogs.some((a) => a.summary.includes('tautan sekali buka'))).toBe(true);
+    expect(mockAuditLogs.some((a) => a.summary?.includes('tautan sekali buka'))).toBe(true);
 
     // IDOR via token: Sales 2 mencoba unduh Nota Kredit milik Sales 1
     const { token: idorToken } = createDownloadToken(

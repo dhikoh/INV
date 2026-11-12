@@ -23,6 +23,7 @@ import { formatRupiah } from '@/lib/domain/money';
 import { PatenPrice } from '@/components/ui/PatenPrice';
 import { FloorSource } from '@/lib/domain/pricing';
 import { useIsOnline } from '@/components/pwa/OfflineBanner';
+import { formatDateId } from '@/lib/format/date';
 
 interface CustomerSummary {
   id: string;
@@ -431,7 +432,7 @@ export default function CatalogDetailPage() {
               </span>
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
-              Dibuat oleh {catalog.ownerName} • {new Date(catalog.createdAt).toLocaleDateString('id-ID')}
+              Dibuat oleh {catalog.ownerName} • {formatDateId(catalog.createdAt, 'compact')}
             </p>
           </div>
         </div>

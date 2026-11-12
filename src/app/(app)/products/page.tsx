@@ -28,6 +28,7 @@ import { ConfirmTypeDialog } from '@/components/ui/ConfirmTypeDialog';
 import { formatRupiah } from '@/lib/domain/money';
 import { PatenPrice } from '@/components/ui/PatenPrice';
 import { SortableHeader } from '@/components/ui/SortableHeader';
+import { formatDateId } from '@/lib/format/date';
 
 interface CategoryItem {
   id: string;
@@ -129,7 +130,7 @@ export default function ProductsPage() {
     setShowFromProductsModal(true);
     setFromProductsError(null);
     setFromProductsTitle(
-      `Katalog Penawaran ${activeBusinessName || ''} - ${new Date().toLocaleDateString('id-ID')}`.trim()
+      `Katalog Penawaran ${activeBusinessName || ''} - ${formatDateId(new Date(), 'compact')}`.trim()
     );
     if (customersList.length === 0) {
       try {

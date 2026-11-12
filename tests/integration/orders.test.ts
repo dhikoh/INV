@@ -16,7 +16,6 @@ import {
   DiscountSource,
   DiscountType,
 } from '@prisma/client';
-import { DomainError } from '@/lib/domain/money';
 import * as contextModule from '@/lib/auth/context';
 import { assertNoSecretKeys } from '../helpers/leak';
 
@@ -462,6 +461,7 @@ describe('Integrasi Draf Order, Preview, dan Penegakan DTO per Role (T2.5, Seksi
     sessionId: 'sess_sales_b',
     ip: '127.0.0.1',
   };
+  void salesBCtx;
 
   let activeCtx = superAdminCtx;
 

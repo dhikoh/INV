@@ -24,6 +24,7 @@ import {
   MarginSalesRow,
   MarginBusinessRow,
 } from '@/lib/services/reportMargin';
+import { formatDateId } from '@/lib/format/date';
 
 type GroupByOption = 'order' | 'product' | 'sales' | 'business';
 
@@ -521,7 +522,7 @@ export default function MarginReportPage() {
                           {row.orderNo} <ArrowUpRight className="w-3 h-3" />
                         </Link>
                         <div className="text-[11px] text-slate-400 font-normal">
-                          {new Date(row.orderDate).toLocaleDateString('id-ID')}
+                          {formatDateId(row.orderDate, 'compact')}
                         </div>
                       </td>
                       <td className="py-3 px-4">

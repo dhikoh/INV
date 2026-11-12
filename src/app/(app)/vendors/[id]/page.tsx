@@ -22,6 +22,7 @@ import {
 import { Skeleton, ErrorState, EmptyState } from '@/components/ui/States';
 import { MoneyInput } from '@/components/ui/MoneyInput';
 import { formatRupiah } from '@/lib/domain/money';
+import { formatDateId } from '@/lib/format/date';
 
 interface VendorDetail {
   id: string;
@@ -456,11 +457,7 @@ export default function VendorDetailPage() {
                       <tr key={entry.id} className="hover:bg-slate-50/50">
                         {/* Tanggal */}
                         <td className="px-4 py-3 text-xs text-slate-600 font-mono">
-                          {new Date(entry.date).toLocaleDateString('id-ID', {
-                            day: 'numeric',
-                            month: 'short',
-                            year: 'numeric',
-                          })}
+                          {formatDateId(entry.date)}
                         </td>
 
                         {/* Dokumen / Jenis */}
@@ -557,11 +554,7 @@ export default function VendorDetailPage() {
                         )}
                       </div>
                       <div className="text-[11px] font-mono text-slate-400">
-                        {new Date(entry.date).toLocaleDateString('id-ID', {
-                          day: 'numeric',
-                          month: 'short',
-                          year: 'numeric',
-                        })}
+                        {formatDateId(entry.date)}
                       </div>
                     </div>
 

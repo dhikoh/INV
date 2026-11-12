@@ -103,26 +103,40 @@ let mockBusinesses: MockBusiness[] = [];
 
 // Mock engine PDF to avoid chromium launch
 vi.mock('@/lib/pdf/engine', async (importOriginal) => {
-  const actual: any = await importOriginal();
+  const actual = await importOriginal<typeof import('@/lib/pdf/engine')>();
   return {
     ...actual,
     renderHtmlToPdf: vi.fn(async () => Buffer.from('%PDF-1.4 mock catalog pdf data')),
   };
 });
 
+interface CatalogOrCondition {
+  title?: { contains: string };
+  note?: { contains: string };
+}
+
+interface CatalogWhere {
+  id?: string;
+  businessId?: string;
+  deletedAt?: Date | null;
+  ownerId?: string;
+  customerId?: string;
+  OR?: CatalogOrCondition[];
+}
+
 // Mock DB
 vi.mock('@/lib/db', () => {
   const mockPrisma = {
-    $transaction: vi.fn(async (cb: (tx: any) => Promise<any>) => cb(mockPrisma)),
+    $transaction: vi.fn(async <T>(cb: (tx: never) => Promise<T>): Promise<T> => cb(mockPrisma as never)),
     catalog: {
-      count: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      count: vi.fn(async ({ where }: { where: CatalogWhere }) => {
         return mockCatalogs.filter((c) => {
           if (where.businessId && c.businessId !== where.businessId) return false;
           if (where.deletedAt === null && c.deletedAt !== null) return false;
           if (where.ownerId && c.ownerId !== where.ownerId) return false;
           if (where.customerId && c.customerId !== where.customerId) return false;
           if (where.OR) {
-            const matches = where.OR.some((cond: any) => {
+            const matches = where.OR.some((cond) => {
               if (cond.title && c.title.toLowerCase().includes(cond.title.contains.toLowerCase())) return true;
               if (cond.note && c.note && c.note.toLowerCase().includes(cond.note.contains.toLowerCase())) return true;
               return false;
@@ -132,14 +146,14 @@ vi.mock('@/lib/db', () => {
           return true;
         }).length;
       }),
-      findMany: vi.fn(async ({ where, skip = 0, take = 20 }: { where: Record<string, any>; skip?: number; take?: number }) => {
+      findMany: vi.fn(async ({ where, skip = 0, take = 20 }: { where: CatalogWhere; skip?: number; take?: number }) => {
         const filtered = mockCatalogs.filter((c) => {
           if (where.businessId && c.businessId !== where.businessId) return false;
           if (where.deletedAt === null && c.deletedAt !== null) return false;
           if (where.ownerId && c.ownerId !== where.ownerId) return false;
           if (where.customerId && c.customerId !== where.customerId) return false;
           if (where.OR) {
-            const matches = where.OR.some((cond: any) => {
+            const matches = where.OR.some((cond) => {
               if (cond.title && c.title.toLowerCase().includes(cond.title.contains.toLowerCase())) return true;
               if (cond.note && c.note && c.note.toLowerCase().includes(cond.note.contains.toLowerCase())) return true;
               return false;
@@ -156,7 +170,7 @@ vi.mock('@/lib/db', () => {
           },
         }));
       }),
-      findFirst: vi.fn(async ({ where, include }: { where: Record<string, any>; include?: Record<string, any> }) => {
+      findFirst: vi.fn(async ({ where, include }: { where: CatalogWhere; include?: { items?: boolean } }) => {
         const c = mockCatalogs.find((cat) => {
           if (where.id && cat.id !== where.id) return false;
           if (where.businessId && cat.businessId !== where.businessId) return false;
@@ -174,7 +188,7 @@ vi.mock('@/lib/db', () => {
         }
         return c;
       }),
-      create: vi.fn(async ({ data }: { data: any }) => {
+      create: vi.fn(async ({ data }: { data: { businessId: string; ownerId: string; customerId?: string | null; title: string; note?: string | null; items?: { createMany?: { data: Array<{ productId: string; price: bigint | number; sortOrder?: number }> } } } }) => {
         const newCat: MockCatalog = {
           id: `cat_${Date.now()}_${Math.random().toString(36).substring(7)}`,
           businessId: data.businessId,
@@ -189,7 +203,7 @@ vi.mock('@/lib/db', () => {
         mockCatalogs.push(newCat);
 
         if (data.items?.createMany?.data) {
-          data.items.createMany.data.forEach((itemData: any, idx: number) => {
+          data.items.createMany.data.forEach((itemData, idx) => {
             mockCatalogItems.push({
               id: `item_${Date.now()}_${idx}`,
               catalogId: newCat.id,
@@ -201,7 +215,7 @@ vi.mock('@/lib/db', () => {
         }
         return newCat;
       }),
-      updateMany: vi.fn(async ({ where, data }: { where: Record<string, any>; data: any }) => {
+      updateMany: vi.fn(async ({ where, data }: { where: CatalogWhere; data: { title?: string; customerId?: string | null; note?: string | null; deletedAt?: Date | null } }) => {
         let count = 0;
         mockCatalogs.forEach((c) => {
           if (where.id && c.id !== where.id) return;
@@ -216,7 +230,7 @@ vi.mock('@/lib/db', () => {
         });
         return { count };
       }),
-      deleteMany: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      deleteMany: vi.fn(async ({ where }: { where: CatalogWhere }) => {
         let count = 0;
         mockCatalogs.forEach((c) => {
           if (where.id && c.id !== where.id) return;
@@ -228,13 +242,13 @@ vi.mock('@/lib/db', () => {
       }),
     },
     catalogItem: {
-      findMany: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findMany: vi.fn(async ({ where }: { where: { catalogId?: string } }) => {
         return mockCatalogItems.filter((i) => {
           if (where.catalogId && i.catalogId !== where.catalogId) return false;
           return true;
         });
       }),
-      createMany: vi.fn(async ({ data }: { data: any[] }) => {
+      createMany: vi.fn(async ({ data }: { data: Array<{ catalogId: string; productId: string; price: bigint | number; sortOrder?: number }> }) => {
         data.forEach((itemData, idx) => {
           mockCatalogItems.push({
             id: `item_${Date.now()}_${idx}`,
@@ -246,7 +260,7 @@ vi.mock('@/lib/db', () => {
         });
         return { count: data.length };
       }),
-      deleteMany: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      deleteMany: vi.fn(async ({ where }: { where: { catalogId?: string } }) => {
         const initialLen = mockCatalogItems.length;
         mockCatalogItems = mockCatalogItems.filter((i) => {
           if (where.catalogId && i.catalogId === where.catalogId) return false;
@@ -254,7 +268,7 @@ vi.mock('@/lib/db', () => {
         });
         return { count: initialLen - mockCatalogItems.length };
       }),
-      updateMany: vi.fn(async ({ where, data }: { where: Record<string, any>; data: any }) => {
+      updateMany: vi.fn(async ({ where, data }: { where: { id?: string; catalogId?: string; productId?: string }; data: { price?: bigint | number } }) => {
         let count = 0;
         mockCatalogItems.forEach((i) => {
           if (where.id && i.id !== where.id) return;
@@ -267,7 +281,7 @@ vi.mock('@/lib/db', () => {
       }),
     },
     product: {
-      findMany: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findMany: vi.fn(async ({ where }: { where: { businessId?: string; deletedAt?: Date | null; id?: { in?: string[] } } }) => {
         return mockProducts.filter((p) => {
           if (where.businessId && p.businessId !== where.businessId) return false;
           if (where.deletedAt === null && p.deletedAt !== null) return false;
@@ -275,7 +289,7 @@ vi.mock('@/lib/db', () => {
           return true;
         });
       }),
-      findFirst: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findFirst: vi.fn(async ({ where }: { where: { id?: string; businessId?: string; deletedAt?: Date | null } }) => {
         return (
           mockProducts.find((p) => {
             if (where.id && p.id !== where.id) return false;
@@ -287,14 +301,14 @@ vi.mock('@/lib/db', () => {
       }),
     },
     customer: {
-      findMany: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findMany: vi.fn(async ({ where }: { where: { businessId?: string; id?: { in?: string[] } } }) => {
         return mockCustomers.filter((c) => {
           if (where.businessId && c.businessId !== where.businessId) return false;
           if (where.id?.in && !where.id.in.includes(c.id)) return false;
           return true;
         });
       }),
-      findFirst: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findFirst: vi.fn(async ({ where }: { where: { id?: string; businessId?: string } }) => {
         return (
           mockCustomers.find((c) => {
             if (where.id && c.id !== where.id) return false;
@@ -305,7 +319,7 @@ vi.mock('@/lib/db', () => {
       }),
     },
     customerMinPrice: {
-      findMany: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findMany: vi.fn(async ({ where }: { where: { businessId?: string; customerId?: string; productId?: { in?: string[] } } }) => {
         return mockCustomerMinPrices.filter((cmp) => {
           if (where.businessId && cmp.businessId !== where.businessId) return false;
           if (where.customerId && cmp.customerId !== where.customerId) return false;
@@ -318,7 +332,7 @@ vi.mock('@/lib/db', () => {
       findUnique: vi.fn(async ({ where }: { where: { id: string } }) => {
         return mockUsers.find((u) => u.id === where.id) || null;
       }),
-      findMany: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findMany: vi.fn(async ({ where }: { where: { id?: { in?: string[] } } }) => {
         return mockUsers.filter((u) => {
           if (where.id?.in && !where.id.in.includes(u.id)) return false;
           return true;
@@ -326,7 +340,7 @@ vi.mock('@/lib/db', () => {
       }),
     },
     business: {
-      findFirst: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findFirst: vi.fn(async ({ where }: { where: { id?: string; deletedAt?: Date | null } }) => {
         return (
           mockBusinesses.find((b) => {
             if (where.id && b.id !== where.id) return false;
@@ -346,31 +360,23 @@ describe('T4.5: Manajemen Katalog Harga, Validasi Floor, dan PDF (Seksi 15 & 17.
   const SALES_2_ID = 'usr_sales_02';
   const SUPERADMIN_ID = 'usr_admin_01';
 
-  const sales1Ctx = {
-    user: { id: SALES_1_ID, name: 'Sales Satu', username: 'sales1', role: Role.SALES, businessId: BIZ_ID, mustChangePassword: false },
+  const sales1Ctx: contextModule.Ctx = {
+    user: { id: SALES_1_ID, name: 'Sales Satu', role: Role.SALES, businessId: BIZ_ID },
     role: Role.SALES,
     businessId: BIZ_ID,
     sessionId: 'sess_sales_1',
     ip: '127.0.0.1',
   };
 
-  const sales2Ctx = {
-    user: { id: SALES_2_ID, name: 'Sales Dua', username: 'sales2', role: Role.SALES, businessId: BIZ_ID, mustChangePassword: false },
-    role: Role.SALES,
-    businessId: BIZ_ID,
-    sessionId: 'sess_sales_2',
-    ip: '127.0.0.1',
-  };
-
-  const adminCtx = {
-    user: { id: SUPERADMIN_ID, name: 'Super Admin', username: 'admin', role: Role.SUPERADMIN, businessId: BIZ_ID, mustChangePassword: false },
+  const adminCtx: contextModule.Ctx = {
+    user: { id: SUPERADMIN_ID, name: 'Super Admin', role: Role.SUPERADMIN, businessId: BIZ_ID },
     role: Role.SUPERADMIN,
     businessId: BIZ_ID,
     sessionId: 'sess_admin',
     ip: '127.0.0.1',
   };
 
-  let activeCtx: any = sales1Ctx;
+  let activeCtx: contextModule.Ctx = sales1Ctx;
 
   beforeEach(() => {
     mockCatalogs = [];
@@ -470,7 +476,7 @@ describe('T4.5: Manajemen Katalog Harga, Validasi Floor, dan PDF (Seksi 15 & 17.
       }
       return activeCtx;
     });
-    vi.spyOn(contextModule, 'requireBusiness').mockImplementation(() => activeCtx.businessId);
+    vi.spyOn(contextModule, 'requireBusiness').mockImplementation(() => activeCtx.businessId!);
   });
 
   describe('1. Preset Judul Katalog (Seksi 15.1)', () => {
@@ -661,7 +667,7 @@ describe('T4.5: Manajemen Katalog Harga, Validasi Floor, dan PDF (Seksi 15 & 17.
 
       const req = new NextRequest('http://localhost/api/v1/catalogs/cat_sales_2');
       const res = await getCatalogDetailHandler(req, { params: Promise.resolve({ id: 'cat_sales_2' }) });
-      const json = await res.json();
+      await res.json();
 
       expect(res.status).toBe(404);
     });
@@ -738,7 +744,7 @@ describe('T4.5: Manajemen Katalog Harga, Validasi Floor, dan PDF (Seksi 15 & 17.
       });
 
       const res = await replaceCatalogItemsHandler(req, { params: Promise.resolve({ id: 'cat_edit' }) });
-      const json = await res.json();
+      await res.json();
 
       expect(res.status).toBe(200);
       expect(mockCatalogItems.filter((i) => i.catalogId === 'cat_edit')).toHaveLength(1);

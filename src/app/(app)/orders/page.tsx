@@ -19,6 +19,7 @@ import { StatusBadge } from '@/components/ui/StatusBadge';
 import { SortableHeader } from '@/components/ui/SortableHeader';
 import { formatRupiah } from '@/lib/domain/money';
 import { unwrapList } from '@/lib/api/client';
+import { formatDateId } from '@/lib/format/date';
 
 interface CustomerSummary {
   id: string;
@@ -437,11 +438,7 @@ export default function OrdersPage() {
                 </thead>
                 <tbody className="divide-y divide-slate-200">
                   {orders.map((order) => {
-                    const formattedDate = new Date(order.orderDate).toLocaleDateString('id-ID', {
-                      day: 'numeric',
-                      month: 'short',
-                      year: 'numeric',
-                    });
+                    const formattedDate = formatDateId(order.orderDate);
 
                     return (
                       <tr
@@ -509,11 +506,7 @@ export default function OrdersPage() {
           {/* Tampilan Mobile (Kartu Responsif 360 px) */}
           <div className="grid grid-cols-1 gap-3 md:hidden">
             {orders.map((order) => {
-              const formattedDate = new Date(order.orderDate).toLocaleDateString('id-ID', {
-                day: 'numeric',
-                month: 'short',
-                year: 'numeric',
-              });
+              const formattedDate = formatDateId(order.orderDate);
 
               return (
                 <Link

@@ -5,6 +5,7 @@ import {
   receivePurchaseOrder,
   cancelPurchaseOrder,
   updatePurchaseOrder,
+  Tx,
 } from '@/lib/services/purchase-order';
 import {
   recordVendorPayment,
@@ -465,8 +466,10 @@ describe('Purchase Order & Vendor Ledger: purchase-order.ts & vendor-ledger.ts (
   });
 
   it('Alur lengkap PO: buat DRAFT -> ubah DRAFT -> ORDERED (alokasi nomor PO)', async () => {
+    const tx = mockPrisma as unknown as Tx;
+
     // 1. Buat DRAFT
-    const { po: draftPo } = await createPurchaseOrder(mockPrisma as any, businessId, adminId, {
+    const { po: draftPo } = await createPurchaseOrder(tx, businessId, adminId, {
       vendorId,
       orderDate: '2026-11-10',
       shippingCost: 25000,
@@ -481,7 +484,7 @@ describe('Purchase Order & Vendor Ledger: purchase-order.ts & vendor-ledger.ts (
     expect(draftPo.poNo).toBeNull();
 
     // 2. Ubah DRAFT
-    const { po: updatedPo } = await updatePurchaseOrder(mockPrisma as any, businessId, draftPo.id, adminId, {
+    const { po: updatedPo } = await updatePurchaseOrder(tx, businessId, draftPo.id, adminId, {
       shippingCost: 30000,
       items: [{ productId, qty: 15, unitCost: 90000 }],
     });
@@ -490,7 +493,7 @@ describe('Purchase Order & Vendor Ledger: purchase-order.ts & vendor-ledger.ts (
     expect(Number(updatedPo.total)).toBe(1385000); // 1350000 + 30000 + 5000
 
     // 3. Pesan (ORDERED) -> Alokasi poNo resmi
-    const { po: orderedPo } = await orderPurchaseOrder(mockPrisma as any, businessId, draftPo.id, adminId);
+    const { po: orderedPo } = await orderPurchaseOrder(tx, businessId, draftPo.id, adminId);
 
     expect(orderedPo.status).toBe(PoStatus.ORDERED);
     expect(orderedPo.vendorSeq).toBe(1);
@@ -498,17 +501,19 @@ describe('Purchase Order & Vendor Ledger: purchase-order.ts & vendor-ledger.ts (
   });
 
   it('Penerimaan PO menambah stok, menghasilkan mutasi PO_RECEIPT, dan memperbarui HPP dengan PriceHistory', async () => {
-    const created = await createPurchaseOrder(mockPrisma as any, businessId, adminId, {
+    const tx = mockPrisma as unknown as Tx;
+
+    const created = await createPurchaseOrder(tx, businessId, adminId, {
       vendorId,
       orderDate: '2026-11-10',
       items: [{ productId, qty: 10, unitCost: 92000 }],
     });
-    const { po: orderedPo } = await orderPurchaseOrder(mockPrisma as any, businessId, created.po.id, adminId);
+    const { po: orderedPo } = await orderPurchaseOrder(tx, businessId, created.po.id, adminId);
 
     const item = orderedPo.items[0];
 
     // Penerimaan parsial (4 unit) dengan updateHpp = true
-    const { po: receivedPart } = await receivePurchaseOrder(mockPrisma as any, businessId, orderedPo.id, adminId, {
+    const { po: receivedPart } = await receivePurchaseOrder(tx, businessId, orderedPo.id, adminId, {
       items: [{ itemId: item.id, qty: 4, updateHpp: true }],
     });
 
@@ -531,7 +536,7 @@ describe('Purchase Order & Vendor Ledger: purchase-order.ts & vendor-ledger.ts (
     expect(Number(priceHist?.newValue)).toBe(92000);
 
     // Penerimaan sisa (6 unit) tanpa updateHpp
-    const { po: receivedFull } = await receivePurchaseOrder(mockPrisma as any, businessId, orderedPo.id, adminId, {
+    const { po: receivedFull } = await receivePurchaseOrder(tx, businessId, orderedPo.id, adminId, {
       items: [{ itemId: item.id, qty: 6, updateHpp: false }],
     });
 
@@ -542,16 +547,18 @@ describe('Purchase Order & Vendor Ledger: purchase-order.ts & vendor-ledger.ts (
   });
 
   it('Pembatalan PO: Berhasil jika belum ada penerimaan, ditolak 409 jika sudah ada penerimaan barang', async () => {
+    const tx = mockPrisma as unknown as Tx;
+
     // 1. PO tanpa penerimaan -> Bisa dibatalkan
-    const created1 = await createPurchaseOrder(mockPrisma as any, businessId, adminId, {
+    const created1 = await createPurchaseOrder(tx, businessId, adminId, {
       vendorId,
       orderDate: '2026-11-10',
       items: [{ productId, qty: 5, unitCost: 80000 }],
     });
-    const { po: orderedPo1 } = await orderPurchaseOrder(mockPrisma as any, businessId, created1.po.id, adminId);
+    const { po: orderedPo1 } = await orderPurchaseOrder(tx, businessId, created1.po.id, adminId);
 
     const { po: cancelledPo } = await cancelPurchaseOrder(
-      mockPrisma as any,
+      tx,
       businessId,
       orderedPo1.id,
       adminId,
@@ -561,19 +568,19 @@ describe('Purchase Order & Vendor Ledger: purchase-order.ts & vendor-ledger.ts (
     expect(cancelledPo.status).toBe(PoStatus.CANCELLED);
 
     // 2. PO yang sudah ada penerimaan -> Ditolak 409 CANNOT_CANCEL
-    const created2 = await createPurchaseOrder(mockPrisma as any, businessId, adminId, {
+    const created2 = await createPurchaseOrder(tx, businessId, adminId, {
       vendorId,
       orderDate: '2026-11-10',
       items: [{ productId, qty: 5, unitCost: 80000 }],
     });
-    const { po: orderedPo2 } = await orderPurchaseOrder(mockPrisma as any, businessId, created2.po.id, adminId);
-    await receivePurchaseOrder(mockPrisma as any, businessId, orderedPo2.id, adminId, {
+    const { po: orderedPo2 } = await orderPurchaseOrder(tx, businessId, created2.po.id, adminId);
+    await receivePurchaseOrder(tx, businessId, orderedPo2.id, adminId, {
       items: [{ itemId: orderedPo2.items[0].id, qty: 2 }],
     });
 
     await expect(
       cancelPurchaseOrder(
-        mockPrisma as any,
+        tx,
         businessId,
         orderedPo2.id,
         adminId,
@@ -583,8 +590,10 @@ describe('Purchase Order & Vendor Ledger: purchase-order.ts & vendor-ledger.ts (
   });
 
   it('Buku Transaksi Vendor (Vendor Ledger) menjumlah debit, kredit, dan saldo hutang dengan tepat', async () => {
+    const tx = mockPrisma as unknown as Tx;
+
     // 1. Buat PO pertama senilai Rp 500.000
-    const { po: po1 } = await createPurchaseOrder(mockPrisma as any, businessId, adminId, {
+    const { po: po1 } = await createPurchaseOrder(tx, businessId, adminId, {
       vendorId,
       orderDate: '2026-11-01',
       shippingCost: 0,
@@ -592,7 +601,7 @@ describe('Purchase Order & Vendor Ledger: purchase-order.ts & vendor-ledger.ts (
     });
 
     // 2. Buat PO kedua senilai Rp 300.000
-    const { po: po2 } = await createPurchaseOrder(mockPrisma as any, businessId, adminId, {
+    await createPurchaseOrder(tx, businessId, adminId, {
       vendorId,
       orderDate: '2026-11-03',
       shippingCost: 0,
@@ -600,7 +609,7 @@ describe('Purchase Order & Vendor Ledger: purchase-order.ts & vendor-ledger.ts (
     });
 
     // 3. Catat Pembayaran pertama Rp 400.000 (terkait PO1)
-    await recordVendorPayment(mockPrisma as any, businessId, vendorId, adminId, {
+    await recordVendorPayment(tx, businessId, vendorId, adminId, {
       purchaseOrderId: po1.id,
       amount: 400000,
       paidAt: '2026-11-02',
@@ -610,7 +619,7 @@ describe('Purchase Order & Vendor Ledger: purchase-order.ts & vendor-ledger.ts (
     });
 
     // 4. Catat Pembayaran kedua Rp 250.000 (pembayaran umum)
-    await recordVendorPayment(mockPrisma as any, businessId, vendorId, adminId, {
+    await recordVendorPayment(tx, businessId, vendorId, adminId, {
       amount: 250000,
       paidAt: '2026-11-04',
       method: PaymentMethod.TRANSFER,
@@ -618,7 +627,7 @@ describe('Purchase Order & Vendor Ledger: purchase-order.ts & vendor-ledger.ts (
     });
 
     // 5. Periksa Buku Transaksi Vendor
-    const ledger = await getVendorLedger(mockPrisma as any, businessId, vendorId);
+    const ledger = await getVendorLedger(tx, businessId, vendorId);
 
     // Total Beli: 500.000 + 300.000 = 800.000
     expect(ledger.summary.totalPurchases).toBe(800000);

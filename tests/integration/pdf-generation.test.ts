@@ -4,6 +4,7 @@ import React from 'react';
 import { Role, InvoiceStatus, ShipStatus, InvoiceTheme } from '@prisma/client';
 import { DomainError } from '@/lib/domain/money';
 import * as contextModule from '@/lib/auth/context';
+import type { Ctx } from '@/lib/auth/context';
 import { assertNoSecretKeys } from '../helpers/leak';
 import { InvoiceDocument } from '@/lib/pdf/InvoiceDocument';
 import { DeliveryNoteDocument, DeliveryNoteData } from '@/lib/pdf/DeliveryNoteDocument';
@@ -13,18 +14,126 @@ import { renderReactToHtml, Semaphore, closeBrowser } from '@/lib/pdf/engine';
 import { GET as getInvoicePdfHandler } from '@/app/api/v1/invoices/[id]/pdf/route';
 import { GET as getInvoicePreviewHandler } from '@/app/api/v1/businesses/[id]/invoice-preview/route';
 import { GET as getDeliveryNotePdfHandler } from '@/app/api/v1/orders/[id]/delivery-note/pdf/route';
+import type { InvoiceSnapshot } from '@/lib/pdf/snapshot';
 
 // Mock Prisma
-const mockInvoices: any[] = [];
-const mockOrders: any[] = [];
-const mockBusinesses: any[] = [];
-const mockShipments: any[] = [];
-const mockAuditLogs: any[] = [];
+interface MockBusiness {
+  id: string;
+  name: string;
+  legalName: string | null;
+  address: string | null;
+  phone: string | null;
+  email: string | null;
+  npwp?: string | null;
+  logoPath: string | null;
+  invoiceTheme?: string;
+  deletedAt?: Date | null;
+}
+
+interface MockOrder {
+  id: string;
+  orderNo: string;
+  salesId: string;
+  businessId: string;
+  paidTotal?: bigint;
+  grandTotal?: bigint;
+  dpAmount?: bigint;
+  deliveryAddress?: string;
+  deletedAt: Date | null;
+  business?: MockBusiness;
+  customer?: {
+    id: string;
+    code: string;
+    name: string;
+    contactName: string | null;
+    address: string | null;
+    phone: string | null;
+  };
+  items?: Array<{
+    id: string;
+    qty: number;
+    productName: string;
+    sku: string;
+    unit: string;
+    sortOrder: number;
+  }>;
+}
+
+interface MockInvoice {
+  id: string;
+  orderId: string;
+  number: string | null;
+  businessId?: string;
+  status: InvoiceStatus;
+  amount?: bigint;
+  paidAmount?: bigint;
+  type?: string;
+  theme?: InvoiceTheme;
+  snapshot?: InvoiceSnapshot | null;
+  printedCount?: number;
+  lastPrintedAt?: Date | null;
+  deletedAt: Date | null;
+  business?: MockBusiness;
+}
+
+interface MockShipment {
+  id: string;
+  orderId: string;
+  status: ShipStatus;
+  deliveryNo: string | null;
+  courier?: string;
+  trackingNo: string | null;
+  method?: string;
+  transporterId?: string;
+  driverName?: string;
+  vehiclePlate?: string;
+  shippedAt?: Date;
+}
+
+interface MockAuditLog {
+  action?: string;
+  entityId?: string;
+  [key: string]: unknown;
+}
+
+interface MockInvoiceWhere {
+  id?: string;
+  orderId?: string;
+  businessId?: string;
+  status?: InvoiceStatus;
+  deletedAt?: null;
+}
+
+interface MockInvoiceUpdateData {
+  printedCount?: { increment?: number };
+  lastPrintedAt?: Date;
+}
+
+interface MockShipmentWhere {
+  orderId?: string;
+}
+
+interface MockOrderWhere {
+  id?: string;
+  businessId?: string;
+  deletedAt?: null;
+}
+
+interface MockBusinessWhere {
+  id?: string;
+  deletedAt?: null;
+}
+
+const mockInvoices: MockInvoice[] = [];
+const mockOrders: MockOrder[] = [];
+const mockBusinesses: MockBusiness[] = [];
+const mockShipments: MockShipment[] = [];
+const mockAuditLogs: MockAuditLog[] = [];
 
 vi.mock('@/lib/db', () => ({
   prisma: {
     invoice: {
-      findFirst: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findFirst: vi.fn(async ({ where }: { where: MockInvoiceWhere }) => {
         return mockInvoices.find((inv) => {
           if (where.id && inv.id !== where.id) return false;
           if (where.orderId && inv.orderId !== where.orderId) return false;
@@ -33,7 +142,7 @@ vi.mock('@/lib/db', () => ({
           return true;
         }) || null;
       }),
-      findMany: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findMany: vi.fn(async ({ where }: { where: MockInvoiceWhere }) => {
         return mockInvoices.filter((inv) => {
           if (where.orderId && inv.orderId !== where.orderId) return false;
           if (where.status && inv.status !== where.status) return false;
@@ -41,7 +150,7 @@ vi.mock('@/lib/db', () => ({
           return true;
         });
       }),
-      update: vi.fn(async ({ where, data }: { where: { id: string }; data: any }) => {
+      update: vi.fn(async ({ where, data }: { where: { id: string }; data: MockInvoiceUpdateData }) => {
         const inv = mockInvoices.find((i) => i.id === where.id);
         if (inv) {
           if (data.printedCount?.increment) {
@@ -53,7 +162,7 @@ vi.mock('@/lib/db', () => ({
         }
         return inv;
       }),
-      updateMany: vi.fn(async ({ where, data }: { where: { id: string; businessId?: string }; data: any }) => {
+      updateMany: vi.fn(async ({ where, data }: { where: { id: string; businessId?: string }; data: MockInvoiceUpdateData }) => {
         const matched = mockInvoices.filter(
           (i) => i.id === where.id && (!where.businessId || i.businessId === where.businessId)
         );
@@ -69,7 +178,7 @@ vi.mock('@/lib/db', () => ({
       }),
     },
     shipment: {
-      findFirst: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findFirst: vi.fn(async ({ where }: { where: MockShipmentWhere }) => {
         return mockShipments.find((ship) => {
           if (where.orderId && ship.orderId !== where.orderId) return false;
           return true;
@@ -77,7 +186,7 @@ vi.mock('@/lib/db', () => ({
       }),
     },
     order: {
-      findFirst: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findFirst: vi.fn(async ({ where }: { where: MockOrderWhere }) => {
         return mockOrders.find((ord) => {
           if (where.id && ord.id !== where.id) return false;
           if (where.businessId && ord.businessId !== where.businessId) return false;
@@ -87,7 +196,7 @@ vi.mock('@/lib/db', () => ({
       }),
     },
     business: {
-      findFirst: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findFirst: vi.fn(async ({ where }: { where: MockBusinessWhere }) => {
         return mockBusinesses.find((biz) => {
           if (where.id && biz.id !== where.id) return false;
           if (where.deletedAt === null && biz.deletedAt !== null) return false;
@@ -96,7 +205,7 @@ vi.mock('@/lib/db', () => ({
       }),
     },
     auditLog: {
-      create: vi.fn(async ({ data }: { data: any }) => {
+      create: vi.fn(async ({ data }: { data: MockAuditLog }) => {
         mockAuditLogs.push(data);
         return data;
       }),
@@ -106,10 +215,11 @@ vi.mock('@/lib/db', () => ({
 
 // Mock buildInvoiceSnapshot
 vi.mock('@/lib/pdf/snapshot', async (importOriginal) => {
-  const actual: any = await importOriginal();
+  const actual = await importOriginal<typeof import('@/lib/pdf/snapshot')>();
   return {
     ...actual,
-    buildInvoiceSnapshot: vi.fn(async (_tx: any, invoiceId: string, options?: any) => {
+    buildInvoiceSnapshot: vi.fn(async (...args: [unknown, string, { theme?: InvoiceTheme; number?: string | null }?]) => {
+      const [, invoiceId, options] = args;
       const inv = mockInvoices.find((i) => i.id === invoiceId);
       const snapshot = getDummySnapshot(options?.theme || inv?.theme || 'PROFESIONAL');
       if (options?.number !== undefined) {
@@ -122,11 +232,11 @@ vi.mock('@/lib/pdf/snapshot', async (importOriginal) => {
 
 // Mock renderHtmlToPdf dan renderReactToPdf agar tidak memerlukan browser Chrome headless di lingkungan test runner
 vi.mock('@/lib/pdf/engine', async (importOriginal) => {
-  const actual: any = await importOriginal();
+  const actual = await importOriginal<typeof import('@/lib/pdf/engine')>();
   return {
     ...actual,
-    renderHtmlToPdf: vi.fn(async (_html: string) => Buffer.from('%PDF-1.4 mock pdf data')),
-    renderReactToPdf: vi.fn(async (_element: any) => Buffer.from('%PDF-1.4 mock pdf data')),
+    renderHtmlToPdf: vi.fn(async () => Buffer.from('%PDF-1.4 mock pdf data')),
+    renderReactToPdf: vi.fn(async () => Buffer.from('%PDF-1.4 mock pdf data')),
   };
 });
 
@@ -148,7 +258,7 @@ describe('T3.5: Mesin Cetak PDF, 5 Desain Tema, dan Surat Jalan (Seksi 14 & 17.3
   const SALES_ID_1 = 'sales_usr_01';
   const SALES_ID_2 = 'sales_usr_02';
 
-  const superAdminCtx = {
+  const superAdminCtx: Ctx = {
     user: { id: 'sa_usr_01', role: Role.SUPERADMIN, name: 'Owner Utama', businessId: BIZ_ID },
     role: Role.SUPERADMIN,
     businessId: BIZ_ID,
@@ -156,7 +266,7 @@ describe('T3.5: Mesin Cetak PDF, 5 Desain Tema, dan Surat Jalan (Seksi 14 & 17.3
     ip: '127.0.0.1',
   };
 
-  const sales1Ctx = {
+  const sales1Ctx: Ctx = {
     user: { id: SALES_ID_1, role: Role.SALES, name: 'Budi Lapangan', businessId: BIZ_ID },
     role: Role.SALES,
     businessId: BIZ_ID,
@@ -454,7 +564,7 @@ describe('T3.5: Mesin Cetak PDF, 5 Desain Tema, dan Surat Jalan (Seksi 14 & 17.3
     });
 
     it('Sales ditolak 403 jika mencoba mencetak invoice milik Sales lain', async () => {
-      vi.spyOn(contextModule, 'requireContext').mockResolvedValueOnce(sales1Ctx as any);
+      vi.spyOn(contextModule, 'requireContext').mockResolvedValueOnce(sales1Ctx);
 
       const req = new NextRequest('http://localhost:3000/api/v1/invoices/inv_approved_sales2/pdf');
       const res = await getInvoicePdfHandler(req, {
@@ -467,7 +577,7 @@ describe('T3.5: Mesin Cetak PDF, 5 Desain Tema, dan Surat Jalan (Seksi 14 & 17.3
     });
 
     it('Sales ditolak 409 INVOICE_NOT_APPROVED jika invoice belum disetujui (PENDING_APPROVAL)', async () => {
-      vi.spyOn(contextModule, 'requireContext').mockResolvedValueOnce(sales1Ctx as any);
+      vi.spyOn(contextModule, 'requireContext').mockResolvedValueOnce(sales1Ctx);
 
       const req = new NextRequest('http://localhost:3000/api/v1/invoices/inv_pending_1/pdf');
       const res = await getInvoicePdfHandler(req, {
@@ -480,7 +590,7 @@ describe('T3.5: Mesin Cetak PDF, 5 Desain Tema, dan Surat Jalan (Seksi 14 & 17.3
     });
 
     it('Super Admin ditolak 409 jika mencoba cetak PENDING_APPROVAL tanpa parameter ?preview=1', async () => {
-      vi.spyOn(contextModule, 'requireContext').mockResolvedValueOnce(superAdminCtx as any);
+      vi.spyOn(contextModule, 'requireContext').mockResolvedValueOnce(superAdminCtx);
 
       const req = new NextRequest('http://localhost:3000/api/v1/invoices/inv_pending_1/pdf');
       const res = await getInvoicePdfHandler(req, {
@@ -494,7 +604,7 @@ describe('T3.5: Mesin Cetak PDF, 5 Desain Tema, dan Surat Jalan (Seksi 14 & 17.3
     });
 
     it('Super Admin berhasil pratinjau invoice PENDING_APPROVAL dengan ?preview=1 (tanpa increment printedCount)', async () => {
-      vi.spyOn(contextModule, 'requireContext').mockResolvedValueOnce(superAdminCtx as any);
+      vi.spyOn(contextModule, 'requireContext').mockResolvedValueOnce(superAdminCtx);
 
       const req = new NextRequest(
         'http://localhost:3000/api/v1/invoices/inv_pending_1/pdf?preview=1'
@@ -509,12 +619,12 @@ describe('T3.5: Mesin Cetak PDF, 5 Desain Tema, dan Surat Jalan (Seksi 14 & 17.3
       expect(buf.subarray(0, 4).toString()).toBe('%PDF');
 
       const inv = mockInvoices.find((i) => i.id === 'inv_pending_1');
-      expect(inv.printedCount).toBe(0);
+      expect(inv!.printedCount).toBe(0);
       expect(mockAuditLogs.length).toBe(0);
     });
 
     it('Super Admin berhasil cetak invoice APPROVED (increment printedCount & catat AuditLog INVOICE_PRINT)', async () => {
-      vi.spyOn(contextModule, 'requireContext').mockResolvedValueOnce(superAdminCtx as any);
+      vi.spyOn(contextModule, 'requireContext').mockResolvedValueOnce(superAdminCtx);
 
       const req = new NextRequest('http://localhost:3000/api/v1/invoices/inv_approved_1/pdf');
       const res = await getInvoicePdfHandler(req, {
@@ -526,8 +636,8 @@ describe('T3.5: Mesin Cetak PDF, 5 Desain Tema, dan Surat Jalan (Seksi 14 & 17.3
       expect(res.headers.get('Content-Disposition')).toContain('INV-2026-04-0001.pdf');
 
       const inv = mockInvoices.find((i) => i.id === 'inv_approved_1');
-      expect(inv.printedCount).toBe(1);
-      expect(inv.lastPrintedAt).not.toBeNull();
+      expect(inv!.printedCount).toBe(1);
+      expect(inv!.lastPrintedAt).not.toBeNull();
 
       expect(mockAuditLogs).toHaveLength(1);
       expect(mockAuditLogs[0].action).toBe('INVOICE_PRINT');
@@ -535,7 +645,7 @@ describe('T3.5: Mesin Cetak PDF, 5 Desain Tema, dan Surat Jalan (Seksi 14 & 17.3
     });
 
     it('Super Admin dapat mengunduh invoice berstatus VOID (dengan watermark BATAL)', async () => {
-      vi.spyOn(contextModule, 'requireContext').mockResolvedValueOnce(superAdminCtx as any);
+      vi.spyOn(contextModule, 'requireContext').mockResolvedValueOnce(superAdminCtx);
 
       const req = new NextRequest('http://localhost:3000/api/v1/invoices/inv_void_1/pdf');
       const res = await getInvoicePdfHandler(req, {
@@ -566,7 +676,7 @@ describe('T3.5: Mesin Cetak PDF, 5 Desain Tema, dan Surat Jalan (Seksi 14 & 17.3
     });
 
     it('Sales ditolak 403 saat mengakses pratinjau tema usaha', async () => {
-      vi.spyOn(contextModule, 'requireContext').mockResolvedValueOnce(sales1Ctx as any);
+      vi.spyOn(contextModule, 'requireContext').mockResolvedValueOnce(sales1Ctx);
 
       const req = new NextRequest(
         `http://localhost:3000/api/v1/businesses/${BIZ_ID}/invoice-preview?theme=KLASIK`
@@ -579,7 +689,7 @@ describe('T3.5: Mesin Cetak PDF, 5 Desain Tema, dan Surat Jalan (Seksi 14 & 17.3
     });
 
     it('Super Admin berhasil merender contoh tema KLASIK dalam format PDF', async () => {
-      vi.spyOn(contextModule, 'requireContext').mockResolvedValueOnce(superAdminCtx as any);
+      vi.spyOn(contextModule, 'requireContext').mockResolvedValueOnce(superAdminCtx);
 
       const req = new NextRequest(
         `http://localhost:3000/api/v1/businesses/${BIZ_ID}/invoice-preview?theme=KLASIK`
@@ -684,7 +794,7 @@ describe('T3.5: Mesin Cetak PDF, 5 Desain Tema, dan Surat Jalan (Seksi 14 & 17.3
     });
 
     it('menolak cetak surat jalan jika status shipment masih PREPARING (409 INVALID_STATE)', async () => {
-      vi.spyOn(contextModule, 'requireContext').mockResolvedValueOnce(superAdminCtx as any);
+      vi.spyOn(contextModule, 'requireContext').mockResolvedValueOnce(superAdminCtx);
 
       const req = new NextRequest(
         'http://localhost:3000/api/v1/orders/ord_preparing/delivery-note/pdf'
@@ -699,7 +809,7 @@ describe('T3.5: Mesin Cetak PDF, 5 Desain Tema, dan Surat Jalan (Seksi 14 & 17.3
     });
 
     it('berhasil mencetak surat jalan saat status pengiriman SHIPPED', async () => {
-      vi.spyOn(contextModule, 'requireContext').mockResolvedValueOnce(sales1Ctx as any);
+      vi.spyOn(contextModule, 'requireContext').mockResolvedValueOnce(sales1Ctx);
 
       const req = new NextRequest(
         'http://localhost:3000/api/v1/orders/ord_shipped/delivery-note/pdf'

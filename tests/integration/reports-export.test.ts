@@ -98,10 +98,25 @@ let mockCrmTasks: MockCrmTask[] = [];
 let mockCrmInteractions: MockCrmInteraction[] = [];
 let mockReminders: MockReminder[] = [];
 
+interface ExportWhereFilter {
+  businessId?: string;
+  role?: Role;
+  id?: { in?: string[] };
+  assignedSalesId?: string;
+  deletedAt?: null | Date;
+  status?: InvoiceStatus | { not?: OrderStatus };
+  salesId?: string;
+  customerId?: string;
+  orderId?: { in?: string[] };
+  assignedToId?: string;
+  dueAt?: { gte?: Date; lte?: Date };
+  occurredAt?: { gte?: Date; lte?: Date };
+}
+
 vi.mock('@/lib/db', () => {
   const mockPrisma = {
     user: {
-      findMany: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findMany: vi.fn(async ({ where }: { where: ExportWhereFilter }) => {
         return mockUsers.filter((u) => {
           if (where.businessId && u.businessId !== where.businessId) return false;
           if (where.role && u.role !== where.role) return false;
@@ -111,7 +126,7 @@ vi.mock('@/lib/db', () => {
       }),
     },
     customer: {
-      findMany: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findMany: vi.fn(async ({ where }: { where: ExportWhereFilter }) => {
         return mockCustomers.filter((c) => {
           if (where.businessId && c.businessId !== where.businessId) return false;
           if (where.assignedSalesId && c.assignedSalesId !== where.assignedSalesId) return false;
@@ -121,12 +136,18 @@ vi.mock('@/lib/db', () => {
       }),
     },
     order: {
-      findMany: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findMany: vi.fn(async ({ where }: { where: ExportWhereFilter }) => {
         return mockOrders
           .filter((o) => {
             if (where.businessId && o.businessId !== where.businessId) return false;
             if (where.deletedAt === null && o.deletedAt !== null) return false;
-            if (where.status?.not && o.status === where.status.not) return false;
+            if (
+              where.status &&
+              typeof where.status === 'object' &&
+              where.status.not &&
+              o.status === where.status.not
+            )
+              return false;
             if (where.salesId && o.salesId !== where.salesId) return false;
             if (where.customerId && o.customerId !== where.customerId) return false;
             if (where.id?.in && !where.id.in.includes(o.id)) return false;
@@ -145,11 +166,12 @@ vi.mock('@/lib/db', () => {
       }),
     },
     invoice: {
-      findMany: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findMany: vi.fn(async ({ where }: { where: ExportWhereFilter }) => {
         return mockInvoices.filter((inv) => {
           if (where.businessId && inv.businessId !== where.businessId) return false;
           if (where.deletedAt === null && inv.deletedAt !== null) return false;
-          if (where.status && inv.status !== where.status) return false;
+          if (where.status && typeof where.status === 'string' && inv.status !== where.status)
+            return false;
           if (where.orderId?.in && !where.orderId.in.includes(inv.orderId)) return false;
           if (where.customerId && inv.customerId !== where.customerId) return false;
           return true;
@@ -157,7 +179,7 @@ vi.mock('@/lib/db', () => {
       }),
     },
     crmTask: {
-      findMany: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findMany: vi.fn(async ({ where }: { where: ExportWhereFilter }) => {
         return mockCrmTasks
           .filter((t) => {
             if (where.businessId && t.businessId !== where.businessId) return false;
@@ -176,7 +198,7 @@ vi.mock('@/lib/db', () => {
       }),
     },
     crmInteraction: {
-      findMany: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findMany: vi.fn(async ({ where }: { where: ExportWhereFilter }) => {
         return mockCrmInteractions
           .filter((i) => {
             if (where.businessId && i.businessId !== where.businessId) return false;
@@ -195,7 +217,7 @@ vi.mock('@/lib/db', () => {
       }),
     },
     reminder: {
-      findMany: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findMany: vi.fn(async ({ where }: { where: ExportWhereFilter }) => {
         return mockReminders.filter((r) => {
           if (where.businessId && r.businessId !== where.businessId) return false;
           if (where.salesId && r.salesId !== where.salesId) return false;
@@ -215,14 +237,12 @@ describe('T5.4: Piutang, Laporan CRM, Ekspor Excel & PDF dengan Perlindungan Rum
   const SALES_1_ID = 'sales_usr_01';
   const SALES_2_ID = 'sales_usr_02';
 
-  const superAdminCtx = {
+  const superAdminCtx: contextModule.Ctx = {
     user: {
       id: SUPERADMIN_ID,
       name: 'Owner Toko',
-      username: 'owner',
       role: Role.SUPERADMIN,
       businessId: BIZ_ID,
-      mustChangePassword: false,
     },
     role: Role.SUPERADMIN,
     businessId: BIZ_ID,
@@ -230,14 +250,12 @@ describe('T5.4: Piutang, Laporan CRM, Ekspor Excel & PDF dengan Perlindungan Rum
     ip: '127.0.0.1',
   };
 
-  const sales1Ctx = {
+  const sales1Ctx: contextModule.Ctx = {
     user: {
       id: SALES_1_ID,
       name: 'Sales Andi',
-      username: 'andi',
       role: Role.SALES,
       businessId: BIZ_ID,
-      mustChangePassword: false,
     },
     role: Role.SALES,
     businessId: BIZ_ID,
@@ -471,7 +489,7 @@ describe('T5.4: Piutang, Laporan CRM, Ekspor Excel & PDF dengan Perlindungan Rum
 
   describe('1. GET /reports/receivables-aging (Laporan Umur Piutang)', () => {
     it('mengelompokkan invoice ke dalam bucket umur piutang yang tepat (Seksi 13.3)', async () => {
-      vi.spyOn(contextModule, 'requireContext').mockResolvedValue(superAdminCtx as any);
+      vi.spyOn(contextModule, 'requireContext').mockResolvedValue(superAdminCtx);
 
       const req = new NextRequest(`${APP_URL}/api/v1/reports/receivables-aging`, {
         method: 'GET',
@@ -514,7 +532,7 @@ describe('T5.4: Piutang, Laporan CRM, Ekspor Excel & PDF dengan Perlindungan Rum
 
   describe('2. GET /reports/crm (Laporan Aktivitas & Pipeline CRM)', () => {
     it('Super Admin melihat seluruh aktivitas dan pipeline lintas staf sales', async () => {
-      vi.spyOn(contextModule, 'requireContext').mockResolvedValue(superAdminCtx as any);
+      vi.spyOn(contextModule, 'requireContext').mockResolvedValue(superAdminCtx);
 
       const req = new NextRequest(`${APP_URL}/api/v1/reports/crm`, {
         method: 'GET',
@@ -537,7 +555,7 @@ describe('T5.4: Piutang, Laporan CRM, Ekspor Excel & PDF dengan Perlindungan Rum
     });
 
     it('Sales hanya melihat aktivitas dan pelanggan miliknya sendiri (Zero-Leakage & Tenant Scoping)', async () => {
-      vi.spyOn(contextModule, 'requireContext').mockResolvedValue(sales1Ctx as any);
+      vi.spyOn(contextModule, 'requireContext').mockResolvedValue(sales1Ctx);
 
       const req = new NextRequest(`${APP_URL}/api/v1/reports/crm`, {
         method: 'GET',
@@ -556,7 +574,7 @@ describe('T5.4: Piutang, Laporan CRM, Ekspor Excel & PDF dengan Perlindungan Rum
 
       // Memastikan aktivitas milik Sales Budi tidak bocor
       const hasOtherSalesActivities = json.data.recentActivities.some(
-        (a: any) => a.salesId === SALES_2_ID
+        (a: { salesId: string }) => a.salesId === SALES_2_ID
       );
       expect(hasOtherSalesActivities).toBe(false);
     });
@@ -564,7 +582,7 @@ describe('T5.4: Piutang, Laporan CRM, Ekspor Excel & PDF dengan Perlindungan Rum
 
   describe('3. GET /reports/export (Ekspor Excel & PDF dengan Perlindungan Formula Injection 16.4)', () => {
     it('menghasilkan berkas Excel XLSX valid dan menetralkan karakter formula spreadsheet (=, +, -, @) dengan awalan tanda petik tunggal', async () => {
-      vi.spyOn(contextModule, 'requireContext').mockResolvedValue(superAdminCtx as any);
+      vi.spyOn(contextModule, 'requireContext').mockResolvedValue(superAdminCtx);
 
       const req = new NextRequest(
         `${APP_URL}/api/v1/reports/export?type=receivables-aging&format=xlsx`,
@@ -584,7 +602,7 @@ describe('T5.4: Piutang, Laporan CRM, Ekspor Excel & PDF dengan Perlindungan Rum
 
       // Validasi struktur Excel dengan ExcelJS
       const workbook = new ExcelJS.Workbook();
-      await workbook.xlsx.load(buffer as any);
+      await workbook.xlsx.load(buffer as unknown as Parameters<typeof workbook.xlsx.load>[0]);
 
       const worksheet = workbook.getWorksheet('Umur Piutang');
       expect(worksheet).toBeDefined();
@@ -607,7 +625,7 @@ describe('T5.4: Piutang, Laporan CRM, Ekspor Excel & PDF dengan Perlindungan Rum
     });
 
     it('menetralkan sel berawalan formula pada ekspor laporan CRM XLSX', async () => {
-      vi.spyOn(contextModule, 'requireContext').mockResolvedValue(superAdminCtx as any);
+      vi.spyOn(contextModule, 'requireContext').mockResolvedValue(superAdminCtx);
 
       const req = new NextRequest(
         `${APP_URL}/api/v1/reports/export?type=crm&format=xlsx`,
@@ -624,7 +642,7 @@ describe('T5.4: Piutang, Laporan CRM, Ekspor Excel & PDF dengan Perlindungan Rum
       const buffer = Buffer.from(arrayBuffer);
 
       const workbook = new ExcelJS.Workbook();
-      await workbook.xlsx.load(buffer as any);
+      await workbook.xlsx.load(buffer as unknown as Parameters<typeof workbook.xlsx.load>[0]);
 
       const ws = workbook.getWorksheet('Aktivitas CRM');
       expect(ws).toBeDefined();
@@ -641,7 +659,7 @@ describe('T5.4: Piutang, Laporan CRM, Ekspor Excel & PDF dengan Perlindungan Rum
     });
 
     it('mengizinkan Sales mengekspor laporan CRM miliknya sendiri (200 OK)', async () => {
-      vi.spyOn(contextModule, 'requireContext').mockResolvedValue(sales1Ctx as any);
+      vi.spyOn(contextModule, 'requireContext').mockResolvedValue(sales1Ctx);
 
       const req = new NextRequest(
         `${APP_URL}/api/v1/reports/export?type=crm&format=xlsx`,
@@ -657,7 +675,7 @@ describe('T5.4: Piutang, Laporan CRM, Ekspor Excel & PDF dengan Perlindungan Rum
     });
 
     it('menolak Sales mengekspor laporan keuangan/margin (403 FORBIDDEN)', async () => {
-      vi.spyOn(contextModule, 'requireContext').mockResolvedValue(sales1Ctx as any);
+      vi.spyOn(contextModule, 'requireContext').mockResolvedValue(sales1Ctx);
 
       const req = new NextRequest(
         `${APP_URL}/api/v1/reports/export?type=margin&format=xlsx`,
@@ -675,7 +693,7 @@ describe('T5.4: Piutang, Laporan CRM, Ekspor Excel & PDF dengan Perlindungan Rum
     });
 
     it('menolak Sales mengekspor laporan umur piutang (403 FORBIDDEN)', async () => {
-      vi.spyOn(contextModule, 'requireContext').mockResolvedValue(sales1Ctx as any);
+      vi.spyOn(contextModule, 'requireContext').mockResolvedValue(sales1Ctx);
 
       const req = new NextRequest(
         `${APP_URL}/api/v1/reports/export?type=receivables-aging&format=xlsx`,

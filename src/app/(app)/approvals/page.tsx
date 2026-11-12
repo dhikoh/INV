@@ -16,6 +16,7 @@ import {
 import { Skeleton, EmptyState, ErrorState } from '@/components/ui/States';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { formatRupiah, formatPercentFromBps } from '@/lib/domain/money';
+import { formatDateId } from '@/lib/format/date';
 
 interface ApprovalItem {
   id: string;
@@ -389,11 +390,7 @@ export default function ApprovalsPage() {
                       <span>&bull;</span>
                       <span>
                         Tanggal:{' '}
-                        {new Date(item.orderDate).toLocaleDateString('id-ID', {
-                          day: 'numeric',
-                          month: 'short',
-                          year: 'numeric',
-                        })}
+                        {formatDateId(item.orderDate)}
                       </span>
                     </div>
                   </div>

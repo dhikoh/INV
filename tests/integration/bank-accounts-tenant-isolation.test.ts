@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Role } from '@prisma/client';
-import { GET as getBankAccountDetail, PATCH as patchBankAccount, DELETE as deleteBankAccount } from '@/app/api/v1/bank-accounts/[id]/route';
-import { GET as getBusinessBankAccounts, POST as postBusinessBankAccount } from '@/app/api/v1/businesses/[id]/bank-accounts/route';
+import { GET as getBankAccountDetail } from '@/app/api/v1/bank-accounts/[id]/route';
+import { GET as getBusinessBankAccounts } from '@/app/api/v1/businesses/[id]/bank-accounts/route';
 import * as contextModule from '@/lib/auth/context';
 import { DomainError } from '@/lib/domain/money';
 import { prisma } from '@/lib/db';
@@ -19,7 +19,7 @@ vi.mock('@/lib/db', () => ({
     business: {
       findFirst: vi.fn(),
     },
-    $transaction: vi.fn(async (cb: any) => cb(prisma)),
+    $transaction: vi.fn(async (cb: (tx: unknown) => Promise<unknown>) => cb(prisma)),
   },
 }));
 
@@ -36,20 +36,14 @@ describe('Isolasi Tenant Rekening Bank (AUD-TENANT-001 & AUD-TENANT-002)', () =>
     ip: '127.0.0.1',
   };
 
-  const salesCtxBiz1 = {
-    user: { id: 'sales_1', name: 'Sales Staf', role: Role.SALES, businessId: 'biz_1' },
-    role: Role.SALES,
-    businessId: 'biz_1',
-    sessionId: 'sess_2',
-    ip: '127.0.0.1',
-  };
-
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it('Super Admin berhasil mengambil detail rekening miliknya sendiri dengan businessId terpasang', async () => {
-    vi.spyOn(contextModule, 'requireContext').mockResolvedValueOnce(superAdminCtxBiz1 as any);
+    vi.spyOn(contextModule, 'requireContext').mockResolvedValueOnce(
+      superAdminCtxBiz1 as unknown as contextModule.Ctx
+    );
     vi.mocked(prisma.bankAccount.findFirst).mockResolvedValueOnce({
       id: 'bank_1',
       businessId: 'biz_1',
@@ -58,7 +52,7 @@ describe('Isolasi Tenant Rekening Bank (AUD-TENANT-001 & AUD-TENANT-002)', () =>
       accountHolder: 'CV BentoCat Mandiri',
       isDefault: true,
       deletedAt: null,
-    } as any);
+    } as never);
 
     const req = new NextRequest('http://localhost:3000/api/v1/bank-accounts/bank_1');
     const res = await getBankAccountDetail(req, { params: Promise.resolve({ id: 'bank_1' }) });
@@ -88,7 +82,9 @@ describe('Isolasi Tenant Rekening Bank (AUD-TENANT-001 & AUD-TENANT-002)', () =>
   });
 
   it('Super Admin ditolak FORBIDDEN 403 bila mencoba mengakses rekening unit usaha lain', async () => {
-    vi.spyOn(contextModule, 'requireContext').mockResolvedValueOnce(superAdminCtxBiz1 as any);
+    vi.spyOn(contextModule, 'requireContext').mockResolvedValueOnce(
+      superAdminCtxBiz1 as unknown as contextModule.Ctx
+    );
 
     const req = new NextRequest('http://localhost:3000/api/v1/businesses/biz_2/bank-accounts');
     const res = await getBusinessBankAccounts(req, { params: Promise.resolve({ id: 'biz_2' }) });
@@ -100,7 +96,9 @@ describe('Isolasi Tenant Rekening Bank (AUD-TENANT-001 & AUD-TENANT-002)', () =>
   });
 
   it('Super Admin menerima 404 bila rekening ID tidak ada di unit usaha aktifnya', async () => {
-    vi.spyOn(contextModule, 'requireContext').mockResolvedValueOnce(superAdminCtxBiz1 as any);
+    vi.spyOn(contextModule, 'requireContext').mockResolvedValueOnce(
+      superAdminCtxBiz1 as unknown as contextModule.Ctx
+    );
     vi.mocked(prisma.bankAccount.findFirst).mockResolvedValueOnce(null);
 
     const req = new NextRequest('http://localhost:3000/api/v1/bank-accounts/bank_milik_biz_2');

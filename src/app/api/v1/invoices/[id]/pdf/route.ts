@@ -253,7 +253,7 @@ export async function GET(
     const rawNumber = snapshot.number || (preview ? 'DRAFT-INVOICE' : 'INVOICE');
     const safeFilename = `${rawNumber.replace(/[/\\?%*:|"<>]/g, '-')}.pdf`;
 
-    return new NextResponse(pdfBuffer, {
+    return new NextResponse(new Uint8Array(pdfBuffer), {
       status: 200,
       headers: {
         'Content-Type': 'application/pdf',

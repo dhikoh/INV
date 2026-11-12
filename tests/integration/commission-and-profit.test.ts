@@ -28,18 +28,141 @@ import {
   reverseOrderCommission,
 } from '@/lib/services/commission';
 
+interface MockBusiness {
+  id: string;
+  name: string;
+  commissionMode: CommissionMode;
+  commissionRateBps: number;
+  commissionFixedAmount: bigint;
+  commissionTrigger: CommissionTrigger;
+}
+
+interface MockUser {
+  id: string;
+  businessId: string;
+  name: string;
+  email: string;
+  role: Role;
+  commissionMode?: CommissionMode | null;
+  commissionRateBps?: number | null;
+  commissionFixedAmount?: bigint | null;
+}
+
+interface MockOrder {
+  id: string;
+  businessId: string;
+  customerId: string;
+  salesId: string;
+  status: OrderStatus;
+  orderNo: string;
+  subtotal: bigint;
+  discountTotal: bigint;
+  shippingCharge: bigint;
+  ppnEnabled: boolean;
+  ppnRateBps: number;
+  ppnAmount: bigint;
+  grandTotal: bigint;
+  dpBps: number;
+  dpAmount: bigint;
+  paidTotal: bigint;
+  creditTotal: bigint;
+  deletedAt: Date | null;
+  createdAt: Date;
+}
+
+interface MockOrderItem {
+  id: string;
+  businessId: string;
+  orderId: string;
+  productId: string;
+  qty: number;
+  unitPrice: bigint;
+  lineSubtotal: bigint;
+  lineDiscount: bigint;
+  lineNet: bigint;
+  costPrice: bigint;
+  discountSource: string;
+}
+
+interface MockShipment {
+  id: string;
+  businessId: string;
+  orderId: string;
+  [key: string]: unknown;
+}
+
+interface MockOrderCost {
+  id: string;
+  businessId: string;
+  orderId: string;
+  label: string;
+  amount: bigint;
+  createdById: string;
+  createdAt: Date;
+}
+
+interface MockCommissionEntry {
+  id: string;
+  businessId: string;
+  orderId: string;
+  salesId: string;
+  mode: CommissionMode;
+  rateBps: number;
+  basisAmount: bigint;
+  amount: bigint;
+  status: CommissionStatus;
+  note?: string | null;
+  earnedAt: Date;
+  paidAt: Date | null;
+  reversedAt: Date | null;
+  [key: string]: unknown;
+}
+
+interface MockCommissionTier {
+  id: string;
+  businessId: string;
+  minAchievementBps: number;
+  rateBps: number;
+}
+
+interface MockSalesTarget {
+  id: string;
+  businessId: string;
+  salesId: string;
+  month: string;
+  targetRevenue: bigint;
+  targetProfit: bigint;
+}
+
+interface MockCreditNote {
+  id: string;
+  businessId: string;
+  orderId: string;
+  amountExPpn: bigint;
+  cogsReversed: bigint;
+  voidedAt: Date | null;
+}
+
+interface OrderWhere {
+  id?: string;
+  businessId?: string;
+  salesId?: string;
+  status?: { not?: OrderStatus };
+  deletedAt?: Date | null;
+}
+
 // In-memory mock database collections
-let mockBusinesses: any[] = [];
-let mockUsers: any[] = [];
-let mockOrders: any[] = [];
-let mockOrderItems: any[] = [];
-let mockShipments: any[] = [];
-let mockOrderCosts: any[] = [];
-let mockCommissionEntries: any[] = [];
-let mockCommissionTiers: any[] = [];
-let mockSalesTargets: any[] = [];
-let mockCreditNotes: any[] = [];
-let mockAuditLogs: any[] = [];
+let mockBusinesses: MockBusiness[] = [];
+let mockUsers: MockUser[] = [];
+let mockOrders: MockOrder[] = [];
+let mockOrderItems: MockOrderItem[] = [];
+let mockShipments: MockShipment[] = [];
+let mockOrderCosts: MockOrderCost[] = [];
+let mockCommissionEntries: MockCommissionEntry[] = [];
+let mockCommissionTiers: MockCommissionTier[] = [];
+let mockSalesTargets: MockSalesTarget[] = [];
+let mockCreditNotes: MockCreditNote[] = [];
+let mockAuditLogs: Record<string, unknown>[] = [];
 
 let idCounter = 1;
 
@@ -64,7 +187,7 @@ const mockTx = {
       const business = mockBusinesses.find((b) => b.id === found.businessId) || null;
       return { ...found, items, shipment, costs, business };
     }),
-    findFirst: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+    findFirst: vi.fn(async ({ where }: { where: OrderWhere }) => {
       const found = mockOrders.find((o) => {
         if (where.id && o.id !== where.id) return false;
         if (where.businessId && o.businessId !== where.businessId) return false;
@@ -78,7 +201,7 @@ const mockTx = {
       const business = mockBusinesses.find((b) => b.id === found.businessId) || null;
       return { ...found, items, shipment, costs, business };
     }),
-    findFirstOrThrow: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+    findFirstOrThrow: vi.fn(async ({ where }: { where: OrderWhere }) => {
       const found = mockOrders.find((o) => {
         if (where.id && o.id !== where.id) return false;
         if (where.businessId && o.businessId !== where.businessId) return false;
@@ -92,7 +215,7 @@ const mockTx = {
       const business = mockBusinesses.find((b) => b.id === found.businessId) || null;
       return { ...found, items, shipment, costs, business };
     }),
-    findMany: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+    findMany: vi.fn(async ({ where }: { where: OrderWhere }) => {
       return mockOrders
         .filter((o) => {
           if (where.businessId && o.businessId !== where.businessId) return false;
@@ -109,7 +232,7 @@ const mockTx = {
           createdAt: o.createdAt,
         }));
     }),
-    update: vi.fn(async ({ where, data }: { where: { id: string }; data: any }) => {
+    update: vi.fn(async ({ where, data }: { where: { id: string }; data: Partial<MockOrder> }) => {
       const idx = mockOrders.findIndex((o) => o.id === where.id);
       if (idx === -1) throw new Error('Order not found');
       mockOrders[idx] = { ...mockOrders[idx], ...data };
@@ -117,7 +240,7 @@ const mockTx = {
     }),
   },
   orderItem: {
-    findMany: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+    findMany: vi.fn(async ({ where }: { where: { orderId?: string; businessId?: string } }) => {
       return mockOrderItems.filter((i) => {
         if (where.orderId && i.orderId !== where.orderId) return false;
         if (where.businessId && i.businessId !== where.businessId) return false;
@@ -126,7 +249,7 @@ const mockTx = {
     }),
   },
   shipment: {
-    findFirst: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+    findFirst: vi.fn(async ({ where }: { where: { orderId?: string; businessId?: string } }) => {
       return (
         mockShipments.find((s) => {
           if (where.orderId && s.orderId !== where.orderId) return false;
@@ -137,8 +260,8 @@ const mockTx = {
     }),
   },
   orderCost: {
-    create: vi.fn(async ({ data }: { data: any }) => {
-      const created = {
+    create: vi.fn(async ({ data }: { data: Omit<MockOrderCost, 'id' | 'createdAt'> }) => {
+      const created: MockOrderCost = {
         id: `cost_${idCounter++}`,
         ...data,
         createdAt: new Date(),
@@ -146,7 +269,7 @@ const mockTx = {
       mockOrderCosts.push(created);
       return created;
     }),
-    findFirst: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+    findFirst: vi.fn(async ({ where }: { where: { id?: string; businessId?: string; orderId?: string } }) => {
       return (
         mockOrderCosts.find((c) => {
           if (where.id && c.id !== where.id) return false;
@@ -156,7 +279,7 @@ const mockTx = {
         }) || null
       );
     }),
-    findMany: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+    findMany: vi.fn(async ({ where }: { where: { businessId?: string; orderId?: string } }) => {
       return mockOrderCosts
         .filter((c) => {
           if (where.businessId && c.businessId !== where.businessId) return false;
@@ -174,7 +297,7 @@ const mockTx = {
       const [deleted] = mockOrderCosts.splice(idx, 1);
       return deleted;
     }),
-    deleteMany: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+    deleteMany: vi.fn(async ({ where }: { where: { id?: string; businessId?: string; orderId?: string } }) => {
       let count = 0;
       for (let i = mockOrderCosts.length - 1; i >= 0; i--) {
         const c = mockOrderCosts[i];
@@ -191,7 +314,7 @@ const mockTx = {
     findUnique: vi.fn(async ({ where }: { where: { orderId: string } }) => {
       return mockCommissionEntries.find((ce) => ce.orderId === where.orderId) || null;
     }),
-    findFirst: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+    findFirst: vi.fn(async ({ where }: { where: { id?: string; orderId?: string; businessId?: string } }) => {
       return (
         mockCommissionEntries.find((ce) => {
           if (where.id && ce.id !== where.id) return false;
@@ -201,18 +324,18 @@ const mockTx = {
         }) || null
       );
     }),
-    create: vi.fn(async ({ data }: { data: any }) => {
+    create: vi.fn(async ({ data }: { data: Partial<MockCommissionEntry> & Record<string, unknown> }) => {
       const created = {
         id: `comm_${idCounter++}`,
         ...data,
         earnedAt: new Date(),
         paidAt: null,
         reversedAt: null,
-      };
+      } as MockCommissionEntry;
       mockCommissionEntries.push(created);
       return created;
     }),
-    update: vi.fn(async ({ where, data }: { where: { orderId?: string; id?: string }; data: any }) => {
+    update: vi.fn(async ({ where, data }: { where: { orderId?: string; id?: string }; data: Partial<MockCommissionEntry> }) => {
       const idx = mockCommissionEntries.findIndex((ce) =>
         where.orderId ? ce.orderId === where.orderId : ce.id === where.id
       );
@@ -220,7 +343,7 @@ const mockTx = {
       mockCommissionEntries[idx] = { ...mockCommissionEntries[idx], ...data };
       return mockCommissionEntries[idx];
     }),
-    updateMany: vi.fn(async ({ where, data }: { where: Record<string, any>; data: any }) => {
+    updateMany: vi.fn(async ({ where, data }: { where: { orderId?: string; status?: { not?: CommissionStatus } }; data: Partial<MockCommissionEntry> }) => {
       let count = 0;
       mockCommissionEntries.forEach((ce) => {
         if (where.orderId && ce.orderId !== where.orderId) return;
@@ -230,7 +353,7 @@ const mockTx = {
       });
       return { count };
     }),
-    findMany: vi.fn(async ({ where, skip, take }: { where?: any; skip?: number; take?: number }) => {
+    findMany: vi.fn(async ({ where, skip, take }: { where?: { businessId?: string; salesId?: string; status?: CommissionStatus }; skip?: number; take?: number }) => {
       let res = mockCommissionEntries.filter((ce) => {
         if (where?.businessId && ce.businessId !== where.businessId) return false;
         if (where?.salesId && ce.salesId !== where.salesId) return false;
@@ -249,7 +372,7 @@ const mockTx = {
         };
       });
     }),
-    count: vi.fn(async ({ where }: { where?: any }) => {
+    count: vi.fn(async ({ where }: { where?: { businessId?: string; salesId?: string; status?: CommissionStatus } }) => {
       return mockCommissionEntries.filter((ce) => {
         if (where?.businessId && ce.businessId !== where.businessId) return false;
         if (where?.salesId && ce.salesId !== where.salesId) return false;
@@ -270,14 +393,14 @@ const mockTx = {
       );
       return { count: 1 };
     }),
-    create: vi.fn(async ({ data }: { data: any }) => {
-      const created = { id: `tier_${idCounter++}`, ...data };
+    create: vi.fn(async ({ data }: { data: Omit<MockCommissionTier, 'id'> }) => {
+      const created: MockCommissionTier = { id: `tier_${idCounter++}`, ...data };
       mockCommissionTiers.push(created);
       return created;
     }),
   },
   salesTarget: {
-    findFirst: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+    findFirst: vi.fn(async ({ where }: { where: { businessId?: string; salesId?: string; month?: string } }) => {
       return (
         mockSalesTargets.find((st) => {
           if (where.businessId && st.businessId !== where.businessId) return false;
@@ -298,12 +421,12 @@ const mockTx = {
     }),
   },
   creditNote: {
-    findMany: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+    findMany: vi.fn(async ({ where }: { where: { businessId?: string; orderId?: string | { in?: string[] }; voidedAt?: Date | null } }) => {
       return mockCreditNotes.filter((cn) => {
         if (where.businessId && cn.businessId !== where.businessId) return false;
         if (where.orderId) {
           if (typeof where.orderId === 'string' && cn.orderId !== where.orderId) return false;
-          if (where.orderId.in && !where.orderId.in.includes(cn.orderId)) return false;
+          if (typeof where.orderId === 'object' && where.orderId.in && !where.orderId.in.includes(cn.orderId)) return false;
         }
         if (where.voidedAt === null && cn.voidedAt !== null) return false;
         return true;
@@ -314,7 +437,7 @@ const mockTx = {
     findMany: vi.fn(async () => []),
   },
   auditLog: {
-    create: vi.fn(async ({ data }: { data: any }) => {
+    create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
       mockAuditLogs.push(data);
       return { id: `audit_${idCounter++}`, ...data };
     }),
@@ -323,7 +446,7 @@ const mockTx = {
 
 vi.mock('@/lib/db', () => ({
   prisma: {
-    $transaction: vi.fn(async (callback: any) => callback(mockTx)),
+    $transaction: vi.fn(async <T>(callback: (tx: typeof mockTx) => Promise<T>): Promise<T> => callback(mockTx)),
   },
 }));
 
@@ -403,7 +526,7 @@ describe('T3.7: Profit dan Komisi Sales (Integration Tests)', () => {
     shippingCharge?: bigint;
     grandTotal?: bigint;
     status?: OrderStatus;
-    items?: any[];
+    items?: MockOrderItem[];
   }) {
     const oId = opts?.id || 'ord_001';
     const order = {
@@ -575,7 +698,7 @@ describe('T3.7: Profit dan Komisi Sales (Integration Tests)', () => {
     order.paidTotal = order.grandTotal;
 
     // Pemicu evaluasi komisi awal (Laba awal: 975.000 - 600.000 = 375.000. Komisi 10% = 37.500)
-    const commEntry = await evaluateOrderCommission(mockTx as any, order.id, businessId);
+    const commEntry = await evaluateOrderCommission(mockTx as never, order.id, businessId);
     expect(commEntry).not.toBeNull();
     expect(commEntry?.status).toBe(CommissionStatus.EARNED);
     expect(Number(commEntry?.amount)).toBe(37500);
@@ -622,7 +745,7 @@ describe('T3.7: Profit dan Komisi Sales (Integration Tests)', () => {
     // Baru bayar DP (belum lunas)
     orderA.paidTotal = orderA.dpAmount; // 292.500 < 975.000
 
-    const commA = await evaluateOrderCommission(mockTx as any, orderA.id, businessId);
+    const commA = await evaluateOrderCommission(mockTx as never, orderA.id, businessId);
     expect(commA).toBeNull(); // Belum lunas -> belum berhak komisi
 
     // Skenario B: Business setting ON_DP_PAID
@@ -631,7 +754,7 @@ describe('T3.7: Profit dan Komisi Sales (Integration Tests)', () => {
 
     orderB.paidTotal = orderB.dpAmount; // DP terpenuhi
 
-    const commB = await evaluateOrderCommission(mockTx as any, orderB.id, businessId);
+    const commB = await evaluateOrderCommission(mockTx as never, orderB.id, businessId);
     expect(commB).not.toBeNull();
     expect(commB?.status).toBe(CommissionStatus.EARNED);
     expect(Number(commB?.amount)).toBe(37500);
@@ -646,7 +769,7 @@ describe('T3.7: Profit dan Komisi Sales (Integration Tests)', () => {
     const order1 = createTestOrder({ id: 'ord_rev_1' });
     order1.paidTotal = order1.grandTotal;
 
-    const c1 = await evaluateOrderCommission(mockTx as any, order1.id, businessId);
+    const c1 = await evaluateOrderCommission(mockTx as never, order1.id, businessId);
     expect(Number(c1?.amount)).toBe(19500);
 
     // Mode 2: FIXED_PER_ORDER (Rp 50.000 flat)
@@ -655,7 +778,7 @@ describe('T3.7: Profit dan Komisi Sales (Integration Tests)', () => {
     const order2 = createTestOrder({ id: 'ord_fixed_1' });
     order2.paidTotal = order2.grandTotal;
 
-    const c2 = await evaluateOrderCommission(mockTx as any, order2.id, businessId);
+    const c2 = await evaluateOrderCommission(mockTx as never, order2.id, businessId);
     expect(Number(c2?.amount)).toBe(50000);
 
     // Mode 3: TIERED_BY_TARGET
@@ -707,7 +830,7 @@ describe('T3.7: Profit dan Komisi Sales (Integration Tests)', () => {
     });
     order3.paidTotal = order3.grandTotal;
 
-    const c3 = await evaluateOrderCommission(mockTx as any, order3.id, businessId);
+    const c3 = await evaluateOrderCommission(mockTx as never, order3.id, businessId);
     expect(c3).not.toBeNull();
     // 85% achievement matches tier_2 (>= 80% minAchievementBps) with 10% rate
     expect(c3?.rateBps).toBe(1000);
@@ -720,14 +843,14 @@ describe('T3.7: Profit dan Komisi Sales (Integration Tests)', () => {
     mockBusinesses[0].commissionRateBps = 200;
 
     // Sales Andi dikonfigurasi khusus: PERCENT_OF_PROFIT 20%
-    const sales = mockUsers.find((u) => u.id === salesUserId);
+    const sales = mockUsers.find((u) => u.id === salesUserId)!;
     sales.commissionMode = CommissionMode.PERCENT_OF_PROFIT;
     sales.commissionRateBps = 2000; // 20%
 
     const order = createTestOrder({ id: 'ord_override_1' });
     order.paidTotal = order.grandTotal;
 
-    const comm = await evaluateOrderCommission(mockTx as any, order.id, businessId);
+    const comm = await evaluateOrderCommission(mockTx as never, order.id, businessId);
     // Menggunakan 20% dari laba (375.000) = 75.000, bukan 2% omzet (19.500)
     expect(comm?.mode).toBe(CommissionMode.PERCENT_OF_PROFIT);
     expect(comm?.rateBps).toBe(2000);
@@ -742,7 +865,7 @@ describe('T3.7: Profit dan Komisi Sales (Integration Tests)', () => {
     order.paidTotal = order.grandTotal;
 
     // Komisi awal: 10% dari 375.000 = 37.500
-    await evaluateOrderCommission(mockTx as any, order.id, businessId);
+    await evaluateOrderCommission(mockTx as never, order.id, businessId);
     let comm = mockCommissionEntries.find((c) => c.orderId === order.id);
     expect(Number(comm?.amount)).toBe(37500);
 
@@ -759,14 +882,14 @@ describe('T3.7: Profit dan Komisi Sales (Integration Tests)', () => {
     };
     mockCreditNotes.push(cn);
 
-    await recalculateOrderCommission(mockTx as any, order.id, businessId);
+    await recalculateOrderCommission(mockTx as never, order.id, businessId);
     comm = mockCommissionEntries.find((c) => c.orderId === order.id);
     expect(Number(comm?.amount)).toBe(29500);
     expect(Number(comm?.basisAmount)).toBe(295000);
 
     // Batalkan (Void) Nota Kredit: laba dan komisi kembali normal
     cn.voidedAt = new Date();
-    await recalculateOrderCommission(mockTx as any, order.id, businessId);
+    await recalculateOrderCommission(mockTx as never, order.id, businessId);
     comm = mockCommissionEntries.find((c) => c.orderId === order.id);
     expect(Number(comm?.amount)).toBe(37500);
   });
@@ -776,7 +899,7 @@ describe('T3.7: Profit dan Komisi Sales (Integration Tests)', () => {
     const order = createTestOrder({ id: 'ord_paid_1' });
     order.paidTotal = order.grandTotal;
 
-    await evaluateOrderCommission(mockTx as any, order.id, businessId);
+    await evaluateOrderCommission(mockTx as never, order.id, businessId);
     let comm = mockCommissionEntries.find((c) => c.orderId === order.id);
     expect(comm?.status).toBe(CommissionStatus.EARNED);
 
@@ -806,12 +929,12 @@ describe('T3.7: Profit dan Komisi Sales (Integration Tests)', () => {
       createdById: superAdminId,
       createdAt: new Date(),
     });
-    await recalculateOrderCommission(mockTx as any, order.id, businessId);
+    await recalculateOrderCommission(mockTx as never, order.id, businessId);
     comm = mockCommissionEntries.find((c) => c.orderId === order.id);
     expect(Number(comm?.amount)).toBe(37500); // Tetap 37.500
 
     // Saat pesanan dibatalkan / dihapus, status komisi menjadi REVERSED
-    await reverseOrderCommission(mockTx as any, order.id, businessId, 'Pesanan dibatalkan');
+    await reverseOrderCommission(mockTx as never, order.id, businessId, 'Pesanan dibatalkan');
     comm = mockCommissionEntries.find((c) => c.orderId === order.id);
     expect(comm?.status).toBe(CommissionStatus.REVERSED);
     expect(comm?.reversedAt).not.toBeNull();

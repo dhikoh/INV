@@ -16,6 +16,7 @@ import { Skeleton, EmptyState, ErrorState } from '@/components/ui/States';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { SortableHeader } from '@/components/ui/SortableHeader';
 import { formatRupiah } from '@/lib/domain/money';
+import { formatDateId } from '@/lib/format/date';
 
 interface PoListItem {
   id: string;
@@ -393,11 +394,7 @@ export default function PurchaseOrdersPage() {
                 </thead>
                 <tbody className="divide-y divide-slate-200">
                   {orders.map((po) => {
-                    const formattedDate = new Date(po.orderDate).toLocaleDateString('id-ID', {
-                      day: 'numeric',
-                      month: 'short',
-                      year: 'numeric',
-                    });
+                    const formattedDate = formatDateId(po.orderDate);
 
                     return (
                       <tr key={po.id} className="hover:bg-slate-50/75 transition-colors group">
@@ -445,11 +442,7 @@ export default function PurchaseOrdersPage() {
           {/* Mobile Cards (360 px) */}
           <div className="grid grid-cols-1 gap-3 md:hidden">
             {orders.map((po) => {
-              const formattedDate = new Date(po.orderDate).toLocaleDateString('id-ID', {
-                day: 'numeric',
-                month: 'short',
-                year: 'numeric',
-              });
+              const formattedDate = formatDateId(po.orderDate);
 
               return (
                 <Link

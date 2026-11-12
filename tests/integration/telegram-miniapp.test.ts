@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { NextRequest } from 'next/server';
-import crypto from 'node:crypto';
 import {
   Role,
   InvoiceStatus,
@@ -23,23 +22,129 @@ import * as contextModule from '@/lib/auth/context';
 import type { Ctx } from '@/lib/auth/context';
 import { DomainError } from '@/lib/domain/money';
 
+interface MockUser {
+  id: string;
+  username: string;
+  name: string;
+  role: Role;
+  businessId: string | null;
+  isActive: boolean;
+  telegramChatId: bigint | null;
+  telegramLinkedAt: Date | null;
+  telegramBlocked: boolean;
+  mustChangePassword: boolean;
+  deletedAt: Date | null;
+}
+
+interface MockSession {
+  id: string;
+  userId: string;
+  tokenHash?: string;
+  activeBusinessId?: string | null;
+  userAgent?: string | null;
+  ip?: string | null;
+  expiresAt?: Date;
+  revokedAt?: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+interface MockLoginAttempt {
+  id: string;
+  username?: string | null;
+  ip?: string | null;
+  success?: boolean;
+  createdAt: Date;
+}
+
+interface MockBusinessRef {
+  id: string;
+  name: string;
+  legalName: string | null;
+  address: string | null;
+  phone: string | null;
+  email: string | null;
+  npwp: string | null;
+  logoPath: string | null;
+}
+
+interface MockInvoice {
+  id: string;
+  businessId: string;
+  orderId: string;
+  number: string;
+  status: InvoiceStatus;
+  amount: bigint;
+  paidAmount: bigint;
+  printedCount: number;
+  lastPrintedAt: Date | null;
+  snapshot: unknown;
+  theme: InvoiceTheme;
+  business: MockBusinessRef;
+  deletedAt: Date | null;
+}
+
+interface MockOrder {
+  id: string;
+  orderNo: string;
+  salesId: string;
+  businessId: string;
+  paidTotal: bigint;
+  grandTotal: bigint;
+  dpAmount: bigint;
+  items: unknown[];
+  customer: { name: string };
+  deletedAt: Date | null;
+}
+
+interface MockCreditNote {
+  id: string;
+  businessId: string;
+  deletedAt: Date | null;
+}
+
+interface MockCatalog {
+  id: string;
+  businessId: string;
+}
+
+interface MockAuditLog {
+  action?: string;
+  entityId?: string;
+  [key: string]: unknown;
+}
+
+interface WhereFilter {
+  id?: string | { in?: string[] };
+  telegramChatId?: bigint | null;
+  isActive?: boolean;
+  deletedAt?: null | Date;
+  userId?: string;
+  revokedAt?: null | Date;
+  username?: string;
+  ip?: string;
+  success?: boolean;
+  businessId?: string;
+}
+
 // Mock DB stores
-let mockUsers: any[] = [];
-let mockSessions: any[] = [];
-let mockLoginAttempts: any[] = [];
-let mockInvoices: any[] = [];
-let mockOrders: any[] = [];
-let mockCreditNotes: any[] = [];
-let mockCatalogs: any[] = [];
-let mockAuditLogs: any[] = [];
+let mockUsers: MockUser[] = [];
+let mockSessions: MockSession[] = [];
+let mockLoginAttempts: MockLoginAttempt[] = [];
+let mockInvoices: MockInvoice[] = [];
+let mockOrders: MockOrder[] = [];
+let mockCreditNotes: MockCreditNote[] = [];
+let mockCatalogs: MockCatalog[] = [];
+let mockAuditLogs: MockAuditLog[] = [];
 
 vi.mock('@/lib/db', () => ({
   prisma: {
-    $transaction: vi.fn(async (cb: (tx: any) => any) => {
-      return cb(prismaMock);
+    $transaction: vi.fn(async (cb: (tx: unknown) => Promise<unknown>) => {
+      const { prisma } = await import('@/lib/db');
+      return cb(prisma);
     }),
     user: {
-      findFirst: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findFirst: vi.fn(async ({ where }: { where: WhereFilter }) => {
         return (
           mockUsers.find((u) => {
             if (where.id && u.id !== where.id) return false;
@@ -53,7 +158,7 @@ vi.mock('@/lib/db', () => ({
       findUnique: vi.fn(async ({ where }: { where: { id: string } }) => {
         return mockUsers.find((u) => u.id === where.id) || null;
       }),
-      update: vi.fn(async ({ where, data }: { where: { id: string }; data: any }) => {
+      update: vi.fn(async ({ where, data }: { where: { id: string }; data: Partial<MockUser> }) => {
         const u = mockUsers.find((user) => user.id === where.id);
         if (u) {
           Object.assign(u, data);
@@ -62,36 +167,49 @@ vi.mock('@/lib/db', () => ({
       }),
     },
     session: {
-      findMany: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findMany: vi.fn(async ({ where }: { where: WhereFilter }) => {
         return mockSessions.filter((s) => {
           if (where.userId && s.userId !== where.userId) return false;
           if (where.revokedAt === null && s.revokedAt !== null) return false;
           return true;
         });
       }),
-      updateMany: vi.fn(async ({ where, data }: { where: Record<string, any>; data: any }) => {
-        let count = 0;
-        mockSessions.forEach((s) => {
-          if (where.id && Array.isArray(where.id.in) && where.id.in.includes(s.id)) {
-            Object.assign(s, data);
-            count++;
-          }
-        });
-        return { count };
-      }),
-      create: vi.fn(async ({ data }: { data: any }) => {
-        const sess = {
-          id: `sess_${Date.now()}_${Math.random().toString(36).substring(7)}`,
-          ...data,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        };
-        mockSessions.push(sess);
-        return sess;
-      }),
+      updateMany: vi.fn(
+        async ({ where, data }: { where: WhereFilter; data: Partial<MockSession> }) => {
+          let count = 0;
+          mockSessions.forEach((s) => {
+            if (
+              where.id &&
+              typeof where.id === 'object' &&
+              Array.isArray(where.id.in) &&
+              where.id.in.includes(s.id)
+            ) {
+              Object.assign(s, data);
+              count++;
+            }
+          });
+          return { count };
+        }
+      ),
+      create: vi.fn(
+        async ({
+          data,
+        }: {
+          data: Omit<MockSession, 'id' | 'createdAt' | 'updatedAt'>;
+        }) => {
+          const sess: MockSession = {
+            id: `sess_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+            ...data,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          };
+          mockSessions.push(sess);
+          return sess;
+        }
+      ),
     },
     loginAttempt: {
-      count: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      count: vi.fn(async ({ where }: { where: WhereFilter }) => {
         return mockLoginAttempts.filter((a) => {
           if (where.username && a.username !== where.username) return false;
           if (where.ip && a.ip !== where.ip) return false;
@@ -99,8 +217,8 @@ vi.mock('@/lib/db', () => ({
           return true;
         }).length;
       }),
-      create: vi.fn(async ({ data }: { data: any }) => {
-        const record = {
+      create: vi.fn(async ({ data }: { data: Omit<MockLoginAttempt, 'id' | 'createdAt'> }) => {
+        const record: MockLoginAttempt = {
           id: `att_${Date.now()}`,
           ...data,
           createdAt: new Date(),
@@ -110,7 +228,7 @@ vi.mock('@/lib/db', () => ({
       }),
     },
     invoice: {
-      findFirst: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findFirst: vi.fn(async ({ where }: { where: WhereFilter }) => {
         return (
           mockInvoices.find((i) => {
             if (where.id && i.id !== where.id) return false;
@@ -120,35 +238,51 @@ vi.mock('@/lib/db', () => ({
           }) || null
         );
       }),
-      update: vi.fn(async ({ where, data }: { where: { id: string }; data: any }) => {
-        const inv = mockInvoices.find((i) => i.id === where.id);
-        if (inv) {
-          if (data.printedCount?.increment) {
-            inv.printedCount = (inv.printedCount || 0) + data.printedCount.increment;
+      update: vi.fn(
+        async ({
+          where,
+          data,
+        }: {
+          where: { id: string };
+          data: { printedCount?: { increment?: number }; lastPrintedAt?: Date };
+        }) => {
+          const inv = mockInvoices.find((i) => i.id === where.id);
+          if (inv) {
+            if (data.printedCount?.increment) {
+              inv.printedCount = (inv.printedCount || 0) + data.printedCount.increment;
+            }
+            if (data.lastPrintedAt) {
+              inv.lastPrintedAt = data.lastPrintedAt;
+            }
           }
-          if (data.lastPrintedAt) {
-            inv.lastPrintedAt = data.lastPrintedAt;
-          }
+          return inv;
         }
-        return inv;
-      }),
-      updateMany: vi.fn(async ({ where, data }: { where: { id: string; businessId?: string }; data: any }) => {
-        const matched = mockInvoices.filter(
-          (i) => i.id === where.id && (!where.businessId || i.businessId === where.businessId)
-        );
-        for (const inv of matched) {
-          if (data.printedCount?.increment) {
-            inv.printedCount = (inv.printedCount || 0) + data.printedCount.increment;
+      ),
+      updateMany: vi.fn(
+        async ({
+          where,
+          data,
+        }: {
+          where: { id: string; businessId?: string };
+          data: { printedCount?: { increment?: number }; lastPrintedAt?: Date };
+        }) => {
+          const matched = mockInvoices.filter(
+            (i) => i.id === where.id && (!where.businessId || i.businessId === where.businessId)
+          );
+          for (const inv of matched) {
+            if (data.printedCount?.increment) {
+              inv.printedCount = (inv.printedCount || 0) + data.printedCount.increment;
+            }
+            if (data.lastPrintedAt) {
+              inv.lastPrintedAt = data.lastPrintedAt;
+            }
           }
-          if (data.lastPrintedAt) {
-            inv.lastPrintedAt = data.lastPrintedAt;
-          }
+          return { count: matched.length };
         }
-        return { count: matched.length };
-      }),
+      ),
     },
     order: {
-      findFirst: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findFirst: vi.fn(async ({ where }: { where: WhereFilter }) => {
         return (
           mockOrders.find((o) => {
             if (where.id && o.id !== where.id) return false;
@@ -160,7 +294,7 @@ vi.mock('@/lib/db', () => ({
       }),
     },
     creditNote: {
-      findFirst: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findFirst: vi.fn(async ({ where }: { where: WhereFilter }) => {
         return (
           mockCreditNotes.find((c) => {
             if (where.id && c.id !== where.id) return false;
@@ -172,7 +306,7 @@ vi.mock('@/lib/db', () => ({
       }),
     },
     catalog: {
-      findFirst: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findFirst: vi.fn(async ({ where }: { where: WhereFilter }) => {
         return (
           mockCatalogs.find((c) => {
             if (where.id && c.id !== where.id) return false;
@@ -183,16 +317,13 @@ vi.mock('@/lib/db', () => ({
       }),
     },
     auditLog: {
-      create: vi.fn(async ({ data }: { data: any }) => {
+      create: vi.fn(async ({ data }: { data: MockAuditLog }) => {
         mockAuditLogs.push(data);
         return data;
       }),
     },
   },
 }));
-
-// Provide reference for transaction mock
-const prismaMock = (await vi.importMock('@/lib/db') as any).prisma;
 
 // Mock PDF render engine
 vi.mock('@/lib/pdf/engine', () => ({
@@ -613,8 +744,8 @@ describe('T4.3: Telegram Mini App, Autologin initData, dan Tautan Unduh Bertanda
       expect(json.data.success).toBe(true);
 
       const updatedUser = mockUsers.find((u) => u.id === salesUser.id);
-      expect(updatedUser.telegramChatId).toBeNull();
-      expect(updatedUser.telegramLinkedAt).toBeNull();
+      expect(updatedUser!.telegramChatId).toBeNull();
+      expect(updatedUser!.telegramLinkedAt).toBeNull();
 
       expect(mockAuditLogs.some((a) => a.action === 'USER_TELEGRAM_UNLINK')).toBe(true);
     });
@@ -862,8 +993,8 @@ describe('T4.3: Telegram Mini App, Autologin initData, dan Tautan Unduh Bertanda
 
       // Verifikasi counter cetak naik dan audit log tercatat
       const inv = mockInvoices.find((i) => i.id === 'inv_approved_1');
-      expect(inv.printedCount).toBe(1);
-      expect(inv.lastPrintedAt).toBeTruthy();
+      expect(inv!.printedCount).toBe(1);
+      expect(inv!.lastPrintedAt).toBeTruthy();
 
       expect(
         mockAuditLogs.some(

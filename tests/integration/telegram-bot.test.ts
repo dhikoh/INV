@@ -18,67 +18,189 @@ import {
   sendTelegramNotification,
 } from '@/lib/services/notification';
 import { hashLinkCode } from '@/lib/telegram/linkCode';
-import { env } from '@/lib/env';
 import { prisma } from '@/lib/db';
 
-const approveInvoiceMock = vi.fn(async (tx: any, ctx: any, invoiceId: string, options: any) => {
-  const inv = mockInvoices.find((i) => i.id === invoiceId);
-  if (inv) inv.status = InvoiceStatus.APPROVED;
-  return { id: invoiceId };
-});
+const approveInvoiceMock = vi.fn(
+  async (...args: [unknown, unknown, string, unknown?]) => {
+    const invoiceId = args[2];
+    const inv = mockInvoices.find((i) => i.id === invoiceId);
+    if (inv) inv.status = InvoiceStatus.APPROVED;
+    return { id: invoiceId };
+  }
+);
 
-const verifyPaymentMock = vi.fn(async (tx: any, ctx: any, paymentId: string) => {
+const verifyPaymentMock = vi.fn(async (...args: [unknown, unknown, string]) => {
+  const paymentId = args[2];
   const pay = mockPayments.find((p) => p.id === paymentId);
   if (pay) pay.status = PaymentStatus.VERIFIED;
   return { id: paymentId };
 });
 
 vi.mock('@/lib/services/invoice', () => ({
-  approveInvoice: (tx: any, ctx: any, invoiceId: string, options: any) =>
+  approveInvoice: (tx: unknown, ctx: unknown, invoiceId: string, options: unknown) =>
     approveInvoiceMock(tx, ctx, invoiceId, options),
 }));
 
 vi.mock('@/lib/services/payment', () => ({
-  verifyPayment: (tx: any, ctx: any, paymentId: string) =>
+  verifyPayment: (tx: unknown, ctx: unknown, paymentId: string) =>
     verifyPaymentMock(tx, ctx, paymentId),
 }));
 
+interface MockBusiness {
+  id: string;
+  code: string;
+  name: string;
+}
+
+interface MockUser {
+  id: string;
+  businessId: string;
+  role: Role;
+  name: string;
+  username: string;
+  isActive: boolean;
+  telegramChatId: bigint | null;
+  telegramLinkedAt: Date | null;
+  telegramBlocked: boolean;
+  business?: MockBusiness | null;
+}
+
+interface MockTelegramLinkCode {
+  id: string;
+  userId: string;
+  codeHash: string;
+  expiresAt: Date;
+  usedAt: Date | null;
+  user?: MockUser;
+}
+
+interface MockNotification {
+  id: string;
+  businessId?: string;
+  userId?: string;
+  type?: string;
+  title?: string;
+  body?: string;
+  linkPath?: string;
+  dedupeKey?: string;
+  telegramSentAt: Date | null;
+  telegramError: string | null;
+  createdAt: Date;
+  [key: string]: unknown;
+}
+
+interface MockInvoice {
+  id: string;
+  businessId: string;
+  orderId: string;
+  status: InvoiceStatus;
+  deletedAt: Date | null;
+  business?: MockBusiness | null;
+}
+
+interface MockPayment {
+  id: string;
+  businessId: string;
+  orderId: string;
+  status: PaymentStatus;
+  business?: MockBusiness | null;
+}
+
+interface MockProduct {
+  id: string;
+  businessId: string;
+  stockQty: number;
+  deletedAt: Date | null;
+}
+
+interface MockCrmTask {
+  id: string;
+  businessId: string;
+  assignedToId: string;
+  doneAt: Date | null;
+}
+
+interface MockOrder {
+  id: string;
+  businessId: string;
+  salesId: string;
+  status: OrderStatus;
+  hasBelowMin: boolean;
+  items: Array<{
+    id: string;
+    price: bigint;
+    minPriceSnapshot: bigint;
+    belowMin: boolean;
+  }>;
+  deletedAt: Date | null;
+}
+
+interface TelegramApiPayload {
+  chat_id?: number | string;
+  text?: string;
+  show_alert?: boolean;
+  reply_markup?: {
+    inline_keyboard?: Array<
+      Array<{
+        text: string;
+        callback_data?: string;
+        url?: string;
+      }>
+    >;
+  };
+}
+
+interface BotWhereFilter {
+  id?: string;
+  telegramChatId?: bigint | null;
+  isActive?: boolean;
+  NOT?: { id?: string };
+  businessId?: string;
+  status?: InvoiceStatus | PaymentStatus | { in?: OrderStatus[] };
+  deletedAt?: null | Date;
+  stockQty?: { lt?: number };
+  assignedToId?: string;
+  doneAt?: null | Date;
+  salesId?: string;
+}
+
 // In-memory mock database
-let mockBusinesses: any[] = [];
-let mockUsers: any[] = [];
-let mockTelegramLinkCodes: any[] = [];
-let mockNotifications: any[] = [];
-let mockInvoices: any[] = [];
-let mockPayments: any[] = [];
-let mockProducts: any[] = [];
-let mockCrmTasks: any[] = [];
-let mockOrders: any[] = [];
+let mockBusinesses: MockBusiness[] = [];
+let mockUsers: MockUser[] = [];
+let mockTelegramLinkCodes: MockTelegramLinkCode[] = [];
+let mockNotifications: MockNotification[] = [];
+let mockInvoices: MockInvoice[] = [];
+let mockPayments: MockPayment[] = [];
+let mockProducts: MockProduct[] = [];
+let mockCrmTasks: MockCrmTask[] = [];
+let mockOrders: MockOrder[] = [];
 
 let idCounter = 1;
 
-let sentMessages: Array<{ method: string; payload: any }> = [];
-let mockApiRejectError: any = null;
+let sentMessages: Array<{ method: string; payload: TelegramApiPayload }> = [];
+let mockApiRejectError: { error_code: number; description: string } | null = null;
 
 // Pasang transformer grammY sekali untuk menangkap semua panggilan API Telegram secara offline
-bot.api.config.use(async (prev, method, payload, signal) => {
+bot.api.config.use(async (prev, method, payload) => {
   if (mockApiRejectError) {
     const err = mockApiRejectError;
     mockApiRejectError = null;
     throw err;
   }
-  sentMessages.push({ method, payload });
+  const typedPayload = (payload || {}) as TelegramApiPayload;
+  sentMessages.push({ method, payload: typedPayload });
   return {
     ok: true,
     result: {
       message_id: idCounter++,
       date: Math.floor(Date.now() / 1000),
       chat: {
-        id: payload && 'chat_id' in (payload as any) ? (payload as any).chat_id : 1,
+        id: typedPayload.chat_id ?? 1,
         type: 'private',
       },
-      text: payload && 'text' in (payload as any) ? (payload as any).text : '',
+      text: typedPayload.text ?? '',
     },
-  } as any;
+  } as never;
 });
 
 vi.mock('@/lib/db', () => {
@@ -87,66 +209,92 @@ vi.mock('@/lib/db', () => {
       findUnique: vi.fn(async ({ where }: { where: { id: string } }) => {
         return mockBusinesses.find((b) => b.id === where.id) || null;
       }),
-      findFirst: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findFirst: vi.fn(async ({ where }: { where: BotWhereFilter }) => {
         return mockBusinesses.find((b) => b.id === where.id) || null;
       }),
     },
     user: {
-      findUnique: vi.fn(async ({ where, include }: { where: Record<string, any>; include?: any }) => {
-        const found = mockUsers.find((u) => {
-          if (where.id && u.id !== where.id) return false;
-          if (where.telegramChatId && u.telegramChatId !== where.telegramChatId) return false;
-          return true;
-        });
-        if (!found) return null;
-        const res = { ...found };
-        if (include?.business) {
-          res.business = mockBusinesses.find((b) => b.id === found.businessId) || null;
+      findUnique: vi.fn(
+        async ({
+          where,
+          include,
+        }: {
+          where: BotWhereFilter;
+          include?: { business?: boolean };
+        }) => {
+          const found = mockUsers.find((u) => {
+            if (where.id && u.id !== where.id) return false;
+            if (where.telegramChatId && u.telegramChatId !== where.telegramChatId) return false;
+            return true;
+          });
+          if (!found) return null;
+          const res: MockUser = { ...found };
+          if (include?.business) {
+            res.business = mockBusinesses.find((b) => b.id === found.businessId) || null;
+          }
+          return res;
         }
-        return res;
-      }),
-      findFirst: vi.fn(async ({ where, include }: { where: Record<string, any>; include?: any }) => {
-        const found = mockUsers.find((u) => {
-          if (where.id && u.id !== where.id) return false;
-          if (where.telegramChatId && u.telegramChatId !== where.telegramChatId) return false;
-          if (where.isActive !== undefined && u.isActive !== where.isActive) return false;
-          if (where.NOT?.id && u.id === where.NOT.id) return false;
-          return true;
-        });
-        if (!found) return null;
-        const res = { ...found };
-        if (include?.business) {
-          res.business = mockBusinesses.find((b) => b.id === found.businessId) || null;
+      ),
+      findFirst: vi.fn(
+        async ({
+          where,
+          include,
+        }: {
+          where: BotWhereFilter;
+          include?: { business?: boolean };
+        }) => {
+          const found = mockUsers.find((u) => {
+            if (where.id && u.id !== where.id) return false;
+            if (where.telegramChatId && u.telegramChatId !== where.telegramChatId) return false;
+            if (where.isActive !== undefined && u.isActive !== where.isActive) return false;
+            if (where.NOT?.id && u.id === where.NOT.id) return false;
+            return true;
+          });
+          if (!found) return null;
+          const res: MockUser = { ...found };
+          if (include?.business) {
+            res.business = mockBusinesses.find((b) => b.id === found.businessId) || null;
+          }
+          return res;
         }
-        return res;
-      }),
-      update: vi.fn(async ({ where, data }: { where: { id: string }; data: any }) => {
+      ),
+      update: vi.fn(async ({ where, data }: { where: { id: string }; data: Partial<MockUser> }) => {
         const found = mockUsers.find((u) => u.id === where.id);
         if (found) Object.assign(found, data);
         return found;
       }),
     },
     telegramLinkCode: {
-      findUnique: vi.fn(async ({ where, include }: { where: { codeHash: string }; include?: any }) => {
-        const found = mockTelegramLinkCodes.find((c) => c.codeHash === where.codeHash);
-        if (!found) return null;
-        const res = { ...found };
-        if (include?.user) {
-          const user = mockUsers.find((u) => u.id === found.userId);
-          if (user) {
-            res.user = {
-              ...user,
-              business: mockBusinesses.find((b) => b.id === user.businessId) || null,
-            };
+      findUnique: vi.fn(
+        async ({
+          where,
+          include,
+        }: {
+          where: { codeHash: string };
+          include?: { user?: boolean };
+        }) => {
+          const found = mockTelegramLinkCodes.find((c) => c.codeHash === where.codeHash);
+          if (!found) return null;
+          const res: MockTelegramLinkCode = { ...found };
+          if (include?.user) {
+            const user = mockUsers.find((u) => u.id === found.userId);
+            if (user) {
+              res.user = {
+                ...user,
+                business: mockBusinesses.find((b) => b.id === user.businessId) || null,
+              };
+            }
           }
+          return res;
         }
-        return res;
-      }),
-      update: vi.fn(async ({ where, data }: { where: { id: string }; data: any }) => {
-        const found = mockTelegramLinkCodes.find((c) => c.id === where.id);
-        if (found) Object.assign(found, data);
-        return found;
-      }),
+      ),
+      update: vi.fn(
+        async ({ where, data }: { where: { id: string }; data: Partial<MockTelegramLinkCode> }) => {
+          const found = mockTelegramLinkCodes.find((c) => c.id === where.id);
+          if (found) Object.assign(found, data);
+          return found;
+        }
+      ),
     },
     notification: {
       findUnique: vi.fn(async ({ where }: { where: { id?: string; dedupeKey?: string } }) => {
@@ -158,8 +306,8 @@ vi.mock('@/lib/db', () => {
         }
         return null;
       }),
-      create: vi.fn(async ({ data }: { data: any }) => {
-        const created = {
+      create: vi.fn(async ({ data }: { data: Partial<MockNotification> }) => {
+        const created: MockNotification = {
           id: `notif_${idCounter++}`,
           telegramSentAt: null,
           telegramError: null,
@@ -169,14 +317,16 @@ vi.mock('@/lib/db', () => {
         mockNotifications.push(created);
         return created;
       }),
-      update: vi.fn(async ({ where, data }: { where: { id: string }; data: any }) => {
-        const found = mockNotifications.find((n) => n.id === where.id);
-        if (found) Object.assign(found, data);
-        return found;
-      }),
+      update: vi.fn(
+        async ({ where, data }: { where: { id: string }; data: Partial<MockNotification> }) => {
+          const found = mockNotifications.find((n) => n.id === where.id);
+          if (found) Object.assign(found, data);
+          return found;
+        }
+      ),
     },
     invoice: {
-      count: vi.fn(async ({ where }: { where: any }) => {
+      count: vi.fn(async ({ where }: { where: BotWhereFilter }) => {
         return mockInvoices.filter((inv) => {
           if (where.businessId && inv.businessId !== where.businessId) return false;
           if (where.status && inv.status !== where.status) return false;
@@ -184,36 +334,52 @@ vi.mock('@/lib/db', () => {
           return true;
         }).length;
       }),
-      findUnique: vi.fn(async ({ where, include }: { where: { id: string }; include?: any }) => {
-        const inv = mockInvoices.find((i) => i.id === where.id);
-        if (!inv) return null;
-        const res = { ...inv };
-        if (include?.business) {
-          res.business = mockBusinesses.find((b) => b.id === inv.businessId) || null;
+      findUnique: vi.fn(
+        async ({
+          where,
+          include,
+        }: {
+          where: { id: string };
+          include?: { business?: boolean };
+        }) => {
+          const inv = mockInvoices.find((i) => i.id === where.id);
+          if (!inv) return null;
+          const res: MockInvoice = { ...inv };
+          if (include?.business) {
+            res.business = mockBusinesses.find((b) => b.id === inv.businessId) || null;
+          }
+          return res;
         }
-        return res;
-      }),
+      ),
     },
     payment: {
-      count: vi.fn(async ({ where }: { where: any }) => {
+      count: vi.fn(async ({ where }: { where: BotWhereFilter }) => {
         return mockPayments.filter((p) => {
           if (where.businessId && p.businessId !== where.businessId) return false;
           if (where.status && p.status !== where.status) return false;
           return true;
         }).length;
       }),
-      findUnique: vi.fn(async ({ where, include }: { where: { id: string }; include?: any }) => {
-        const p = mockPayments.find((pay) => pay.id === where.id);
-        if (!p) return null;
-        const res = { ...p };
-        if (include?.business) {
-          res.business = mockBusinesses.find((b) => b.id === p.businessId) || null;
+      findUnique: vi.fn(
+        async ({
+          where,
+          include,
+        }: {
+          where: { id: string };
+          include?: { business?: boolean };
+        }) => {
+          const p = mockPayments.find((pay) => pay.id === where.id);
+          if (!p) return null;
+          const res: MockPayment = { ...p };
+          if (include?.business) {
+            res.business = mockBusinesses.find((b) => b.id === p.businessId) || null;
+          }
+          return res;
         }
-        return res;
-      }),
+      ),
     },
     product: {
-      count: vi.fn(async ({ where }: { where: any }) => {
+      count: vi.fn(async ({ where }: { where: BotWhereFilter }) => {
         return mockProducts.filter((p) => {
           if (where.businessId && p.businessId !== where.businessId) return false;
           if (where.stockQty?.lt !== undefined && !(p.stockQty < where.stockQty.lt)) return false;
@@ -223,7 +389,7 @@ vi.mock('@/lib/db', () => {
       }),
     },
     crmTask: {
-      count: vi.fn(async ({ where }: { where: any }) => {
+      count: vi.fn(async ({ where }: { where: BotWhereFilter }) => {
         return mockCrmTasks.filter((t) => {
           if (where.businessId && t.businessId !== where.businessId) return false;
           if (where.assignedToId && t.assignedToId !== where.assignedToId) return false;
@@ -233,26 +399,34 @@ vi.mock('@/lib/db', () => {
       }),
     },
     order: {
-      count: vi.fn(async ({ where }: { where: any }) => {
+      count: vi.fn(async ({ where }: { where: BotWhereFilter }) => {
         return mockOrders.filter((o) => {
           if (where.businessId && o.businessId !== where.businessId) return false;
           if (where.salesId && o.salesId !== where.salesId) return false;
-          if (where.status?.in && !where.status.in.includes(o.status)) return false;
+          if (
+            where.status &&
+            typeof where.status === 'object' &&
+            where.status.in &&
+            !where.status.in.includes(o.status)
+          )
+            return false;
           if (where.deletedAt === null && o.deletedAt !== null) return false;
           return true;
         }).length;
       }),
-      findUnique: vi.fn(async ({ where, include }: { where: { id: string }; include?: any }) => {
-        const ord = mockOrders.find((o) => o.id === where.id);
-        if (!ord) return null;
-        const res = { ...ord };
-        if (include?.items) {
-          res.items = ord.items || [];
+      findUnique: vi.fn(
+        async ({ where, include }: { where: { id: string }; include?: { items?: boolean } }) => {
+          const ord = mockOrders.find((o) => o.id === where.id);
+          if (!ord) return null;
+          const res: MockOrder = { ...ord };
+          if (include?.items) {
+            res.items = ord.items || [];
+          }
+          return res;
         }
-        return res;
-      }),
+      ),
     },
-    $transaction: vi.fn(async (callback: any) => {
+    $transaction: vi.fn(async (callback: ((tx: unknown) => Promise<unknown>) | Array<Promise<unknown>>) => {
       if (typeof callback === 'function') {
         return callback(mockPrisma);
       }
@@ -450,16 +624,6 @@ describe('T4.1: Bot Telegram dan Antrean Job Background (Tes 17.3 No. 16)', () =
 
   describe('2. Perintah /start <kode>', () => {
     it('Menolak kode kedaluwarsa atau sudah terpakai dengan pesan generik', async () => {
-      const replies: string[] = [];
-      const fakeCtx: any = {
-        chat: { type: 'private', id: 111222333 },
-        from: { id: 111222333 },
-        match: 'EXPIRED1',
-        reply: vi.fn(async (msg: string) => {
-          replies.push(msg);
-        }),
-      };
-
       // Panggil listener start
       await bot.handleUpdate({
         update_id: 1,
@@ -471,10 +635,10 @@ describe('T4.1: Bot Telegram dan Antrean Job Background (Tes 17.3 No. 16)', () =
           text: '/start EXPIRED1',
           entities: [{ offset: 0, length: 6, type: 'bot_command' }],
         },
-      } as any);
+      } as never);
 
       const user = mockUsers.find((u) => u.id === salesUserId);
-      expect(user.telegramChatId).toBeNull();
+      expect(user!.telegramChatId).toBeNull();
     });
 
     it('Berhasil menghubungkan akun dengan kode valid (mengisi telegramChatId, telegramLinkedAt)', async () => {
@@ -488,15 +652,15 @@ describe('T4.1: Bot Telegram dan Antrean Job Background (Tes 17.3 No. 16)', () =
           text: '/start ABCD2345',
           entities: [{ offset: 0, length: 6, type: 'bot_command' }],
         },
-      } as any);
+      } as never);
 
       const user = mockUsers.find((u) => u.id === salesUserId);
-      expect(user.telegramChatId).toBe(555666777n);
-      expect(user.telegramLinkedAt).toBeInstanceOf(Date);
-      expect(user.telegramBlocked).toBe(false);
+      expect(user!.telegramChatId).toBe(555666777n);
+      expect(user!.telegramLinkedAt).toBeInstanceOf(Date);
+      expect(user!.telegramBlocked).toBe(false);
 
       const linkCode = mockTelegramLinkCodes.find((c) => c.id === 'link_001');
-      expect(linkCode.usedAt).toBeInstanceOf(Date);
+      expect(linkCode!.usedAt).toBeInstanceOf(Date);
     });
 
     it('Menolak jika chat Telegram sudah terhubung ke akun lain', async () => {
@@ -511,11 +675,11 @@ describe('T4.1: Bot Telegram dan Antrean Job Background (Tes 17.3 No. 16)', () =
           text: '/start ABCD2345',
           entities: [{ offset: 0, length: 6, type: 'bot_command' }],
         },
-      } as any);
+      } as never);
 
       // User sales tidak boleh tertaut ke chatId 987654321
       const user = mockUsers.find((u) => u.id === salesUserId);
-      expect(user.telegramChatId).toBeNull();
+      expect(user!.telegramChatId).toBeNull();
     });
 
     it('Membatasi percobaan link: maksimal 5 kali per 10 menit (rate limit)', () => {
@@ -530,15 +694,6 @@ describe('T4.1: Bot Telegram dan Antrean Job Background (Tes 17.3 No. 16)', () =
 
   describe('3. Perintah /me dan /today', () => {
     it('Perintah /me mengembalikan profil lengkap untuk akun yang terhubung', async () => {
-      const replies: any[] = [];
-      const fakeCtx: any = {
-        chat: { type: 'private', id: 987654321 },
-        from: { id: 987654321 },
-        reply: vi.fn(async (msg: string) => {
-          replies.push(msg);
-        }),
-      };
-
       await bot.handleUpdate({
         update_id: 4,
         message: {
@@ -549,7 +704,7 @@ describe('T4.1: Bot Telegram dan Antrean Job Background (Tes 17.3 No. 16)', () =
           text: '/me',
           entities: [{ offset: 0, length: 3, type: 'bot_command' }],
         },
-      } as any);
+      } as never);
       // Handler memproses dengan sukses
     });
 
@@ -564,7 +719,7 @@ describe('T4.1: Bot Telegram dan Antrean Job Background (Tes 17.3 No. 16)', () =
           text: '/today',
           entities: [{ offset: 0, length: 6, type: 'bot_command' }],
         },
-      } as any);
+      } as never);
       // Handler memproses dengan sukses
     });
   });
@@ -581,15 +736,15 @@ describe('T4.1: Bot Telegram dan Antrean Job Background (Tes 17.3 No. 16)', () =
         dedupeKey: 'APPROVE_REQ:inv_1:2026-11-09',
       };
 
-      const notif1 = await createNotification(prisma as any, input);
-      const notif2 = await createNotification(prisma as any, input);
+      const notif1 = await createNotification(prisma, input);
+      const notif2 = await createNotification(prisma, input);
 
       expect(notif1.id).toBe(notif2.id);
       expect(mockNotifications).toHaveLength(1);
     });
 
     it('sendTelegramNotification mengirim pesan dan mengisi telegramSentAt', async () => {
-      const notif = await createNotification(prisma as any, {
+      const notif = await createNotification(prisma, {
         businessId,
         userId: superAdminId,
         type: 'APPROVAL_REQUEST',
@@ -604,8 +759,8 @@ describe('T4.1: Bot Telegram dan Antrean Job Background (Tes 17.3 No. 16)', () =
       expect(sentMessages.length).toBe(initialCount + 1);
 
       const updated = mockNotifications.find((n) => n.id === notif.id);
-      expect(updated.telegramSentAt).toBeInstanceOf(Date);
-      expect(updated.telegramError).toBeNull();
+      expect(updated!.telegramSentAt).toBeInstanceOf(Date);
+      expect(updated!.telegramError).toBeNull();
 
       // Panggilan kedua bersifat idempoten (tidak mengirim ulang)
       const res2 = await sendTelegramNotification(notif.id);
@@ -614,7 +769,7 @@ describe('T4.1: Bot Telegram dan Antrean Job Background (Tes 17.3 No. 16)', () =
     });
 
     it('Menangani kesalahan 403 (User memblokir bot): menandai telegramBlocked = true', async () => {
-      const notif = await createNotification(prisma as any, {
+      const notif = await createNotification(prisma, {
         businessId,
         userId: superAdminId,
         type: 'APPROVAL_REQUEST',
@@ -633,16 +788,16 @@ describe('T4.1: Bot Telegram dan Antrean Job Background (Tes 17.3 No. 16)', () =
       expect(result.blocked).toBe(true);
 
       const user = mockUsers.find((u) => u.id === superAdminId);
-      expect(user.telegramBlocked).toBe(true);
+      expect(user!.telegramBlocked).toBe(true);
 
       const updated = mockNotifications.find((n) => n.id === notif.id);
-      expect(updated.telegramError).toContain('403');
+      expect(updated!.telegramError).toContain('403');
     });
   });
 
   describe('5. Tombol Inline & Callback Persetujuan Telegram (T4.2 - Seksi 12.4 & Tabel 19.5)', () => {
     it('sendTelegramNotification menyertakan inline keyboard tombol interaktif (Setujui, Tolak, Buka) untuk APPROVAL_REQUEST', async () => {
-      const notif = await createNotification(prisma as any, {
+      const notif = await createNotification(prisma, {
         businessId,
         userId: superAdminId,
         type: 'APPROVAL_REQUEST',
@@ -662,16 +817,16 @@ describe('T4.1: Bot Telegram dan Antrean Job Background (Tes 17.3 No. 16)', () =
       const keyboard = sendCall?.payload?.reply_markup?.inline_keyboard;
       expect(keyboard).toBeDefined();
       expect(keyboard).toHaveLength(2); // Row 1: Setujui, Tolak. Row 2: Buka
-      expect(keyboard[0][0].text).toBe('Setujui');
-      expect(keyboard[0][0].callback_data).toBe('ap:inv_001:y');
-      expect(keyboard[0][1].text).toBe('Tolak');
-      expect(keyboard[0][1].url).toContain('/tg/approvals/inv_001?reject=1');
-      expect(keyboard[1][0].text).toBe('Buka');
-      expect(keyboard[1][0].url).toContain('/tg/approvals/inv_001');
+      expect(keyboard![0][0].text).toBe('Setujui');
+      expect(keyboard![0][0].callback_data).toBe('ap:inv_001:y');
+      expect(keyboard![0][1].text).toBe('Tolak');
+      expect(keyboard![0][1].url).toContain('/tg/approvals/inv_001?reject=1');
+      expect(keyboard![1][0].text).toBe('Buka');
+      expect(keyboard![1][0].url).toContain('/tg/approvals/inv_001');
     });
 
     it('sendTelegramNotification menyertakan inline keyboard tombol interaktif (Verifikasi, Buka) untuk PAYMENT_PENDING', async () => {
-      const notif = await createNotification(prisma as any, {
+      const notif = await createNotification(prisma, {
         businessId,
         userId: superAdminId,
         type: 'PAYMENT_PENDING',
@@ -688,16 +843,16 @@ describe('T4.1: Bot Telegram dan Antrean Job Background (Tes 17.3 No. 16)', () =
       const sendCall = sentMessages.find((m) => m.method === 'sendMessage');
       const keyboard = sendCall?.payload?.reply_markup?.inline_keyboard;
       expect(keyboard).toBeDefined();
-      expect(keyboard[0][0].text).toBe('Verifikasi');
-      expect(keyboard[0][0].callback_data).toBe('pv:pay_001:y');
-      expect(keyboard[0][1].text).toBe('Buka');
-      expect(keyboard[0][1].url).toContain('/tg/payments');
+      expect(keyboard![0][0].text).toBe('Verifikasi');
+      expect(keyboard![0][0].callback_data).toBe('pv:pay_001:y');
+      expect(keyboard![0][1].text).toBe('Buka');
+      expect(keyboard![0][1].url).toContain('/tg/payments');
     });
 
     it('Non-Super Admin yang menekan tombol callback ditolak dengan pesan akses ditolak', async () => {
       // User sales (role: SALES, chatId: 555666777)
       const salesUser = mockUsers.find((u) => u.id === salesUserId);
-      salesUser.telegramChatId = 555666777n;
+      salesUser!.telegramChatId = 555666777n;
 
       sentMessages = [];
       await bot.handleUpdate({
@@ -713,7 +868,7 @@ describe('T4.1: Bot Telegram dan Antrean Job Background (Tes 17.3 No. 16)', () =
           },
           data: 'ap:inv_001:y',
         },
-      } as any);
+      } as never);
 
       expect(approveInvoiceMock).not.toHaveBeenCalled();
       const answerCall = sentMessages.find((m) => m.method === 'answerCallbackQuery');
@@ -737,7 +892,7 @@ describe('T4.1: Bot Telegram dan Antrean Job Background (Tes 17.3 No. 16)', () =
           },
           data: 'ap:inv_below_min:y',
         },
-      } as any);
+      } as never);
 
       expect(approveInvoiceMock).not.toHaveBeenCalled();
       const answerCall = sentMessages.find((m) => m.method === 'answerCallbackQuery');
@@ -746,7 +901,7 @@ describe('T4.1: Bot Telegram dan Antrean Job Background (Tes 17.3 No. 16)', () =
       expect(answerCall?.payload?.show_alert).toBe(true);
 
       const inv = mockInvoices.find((i) => i.id === 'inv_below_min');
-      expect(inv.status).toBe(InvoiceStatus.PENDING_APPROVAL);
+      expect(inv!.status).toBe(InvoiceStatus.PENDING_APPROVAL);
     });
 
     it('Super Admin menyetujui faktur normal (hasBelowMin = false) berhasil memanggil domain service dan mengubah status', async () => {
@@ -764,7 +919,7 @@ describe('T4.1: Bot Telegram dan Antrean Job Background (Tes 17.3 No. 16)', () =
           },
           data: 'ap:inv_001:y',
         },
-      } as any);
+      } as never);
 
       expect(approveInvoiceMock).toHaveBeenCalledTimes(1);
       expect(approveInvoiceMock).toHaveBeenCalledWith(
@@ -781,13 +936,13 @@ describe('T4.1: Bot Telegram dan Antrean Job Background (Tes 17.3 No. 16)', () =
       expect(answerCall?.payload?.text).toContain('berhasil disetujui');
 
       const inv = mockInvoices.find((i) => i.id === 'inv_001');
-      expect(inv.status).toBe(InvoiceStatus.APPROVED);
+      expect(inv!.status).toBe(InvoiceStatus.APPROVED);
     });
 
     it('Callback ganda persetujuan faktur bersifat idempoten (menjawab "Sudah diproses" dan menghapus tombol)', async () => {
       // Tandai inv_001 sudah berstatus APPROVED
       const inv = mockInvoices.find((i) => i.id === 'inv_001');
-      inv.status = InvoiceStatus.APPROVED;
+      inv!.status = InvoiceStatus.APPROVED;
 
       sentMessages = [];
       await bot.handleUpdate({
@@ -803,7 +958,7 @@ describe('T4.1: Bot Telegram dan Antrean Job Background (Tes 17.3 No. 16)', () =
           },
           data: 'ap:inv_001:y',
         },
-      } as any);
+      } as never);
 
       expect(approveInvoiceMock).not.toHaveBeenCalled();
       const answerCall = sentMessages.find((m) => m.method === 'answerCallbackQuery');
@@ -829,7 +984,7 @@ describe('T4.1: Bot Telegram dan Antrean Job Background (Tes 17.3 No. 16)', () =
           },
           data: 'pv:pay_001:y',
         },
-      } as any);
+      } as never);
 
       expect(verifyPaymentMock).toHaveBeenCalledTimes(1);
       expect(verifyPaymentMock).toHaveBeenCalledWith(
@@ -845,13 +1000,13 @@ describe('T4.1: Bot Telegram dan Antrean Job Background (Tes 17.3 No. 16)', () =
       expect(answerCall?.payload?.text).toContain('berhasil diverifikasi');
 
       const pay = mockPayments.find((p) => p.id === 'pay_001');
-      expect(pay.status).toBe(PaymentStatus.VERIFIED);
+      expect(pay!.status).toBe(PaymentStatus.VERIFIED);
     });
 
     it('Callback ganda verifikasi pembayaran bersifat idempoten', async () => {
       // Tandai pay_001 sudah berstatus VERIFIED
       const pay = mockPayments.find((p) => p.id === 'pay_001');
-      pay.status = PaymentStatus.VERIFIED;
+      pay!.status = PaymentStatus.VERIFIED;
 
       sentMessages = [];
       await bot.handleUpdate({
@@ -867,7 +1022,7 @@ describe('T4.1: Bot Telegram dan Antrean Job Background (Tes 17.3 No. 16)', () =
           },
           data: 'pv:pay_001:y',
         },
-      } as any);
+      } as never);
 
       expect(verifyPaymentMock).not.toHaveBeenCalled();
       const answerCall = sentMessages.find((m) => m.method === 'answerCallbackQuery');

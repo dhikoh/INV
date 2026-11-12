@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { Skeleton, ErrorState } from '@/components/ui/States';
 import { CrmReportResult, CrmActivityItemDto } from '@/lib/services/reportCrm';
+import { formatDateId } from '@/lib/format/date';
 
 export default function CrmReportPage() {
   const [userRole, setUserRole] = useState<string | null>(null);
@@ -336,11 +337,7 @@ export default function CrmReportPage() {
                 {report?.recentActivities.map((act: CrmActivityItemDto) => (
                   <tr key={act.id} className="hover:bg-slate-50/80 transition">
                     <td className="px-4 py-3.5 text-xs text-slate-500 whitespace-nowrap">
-                      {new Date(act.date).toLocaleDateString('id-ID', {
-                        day: '2-digit',
-                        month: 'short',
-                        year: 'numeric',
-                      })}
+                      {formatDateId(act.date, 'shortPad')}
                     </td>
 
                     <td className="px-4 py-3.5">

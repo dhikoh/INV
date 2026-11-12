@@ -35,72 +35,106 @@ interface MockProduct {
 let mockCatalogs: MockCatalog[] = [];
 let mockCatalogItems: MockCatalogItem[] = [];
 let mockProducts: MockProduct[] = [];
-let mockAuditLogs: Array<any> = [];
+const mockAuditLogs: Array<Record<string, unknown>> = [];
 
 vi.mock('@/lib/db', () => {
   const mockPrisma = {
-    $transaction: vi.fn(async (cb: (tx: any) => Promise<any>) => cb(mockPrisma)),
+    $transaction: vi.fn(
+      async (cb: (tx: unknown) => Promise<unknown>) => cb(mockPrisma)
+    ),
     customerMinPrice: {
       findMany: vi.fn(async () => []),
     },
     catalog: {
-      findFirst: vi.fn(async ({ where }: { where: Record<string, any> }) => {
-        const c = mockCatalogs.find((cat) => {
-          if (where.id && cat.id !== where.id) return false;
-          if (where.businessId && cat.businessId !== where.businessId) return false;
-          if (where.ownerId && cat.ownerId !== where.ownerId) return false;
-          if (where.deletedAt === null && cat.deletedAt !== null) return false;
-          return true;
-        });
-        if (!c) return null;
-        return {
-          ...c,
-          items: mockCatalogItems.filter((i) => i.catalogId === c.id),
-        };
-      }),
+      findFirst: vi.fn(
+        async ({ where }: { where: Record<string, unknown> }) => {
+          const c = mockCatalogs.find((cat) => {
+            if (where.id && cat.id !== where.id) return false;
+            if (where.businessId && cat.businessId !== where.businessId) return false;
+            if (where.ownerId && cat.ownerId !== where.ownerId) return false;
+            if (where.deletedAt === null && cat.deletedAt !== null) return false;
+            return true;
+          });
+          if (!c) return null;
+          return {
+            ...c,
+            items: mockCatalogItems.filter((i) => i.catalogId === c.id),
+          };
+        }
+      ),
     },
     product: {
-      findMany: vi.fn(async ({ where }: { where: Record<string, any> }) => {
-        return mockProducts.filter((p) => {
-          if (where.businessId && p.businessId !== where.businessId) return false;
-          if (where.deletedAt === null && p.deletedAt !== null) return false;
-          if (where.isActive !== undefined && p.isActive !== where.isActive) return false;
-          if (where.id?.in && !where.id.in.includes(p.id)) return false;
-          if (where.id?.notIn && where.id.notIn.includes(p.id)) return false;
-          return true;
-        });
-      }),
+      findMany: vi.fn(
+        async ({
+          where,
+        }: {
+          where: {
+            businessId?: string;
+            deletedAt?: null;
+            isActive?: boolean;
+            id?: { in?: string[]; notIn?: string[] };
+          };
+        }) => {
+          return mockProducts.filter((p) => {
+            if (where.businessId && p.businessId !== where.businessId) return false;
+            if (where.deletedAt === null && p.deletedAt !== null) return false;
+            if (where.isActive !== undefined && p.isActive !== where.isActive) return false;
+            if (where.id?.in && !where.id.in.includes(p.id)) return false;
+            if (where.id?.notIn && where.id.notIn.includes(p.id)) return false;
+            return true;
+          });
+        }
+      ),
     },
     catalogItem: {
-      createMany: vi.fn(async ({ data }: { data: any[] }) => {
-        let added = 0;
-        data.forEach((d, idx) => {
-          const exists = mockCatalogItems.some(
-            (i) => i.catalogId === d.catalogId && i.productId === d.productId
-          );
-          if (!exists) {
-            mockCatalogItems.push({
-              id: `item_${Date.now()}_${idx}`,
-              catalogId: d.catalogId,
-              productId: d.productId,
-              price: BigInt(d.price),
-              sortOrder: d.sortOrder ?? idx,
-            });
-            added++;
-          }
-        });
-        return { count: added };
-      }),
-      update: vi.fn(async ({ where, data }: { where: Record<string, any>; data: any }) => {
-        const item = mockCatalogItems.find((i) => i.id === where.id);
-        if (item) {
-          if (data.price !== undefined) item.price = BigInt(data.price);
+      createMany: vi.fn(
+        async ({
+          data,
+        }: {
+          data: Array<{
+            catalogId: string;
+            productId: string;
+            price: number | bigint;
+            sortOrder?: number;
+          }>;
+        }) => {
+          let added = 0;
+          data.forEach((d, idx) => {
+            const exists = mockCatalogItems.some(
+              (i) => i.catalogId === d.catalogId && i.productId === d.productId
+            );
+            if (!exists) {
+              mockCatalogItems.push({
+                id: `item_${Date.now()}_${idx}`,
+                catalogId: d.catalogId,
+                productId: d.productId,
+                price: BigInt(d.price),
+                sortOrder: d.sortOrder ?? idx,
+              });
+              added++;
+            }
+          });
+          return { count: added };
         }
-        return item;
-      }),
+      ),
+      update: vi.fn(
+        async ({
+          where,
+          data,
+        }: {
+          where: { id: string };
+          data: { price?: number | bigint };
+        }) => {
+          const item = mockCatalogItems.find((i) => i.id === where.id);
+          if (item) {
+            if (data.price !== undefined) item.price = BigInt(data.price);
+          }
+          return item;
+        }
+      ),
     },
     auditLog: {
-      create: vi.fn(async ({ data }: { data: any }) => {
+      create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
         mockAuditLogs.push(data);
         return { id: `audit_${Date.now()}`, ...data };
       }),

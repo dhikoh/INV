@@ -16,6 +16,7 @@ import {
 import { Skeleton, EmptyState, ErrorState } from '@/components/ui/States';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { formatRupiah } from '@/lib/domain/money';
+import { formatDateId } from '@/lib/format/date';
 
 interface PendingPaymentItem {
   id: string;
@@ -232,11 +233,7 @@ export default function PaymentsPage() {
       ) : (
         <div className="space-y-4">
           {filteredPayments.map((p) => {
-            const formattedDate = new Date(p.paidAt).toLocaleDateString('id-ID', {
-              day: 'numeric',
-              month: 'short',
-              year: 'numeric',
-            });
+            const formattedDate = formatDateId(p.paidAt);
 
             return (
               <div

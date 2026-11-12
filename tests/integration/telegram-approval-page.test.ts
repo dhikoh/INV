@@ -14,7 +14,7 @@ const headers = {
 
 vi.mock('@/lib/db', () => ({
   prisma: {
-    $transaction: vi.fn(async (cb: any) => cb(prisma)),
+    $transaction: vi.fn(async (cb: (tx: unknown) => Promise<unknown>) => cb(prisma)),
     invoice: {
       findFirst: vi.fn(),
       update: vi.fn(),
@@ -70,20 +70,14 @@ describe('Persetujuan Faktur Mini App Telegram (AUD-GAP-001 & BLUEPRINT Bagian 8
     ip: '127.0.0.1',
   };
 
-  const salesCtx = {
-    user: { id: 'sales_1', name: 'Sales Staf', role: Role.SALES, businessId: 'biz_1' },
-    role: Role.SALES,
-    businessId: 'biz_1',
-    sessionId: 'sess_sales',
-    ip: '127.0.0.1',
-  };
-
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it('Super Admin berhasil menyetujui invoice melalui endpoint persetujuan', async () => {
-    vi.spyOn(contextModule, 'requireContext').mockResolvedValueOnce(superAdminCtx as any);
+    vi.spyOn(contextModule, 'requireContext').mockResolvedValueOnce(
+      superAdminCtx as unknown as contextModule.Ctx
+    );
 
     const req = new NextRequest('http://localhost:3000/api/v1/invoices/inv_123/approve', {
       method: 'POST',
@@ -115,7 +109,9 @@ describe('Persetujuan Faktur Mini App Telegram (AUD-GAP-001 & BLUEPRINT Bagian 8
   });
 
   it('Super Admin berhasil menolak faktur dengan alasan minimal 5 karakter', async () => {
-    vi.spyOn(contextModule, 'requireContext').mockResolvedValueOnce(superAdminCtx as any);
+    vi.spyOn(contextModule, 'requireContext').mockResolvedValueOnce(
+      superAdminCtx as unknown as contextModule.Ctx
+    );
 
     const req = new NextRequest('http://localhost:3000/api/v1/invoices/inv_123/reject', {
       method: 'POST',
@@ -132,7 +128,9 @@ describe('Persetujuan Faktur Mini App Telegram (AUD-GAP-001 & BLUEPRINT Bagian 8
   });
 
   it('Penolakan faktur ditolak 422 bila alasan kurang dari 5 karakter', async () => {
-    vi.spyOn(contextModule, 'requireContext').mockResolvedValueOnce(superAdminCtx as any);
+    vi.spyOn(contextModule, 'requireContext').mockResolvedValueOnce(
+      superAdminCtx as unknown as contextModule.Ctx
+    );
 
     const req = new NextRequest('http://localhost:3000/api/v1/invoices/inv_123/reject', {
       method: 'POST',

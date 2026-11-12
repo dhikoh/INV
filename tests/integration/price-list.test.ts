@@ -43,10 +43,36 @@ let mockProducts: MockProduct[] = [];
 let mockCustomers: MockCustomer[] = [];
 let mockCustomerMinPrices: MockCustomerMinPrice[] = [];
 
+interface CustomerWhere {
+  id?: string;
+  businessId?: string;
+  assignedSalesId?: string;
+  deletedAt?: null;
+}
+
+interface ProductOrCondition {
+  name?: { contains?: string };
+  sku?: { contains?: string };
+}
+
+interface ProductWhere {
+  businessId?: string;
+  deletedAt?: null;
+  isActive?: boolean;
+  categoryId?: string;
+  OR?: ProductOrCondition[];
+}
+
+interface CustomerMinPriceWhere {
+  businessId?: string;
+  customerId?: string;
+  productId?: { in?: string[] };
+}
+
 vi.mock('@/lib/db', () => {
   const mockPrisma = {
     customer: {
-      findFirst: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findFirst: vi.fn(async ({ where }: { where: CustomerWhere }) => {
         return (
           mockCustomers.find((c) => {
             if (where.id && c.id !== where.id) return false;
@@ -59,14 +85,14 @@ vi.mock('@/lib/db', () => {
       }),
     },
     product: {
-      count: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      count: vi.fn(async ({ where }: { where: ProductWhere }) => {
         return mockProducts.filter((p) => {
           if (where.businessId && p.businessId !== where.businessId) return false;
           if (where.deletedAt === null && p.deletedAt !== null) return false;
           if (where.isActive !== undefined && p.isActive !== where.isActive) return false;
           if (where.categoryId && p.categoryId !== where.categoryId) return false;
           if (where.OR) {
-            const matches = where.OR.some((cond: any) => {
+            const matches = where.OR.some((cond: ProductOrCondition) => {
               if (cond.name?.contains && p.name.toLowerCase().includes(cond.name.contains.toLowerCase())) return true;
               if (cond.sku?.contains && p.sku.toLowerCase().includes(cond.sku.contains.toLowerCase())) return true;
               return false;
@@ -76,14 +102,14 @@ vi.mock('@/lib/db', () => {
           return true;
         }).length;
       }),
-      findMany: vi.fn(async ({ where, skip = 0, take = 20, orderBy }: { where: Record<string, any>; skip?: number; take?: number; orderBy?: any }) => {
-        let filtered = mockProducts.filter((p) => {
+      findMany: vi.fn(async ({ where, skip = 0, take = 20, orderBy }: { where: ProductWhere; skip?: number; take?: number; orderBy?: Record<string, 'asc' | 'desc'> }) => {
+        const filtered = mockProducts.filter((p) => {
           if (where.businessId && p.businessId !== where.businessId) return false;
           if (where.deletedAt === null && p.deletedAt !== null) return false;
           if (where.isActive !== undefined && p.isActive !== where.isActive) return false;
           if (where.categoryId && p.categoryId !== where.categoryId) return false;
           if (where.OR) {
-            const matches = where.OR.some((cond: any) => {
+            const matches = where.OR.some((cond: ProductOrCondition) => {
               if (cond.name?.contains && p.name.toLowerCase().includes(cond.name.contains.toLowerCase())) return true;
               if (cond.sku?.contains && p.sku.toLowerCase().includes(cond.sku.contains.toLowerCase())) return true;
               return false;
@@ -94,11 +120,13 @@ vi.mock('@/lib/db', () => {
         });
 
         if (orderBy) {
-          const field = Object.keys(orderBy)[0];
+          const field = Object.keys(orderBy)[0] as keyof MockProduct;
           const dir = orderBy[field] === 'desc' ? -1 : 1;
-          filtered.sort((a: any, b: any) => {
-            if (a[field] < b[field]) return -1 * dir;
-            if (a[field] > b[field]) return 1 * dir;
+          filtered.sort((a: MockProduct, b: MockProduct) => {
+            const aVal = a[field] as string | number;
+            const bVal = b[field] as string | number;
+            if (aVal < bVal) return -1 * dir;
+            if (aVal > bVal) return 1 * dir;
             return 0;
           });
         }
@@ -107,7 +135,7 @@ vi.mock('@/lib/db', () => {
       }),
     },
     customerMinPrice: {
-      findMany: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findMany: vi.fn(async ({ where }: { where: CustomerMinPriceWhere }) => {
         return mockCustomerMinPrices.filter((m) => {
           if (where.businessId && m.businessId !== where.businessId) return false;
           if (where.customerId && m.customerId !== where.customerId) return false;
@@ -227,8 +255,8 @@ describe('T-A17: GET /api/v1/price-list (Addendum v2 Seksi 13.7 & 14.8)', () => 
     expect(json.ok).toBe(true);
     expect(json.data).toHaveLength(1);
     expect(json.data[0].id).toBe('prod_a1');
-    expect(json.data.some((p: any) => p.id === 'prod_b1')).toBe(false);
-    expect(json.data.some((p: any) => p.id === 'prod_a2_inactive')).toBe(false);
+    expect(json.data.some((p: { id: string }) => p.id === 'prod_b1')).toBe(false);
+    expect(json.data.some((p: { id: string }) => p.id === 'prod_a2_inactive')).toBe(false);
   });
 
   it('(b) Tidak ada kunci terlarang dan tidak ada nilai HPP unik pada respons', async () => {

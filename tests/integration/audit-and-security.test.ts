@@ -6,6 +6,25 @@ import { GET as getAuditLogsHandler } from '@/app/api/v1/audit-logs/route';
 import { resetUserRateLimits } from '@/lib/auth/rateLimit';
 import nextConfig from '@/../next.config';
 
+interface AuditLogWhere {
+  businessId?: string;
+  action?: string;
+  entityType?: string;
+  entityId?: string;
+  actorId?: string;
+  createdAt?: { gte?: Date; lte?: Date };
+  OR?: Array<{
+    summary?: { contains?: string };
+    entityId?: { contains?: string };
+    reason?: { contains?: string };
+    action?: { contains?: string };
+  }>;
+}
+
+interface UserWhere {
+  id?: { in?: string[] };
+}
+
 // Mock Prisma
 const mockAuditLogs: Array<{
   id: string;
@@ -16,8 +35,8 @@ const mockAuditLogs: Array<{
   entityType: string;
   entityId: string;
   summary: string | null;
-  before: any;
-  after: any;
+  before: unknown;
+  after: unknown;
   reason: string | null;
   ip: string | null;
   createdAt: Date;
@@ -33,7 +52,7 @@ const mockUsers: Array<{
 vi.mock('@/lib/db', () => ({
   prisma: {
     auditLog: {
-      count: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      count: vi.fn(async ({ where }: { where: AuditLogWhere }) => {
         return mockAuditLogs.filter((log) => {
           if (where.businessId && log.businessId !== where.businessId) return false;
           if (where.action && log.action !== where.action) return false;
@@ -43,7 +62,7 @@ vi.mock('@/lib/db', () => ({
           if (where.createdAt?.gte && log.createdAt < where.createdAt.gte) return false;
           if (where.createdAt?.lte && log.createdAt > where.createdAt.lte) return false;
           if (where.OR && Array.isArray(where.OR)) {
-            const matchesOr = where.OR.some((cond: any) => {
+            const matchesOr = where.OR.some((cond) => {
               if (cond.summary?.contains && log.summary?.toLowerCase().includes(cond.summary.contains.toLowerCase())) return true;
               if (cond.entityId?.contains && log.entityId.toLowerCase().includes(cond.entityId.contains.toLowerCase())) return true;
               if (cond.reason?.contains && log.reason?.toLowerCase().includes(cond.reason.contains.toLowerCase())) return true;
@@ -55,7 +74,7 @@ vi.mock('@/lib/db', () => ({
           return true;
         }).length;
       }),
-      findMany: vi.fn(async ({ where, skip = 0, take = 20 }: { where: Record<string, any>; skip?: number; take?: number }) => {
+      findMany: vi.fn(async ({ where, skip = 0, take = 20 }: { where: AuditLogWhere; skip?: number; take?: number }) => {
         return mockAuditLogs
           .filter((log) => {
             if (where.businessId && log.businessId !== where.businessId) return false;
@@ -66,7 +85,7 @@ vi.mock('@/lib/db', () => ({
             if (where.createdAt?.gte && log.createdAt < where.createdAt.gte) return false;
             if (where.createdAt?.lte && log.createdAt > where.createdAt.lte) return false;
             if (where.OR && Array.isArray(where.OR)) {
-              const matchesOr = where.OR.some((cond: any) => {
+              const matchesOr = where.OR.some((cond) => {
                 if (cond.summary?.contains && log.summary?.toLowerCase().includes(cond.summary.contains.toLowerCase())) return true;
                 if (cond.entityId?.contains && log.entityId.toLowerCase().includes(cond.entityId.contains.toLowerCase())) return true;
                 if (cond.reason?.contains && log.reason?.toLowerCase().includes(cond.reason.contains.toLowerCase())) return true;
@@ -82,9 +101,9 @@ vi.mock('@/lib/db', () => ({
       }),
     },
     user: {
-      findMany: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      findMany: vi.fn(async ({ where }: { where: UserWhere }) => {
         if (where?.id?.in) {
-          return mockUsers.filter((u) => where.id.in.includes(u.id));
+          return mockUsers.filter((u) => where.id!.in!.includes(u.id));
         }
         return mockUsers;
       }),
@@ -174,7 +193,7 @@ describe('T5.5: Audit Trail, Pengerasan Keamanan & Header CSP (Seksi 14, 16.1, 1
 
   describe('1. GET /api/v1/audit-logs (Audit Trail API)', () => {
     it('mengembalikan daftar log mutasi lengkap dengan informasi actor, pagination, dan snapshot before/after', async () => {
-      vi.spyOn(contextModule, 'requireContext').mockResolvedValue(superAdminCtx as any);
+      vi.spyOn(contextModule, 'requireContext').mockResolvedValue(superAdminCtx);
 
       const req = new NextRequest(`${APP_URL}/api/v1/audit-logs?page=1&limit=10`, {
         method: 'GET',
@@ -203,7 +222,7 @@ describe('T5.5: Audit Trail, Pengerasan Keamanan & Header CSP (Seksi 14, 16.1, 1
     });
 
     it('mendukung penyaringan berdasarkan action dan entityType', async () => {
-      vi.spyOn(contextModule, 'requireContext').mockResolvedValue(superAdminCtx as any);
+      vi.spyOn(contextModule, 'requireContext').mockResolvedValue(superAdminCtx);
 
       const req = new NextRequest(
         `${APP_URL}/api/v1/audit-logs?action=ORDER_SUBMIT&entityType=Order`,
@@ -224,7 +243,7 @@ describe('T5.5: Audit Trail, Pengerasan Keamanan & Header CSP (Seksi 14, 16.1, 1
     });
 
     it('mendukung pencarian teks (q) pada summary, entityId, atau reason', async () => {
-      vi.spyOn(contextModule, 'requireContext').mockResolvedValue(superAdminCtx as any);
+      vi.spyOn(contextModule, 'requireContext').mockResolvedValue(superAdminCtx);
 
       const req = new NextRequest(`${APP_URL}/api/v1/audit-logs?q=diskon`, {
         method: 'GET',
@@ -248,11 +267,11 @@ describe('T5.5: Audit Trail, Pengerasan Keamanan & Header CSP (Seksi 14, 16.1, 1
       if (!nextConfig.headers) return;
 
       const headerGroups = await nextConfig.headers();
-      const globalHeaderGroup = headerGroups.find((g: any) => g.source === '/:path*');
+      const globalHeaderGroup = headerGroups.find((g) => g.source === '/:path*');
       expect(globalHeaderGroup).toBeDefined();
 
       const headers = globalHeaderGroup?.headers || [];
-      const headerMap = new Map(headers.map((h: any) => [h.key.toLowerCase(), h.value]));
+      const headerMap = new Map(headers.map((h) => [h.key.toLowerCase(), h.value]));
 
       // 1. Strict-Transport-Security
       expect(headerMap.get('strict-transport-security')).toContain('max-age=31536000');

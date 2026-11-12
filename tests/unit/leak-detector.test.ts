@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { assertNoSecretKeys, FORBIDDEN_KEYS } from '../helpers/leak';
+import { assertNoSecretKeys } from '../helpers/leak';
 
 describe('Test Infrastructure: leak.ts (T0.5, 17.4)', () => {
   it('mendeteksi kebocoran kunci rahasia di level teratas', () => {

@@ -35,6 +35,14 @@ dan proyek ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed & Changed
 
+- **Penutupan Backlog Pemeliharaan Audit (`AUD-PERF-001`, `AUD-DUP-002`, `AUD-DUP-003`, `AUD-DUP-004`), Kompatibilitas `Uint8Array`, & Kebersihan Linter Menyeluruh**:
+  - **`AUD-PERF-001` (Anti-N+1 Antrean Pembayaran)**: Mengoptimalkan `GET /api/v1/payments` (`src/app/api/v1/payments/route.ts`) dengan batch query `findMany` konstan (`O(1)`) untuk `order`, `customer`, `user`, dan `invoice` batch alokasi beserta pengujian `tests/unit/payments-queue-batch.test.ts`.
+  - **`AUD-DUP-002` (Parser Pembayaran Terpadu)**: Mengekstrak logika penguraian `multipart/form-data`, upload bukti bayar (`saveFile`), dan JSON pada `POST /api/v1/payments` serta `POST /api/v1/orders/:id/payments` ke `parsePaymentInput` di `src/lib/api/paymentInput.ts`.
+  - **`AUD-DUP-003` (Utilitas Format Tanggal Terpusat)**: Menambahkan `formatDateId` di `src/lib/format/date.ts` dan mengkonsolidasikan seluruh 49 pemanggilan `toLocaleDateString('id-ID', ...)` di 28 berkas UI, PDF, WhatsApp, dan bot Telegram.
+  - **`AUD-DUP-004` (Rekonsiliasi Stok dari `StockMovement`)**: Menambahkan `recalculateProductStock` dan `reconcileBusinessStock` di `src/lib/services/stock.ts` beserta pencatatan `AuditLog` `STOCK_RECONCILE` dan pengujian di `tests/unit/backlog-maintenance.test.ts`.
+  - **Kompatibilitas Ketat `Buffer` -> `new Uint8Array(...)`**: Memperbarui 9 titik `new NextResponse(...)` biner di 8 berkas route/layanan (`invoices/[id]/pdf`, `orders/[id]/delivery-note/pdf`, `businesses/[id]/invoice-preview`, `businesses/[id]/export`, `data-transfer/export`, `reports/export`, `dl/[token]`, dan `fileService.ts`) agar kompatibel penuh dengan definisi ketat `BodyInit` pada TypeScript terbaru (`@types/node` v22).
+  - **ESLint 0 Error & 0 Warning Seluruh Repo (`src`, `tests`, `scripts`)**: Membersihkan seluruh tipe `any`, import/variabel tak terpakai, dan `prefer-const` pada 47 berkas `tests/` serta `scripts/` (plus override `scripts/*.js` CommonJS pada `.eslintrc.json`).
+
 - **Sanitasi Kredensial E2E & Pengujian Otomatis (Zero Hardcoded Secret Fallback)**:
   - Mengubah `tests/e2e/core-business-flows.spec.ts`, `playwright.config.ts`, dan `scripts/generate-bentocat-export.ts` agar membaca kredensial pengujian murni dari variabel environment (`E2E_SUPERADMIN_PASSWORD`, `E2E_SALES_PASSWORD`, `SEED_SUPERADMIN_PASSWORD`, `BENTOCAT_INITIAL_PASSWORD`) yang terdokumentasi di `.env.example`.
 - **Pengetatan Isolasi Multi-Tenant, Rate Limit, & Layanan Transaksi Inti**:

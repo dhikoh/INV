@@ -1,6 +1,7 @@
 import React from 'react';
 import { formatRupiah } from '../domain/money';
 import { terbilang } from '../domain/terbilang';
+import { formatDateId } from '@/lib/format/date';
 
 export interface CreditNotePdfData {
   number: string;
@@ -58,11 +59,7 @@ export function CreditNoteDocument({
 }: CreditNoteDocumentProps) {
   const { business, customer, items, totals } = data;
 
-  const formattedDate = new Date(data.createdAt).toLocaleDateString('id-ID', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  });
+  const formattedDate = formatDateId(data.createdAt, 'long');
 
   const isVoided = Boolean(data.voidedAt);
 

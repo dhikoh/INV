@@ -6,7 +6,6 @@ import {
   suratJalanNumber,
   creditNoteNumber,
   purchaseOrderNumber,
-  wibParts,
 } from '@/lib/domain/numbering';
 
 describe('Domain: numbering.ts (7.8, 17.2)', () => {

@@ -18,6 +18,7 @@ import {
 import { Skeleton, ErrorState } from '@/components/ui/States';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { formatRupiah, formatPercentFromBps } from '@/lib/domain/money';
+import { formatDateId } from '@/lib/format/date';
 
 const InvoiceTheme = {
   PROFESIONAL: 'PROFESIONAL',
@@ -426,11 +427,7 @@ export default function ApprovalDetailPage() {
                 </div>
                 <div className="text-xs text-slate-500 mt-0.5">
                   Tanggal Pengajuan:{' '}
-                  {new Date(data.createdAt).toLocaleDateString('id-ID', {
-                    day: 'numeric',
-                    month: 'long',
-                    year: 'numeric',
-                  })}
+                  {formatDateId(data.createdAt, 'long')}
                 </div>
               </div>
 

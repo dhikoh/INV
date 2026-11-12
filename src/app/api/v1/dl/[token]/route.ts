@@ -194,7 +194,7 @@ export async function GET(
       const rawNumber = snapshot.number || 'INVOICE';
       const safeFilename = `${rawNumber.replace(/[/\\?%*:|"<>]/g, '-')}.pdf`;
 
-      return new NextResponse(pdfBuffer, {
+      return new NextResponse(new Uint8Array(pdfBuffer), {
         status: 200,
         headers: {
           'Content-Type': 'application/pdf',
@@ -335,7 +335,7 @@ export async function GET(
 
       const safeFilename = `SuratJalan-${(order.orderNo || order.id).replace(/[/\\?%*:|"<>]/g, '-')}.pdf`;
 
-      return new NextResponse(pdfBuffer, {
+      return new NextResponse(new Uint8Array(pdfBuffer), {
         status: 200,
         headers: {
           'Content-Type': 'application/pdf',
