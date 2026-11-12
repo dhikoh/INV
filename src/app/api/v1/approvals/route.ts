@@ -1,9 +1,10 @@
 import { withApi } from '@/lib/api/withApi';
 import { requireBusiness } from '@/lib/auth/context';
 import { prisma } from '@/lib/db';
-import { Role, OrderStatus, InvoiceStatus, Prisma } from '@prisma/client';
+import { Role, OrderStatus, OrderRevisionStatus, InvoiceStatus, Prisma } from '@prisma/client';
 import { calcProfit } from '@/lib/domain/profit';
 import { formatOrderDto, formatInvoiceDto } from '@/lib/services/order';
+import { formatOrderRevisionDto } from '@/lib/services/revision';
 
 /**
  * GET /api/v1/approvals
@@ -78,9 +79,9 @@ export const GET = withApi(
     const salesIds = [...new Set(orders.map((o) => o.salesId))];
     const salesUsers = salesIds.length > 0
       ? await prisma.user.findMany({
-          where: { id: { in: salesIds } },
-          select: { id: true, name: true, username: true },
-        })
+        where: { id: { in: salesIds } },
+        select: { id: true, name: true, username: true },
+      })
       : [];
     const salesMap = new Map(salesUsers.map((u) => [u.id, u]));
 
@@ -88,14 +89,14 @@ export const GET = withApi(
     const orderIds = orders.map((o) => o.id);
     const pendingInvoices = orderIds.length > 0
       ? await prisma.invoice.findMany({
-          where: {
-            orderId: { in: orderIds },
-            businessId,
-            status: InvoiceStatus.PENDING_APPROVAL,
-            deletedAt: null,
-          },
-          orderBy: { requestedAt: 'desc' },
-        })
+        where: {
+          orderId: { in: orderIds },
+          businessId,
+          status: InvoiceStatus.PENDING_APPROVAL,
+          deletedAt: null,
+        },
+        orderBy: { requestedAt: 'desc' },
+      })
       : [];
     const invoiceMap = new Map(pendingInvoices.map((inv) => [inv.orderId, inv]));
 
@@ -126,13 +127,64 @@ export const GET = withApi(
       };
     });
 
+    const pendingRevisionsRaw =
+      typeof prisma.orderRevision?.findMany === 'function'
+        ? await prisma.orderRevision.findMany({
+          where: {
+            businessId,
+            status: OrderRevisionStatus.PENDING_APPROVAL,
+          },
+          include: {
+            order: {
+              select: {
+                id: true,
+                orderNo: true,
+                salesId: true,
+                customer: {
+                  select: { id: true, code: true, name: true },
+                },
+              },
+            },
+            items: { orderBy: { sortOrder: 'asc' } },
+          },
+          orderBy: { requestedAt: 'asc' },
+        })
+        : [];
+
+    const revSalesIds = [
+      ...new Set(pendingRevisionsRaw.map((r) => r.order.salesId)),
+    ].filter((id) => !salesMap.has(id));
+    if (revSalesIds.length > 0) {
+      const extraSales = await prisma.user.findMany({
+        where: { id: { in: revSalesIds } },
+        select: { id: true, name: true, username: true },
+      });
+      for (const u of extraSales) {
+        salesMap.set(u.id, u);
+      }
+    }
+
+    const revisions = pendingRevisionsRaw.map((r) => {
+      const sales = salesMap.get(r.order.salesId);
+      return {
+        ...formatOrderRevisionDto(r, Role.SUPERADMIN),
+        orderNo: r.order.orderNo,
+        customer: r.order.customer,
+        sales: sales
+          ? { id: sales.id, name: sales.name, username: sales.username }
+          : null,
+      };
+    });
+
     return {
       status: 200,
       data: {
         items,
+        revisions,
         summary: {
           totalPending: total,
           totalBelowMin,
+          totalPendingRevisions: revisions.length,
         },
         pagination: {
           total,

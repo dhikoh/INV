@@ -16,10 +16,13 @@ import {
   X,
   CheckCircle2,
   Link as LinkIcon,
+  ShieldCheck,
+  RotateCcw,
 } from 'lucide-react';
 import Image from 'next/image';
 import { Skeleton, EmptyState, ErrorState } from '@/components/ui/States';
 import DataTransferCard from './DataTransferCard';
+import { DEFAULT_PAYMENT_LEGAL_NOTICE } from '@/lib/domain/paymentPolicy';
 
 interface BankAccount {
   id: string;
@@ -41,10 +44,16 @@ interface BusinessDetail {
   logoPath: string | null;
   invoiceTheme: 'PROFESIONAL' | 'FAMILY' | 'MINIMALIS' | 'MODERN' | 'KLASIK';
   invoiceFooterNote: string | null;
+  showBankOnProforma: boolean;
+  paymentLegalNotice: string | null;
+  allowSalesCashPayment: boolean;
+  requireTransferProofForSales: boolean;
   ppnEnabled: boolean;
   ppnRateBps: number;
   allowNegativeStock: boolean;
   requirePaidBeforeShip: boolean;
+  allowPartialShipment: boolean;
+  allowShipBeforeFinalInvoice: boolean;
   defaultDpBps: number;
   dueDays: number;
   defaultRepeatDays: number;
@@ -291,10 +300,16 @@ export default function BusinessSettingsPage() {
           npwp: formData.npwp || null,
           invoiceTheme: formData.invoiceTheme,
           invoiceFooterNote: formData.invoiceFooterNote || null,
+          showBankOnProforma: Boolean(formData.showBankOnProforma),
+          paymentLegalNotice: formData.paymentLegalNotice || null,
+          allowSalesCashPayment: Boolean(formData.allowSalesCashPayment),
+          requireTransferProofForSales: formData.requireTransferProofForSales ?? true,
           ppnEnabled: formData.ppnEnabled,
           ppnRateBps: Number(formData.ppnRateBps),
           allowNegativeStock: formData.allowNegativeStock,
           requirePaidBeforeShip: formData.requirePaidBeforeShip,
+          allowPartialShipment: Boolean(formData.allowPartialShipment),
+          allowShipBeforeFinalInvoice: Boolean(formData.allowShipBeforeFinalInvoice),
           defaultDpBps: Number(formData.defaultDpBps),
           dueDays: Number(formData.dueDays),
           defaultRepeatDays: Number(formData.defaultRepeatDays),
@@ -1032,6 +1047,117 @@ export default function BusinessSettingsPage() {
                     className="w-5 h-5 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer"
                   />
                 </div>
+
+                <div className="pt-2 border-t border-slate-200 space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <span className="text-sm font-bold text-slate-800">
+                        Izinkan Pengiriman Parsial / Bertahap (Multi-Kloter)
+                      </span>
+                      <p className="text-xs text-slate-500">
+                        Gudang dapat mengirim barang bertahap per kloter dengan Surat Jalan terpisah dan memotong stok hanya untuk qty yang dikirim
+                      </p>
+                    </div>
+                    <input
+                      type="checkbox"
+                      aria-label="Izinkan Pengiriman Parsial / Bertahap (Multi-Kloter)"
+                      checked={formData.allowPartialShipment ?? false}
+                      onChange={(e) =>
+                        handleInputChange(
+                          'allowPartialShipment',
+                          e.target.checked
+                        )
+                      }
+                      className="w-5 h-5 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer shrink-0"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <span className="text-sm font-bold text-slate-800">
+                        Izinkan Pengiriman Barang Sebelum Faktur Pelunasan
+                      </span>
+                      <p className="text-xs text-slate-500">
+                        Jika aktif, order berstatus Diproses (IN_PROCESS) boleh dikirim sebelum Faktur Pelunasan diterbitkan (tetap patuh pada aturan Wajib Lunas jika aktif)
+                      </p>
+                    </div>
+                    <input
+                      type="checkbox"
+                      aria-label="Izinkan Pengiriman Barang Sebelum Faktur Pelunasan"
+                      checked={formData.allowShipBeforeFinalInvoice ?? false}
+                      onChange={(e) =>
+                        handleInputChange(
+                          'allowShipBeforeFinalInvoice',
+                          e.target.checked
+                        )
+                      }
+                      className="w-5 h-5 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer shrink-0"
+                    />
+                  </div>
+                </div>
+
+                {/* Pengaturan Proforma & Kontrol Pembayaran Sales */}
+                <div className="pt-2 border-t border-slate-200 space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <span className="text-sm font-bold text-slate-800">
+                        Tampilkan Rekening Bank di Proforma PDF
+                      </span>
+                      <p className="text-xs text-slate-500">
+                        Jika nonaktif, nomor rekening disembunyikan di Proforma sampai Faktur Resmi disetujui
+                      </p>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={formData.showBankOnProforma ?? false}
+                      onChange={(e) =>
+                        handleInputChange('showBankOnProforma', e.target.checked)
+                      }
+                      className="w-5 h-5 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer shrink-0"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <span className="text-sm font-bold text-slate-800">
+                        Izinkan Sales Input Pembayaran Tunai (Cash)
+                      </span>
+                      <p className="text-xs text-slate-500">
+                        Default nonaktif untuk mencegah penerimaan tunai tanpa mutasi bank resmi
+                      </p>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={formData.allowSalesCashPayment ?? false}
+                      onChange={(e) =>
+                        handleInputChange('allowSalesCashPayment', e.target.checked)
+                      }
+                      className="w-5 h-5 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer shrink-0"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <span className="text-sm font-bold text-slate-800">
+                        Wajib Lampirkan Bukti Transfer untuk Sales
+                      </span>
+                      <p className="text-xs text-slate-500">
+                        Sales wajib mengunggah foto/PDF bukti saat mencatat pembayaran Transfer Bank
+                      </p>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={formData.requireTransferProofForSales ?? true}
+                      onChange={(e) =>
+                        handleInputChange(
+                          'requireTransferProofForSales',
+                          e.target.checked
+                        )
+                      }
+                      className="w-5 h-5 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer shrink-0"
+                    />
+                  </div>
+                </div>
               </div>
 
               {/* DP Default */}
@@ -1158,6 +1284,42 @@ export default function BusinessSettingsPage() {
                   placeholder="Contoh: Terima kasih atas kepercayaan Anda. Pembayaran harap ditransfer sesuai nomor rekening tertera."
                   className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-sm font-medium text-slate-900"
                 />
+              </div>
+
+              <div className="md:col-span-2">
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
+                  <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 uppercase">
+                    <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                    <span>Klausul Pembayaran Sah PDF (Anti-Fraud)</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handleInputChange(
+                        'paymentLegalNotice',
+                        DEFAULT_PAYMENT_LEGAL_NOTICE
+                      )
+                    }
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 min-h-[36px] text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg transition-colors"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>Reset ke Teks Default</span>
+                  </button>
+                </div>
+                <textarea
+                  value={
+                    formData.paymentLegalNotice ?? DEFAULT_PAYMENT_LEGAL_NOTICE
+                  }
+                  onChange={(e) =>
+                    handleInputChange('paymentLegalNotice', e.target.value)
+                  }
+                  rows={3}
+                  placeholder={DEFAULT_PAYMENT_LEGAL_NOTICE}
+                  className="w-full p-3 bg-amber-50/50 border border-amber-300 rounded-lg text-sm font-medium text-slate-900"
+                />
+                <p className="text-xs text-slate-500 mt-1">
+                  Tercetak otomatis pada Proforma Order, Faktur Uang Muka, dan Faktur Penjualan. Kosongkan untuk kembali ke teks default resmi.
+                </p>
               </div>
             </div>
           </section>

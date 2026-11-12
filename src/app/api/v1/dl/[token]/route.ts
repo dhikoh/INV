@@ -26,7 +26,7 @@ import { prepareCreditNotePdf } from '@/lib/pdf/creditNotePdf';
  * Rujukan: Seksi 11.5 & Seksi 16.3 Dokumen Spesifikasi.
  */
 export async function GET(
-  req: NextRequest,
+  _req: NextRequest,
   route: { params: Promise<{ token: string }> }
 ): Promise<NextResponse> {
   try {
@@ -236,10 +236,18 @@ export async function GET(
         );
       }
 
-      const [shipment, invoices] = await Promise.all([
-        prisma.shipment.findFirst({
-          where: { orderId: order.id, businessId: order.businessId },
-        }),
+      const [shipments, invoices] = await Promise.all([
+        typeof (prisma.shipment as { findMany?: unknown })?.findMany === 'function'
+          ? prisma.shipment.findMany({
+            where: { orderId: order.id, businessId: order.businessId },
+            include: { items: { include: { orderItem: true } } },
+            orderBy: [{ kloterNo: 'desc' }, { createdAt: 'desc' }],
+          })
+          : prisma.shipment
+            .findFirst({
+              where: { orderId: order.id, businessId: order.businessId },
+            })
+            .then((s) => (s ? ([s] as import('@/lib/services/shipmentSummary').ShipmentWithOptionalItems[]) : ([] as import('@/lib/services/shipmentSummary').ShipmentWithOptionalItems[]))),
         prisma.invoice.findMany({
           where: {
             orderId: order.id,
@@ -251,9 +259,40 @@ export async function GET(
         }),
       ]);
 
+      const shipment =
+        shipments.find(
+          (s) => s.status === 'SHIPPED' || s.status === 'DELIVERED'
+        ) ??
+        shipments[0] ??
+        null;
+
       const deliveryNo =
         shipment?.deliveryNo ||
         `SJ/${order.orderNo || order.id.slice(0, 8).toUpperCase()}`;
+
+      const batchItems =
+        shipment && Array.isArray(shipment.items) ? shipment.items : [];
+      const dlItems =
+        shipment && batchItems.length > 0
+          ? batchItems.map((si, idx) => {
+            const oi = si.orderItem ?? order.items.find((it) => it.id === si.orderItemId);
+            return {
+              no: idx + 1,
+              name: oi?.productName ?? si.orderItemId,
+              sku: oi?.sku ?? '-',
+              qty: si.qty,
+              unit: oi?.unit ?? '',
+              note: shipment.kloterNo > 1 ? `Kloter #${shipment.kloterNo}` : null,
+            };
+          })
+          : order.items.map((it, idx) => ({
+            no: idx + 1,
+            name: it.productName,
+            sku: it.sku,
+            qty: it.qty,
+            unit: it.unit,
+            note: null,
+          }));
 
       const deliveryNoteData: DeliveryNoteData = {
         deliveryNo,
@@ -282,14 +321,7 @@ export async function GET(
           vehiclePlate: shipment?.vehiclePlate || null,
           estimatedArrival: null,
         },
-        items: order.items.map((it, idx) => ({
-          no: idx + 1,
-          name: it.productName,
-          sku: it.sku,
-          qty: it.qty,
-          unit: it.unit,
-          note: null,
-        })),
+        items: dlItems,
         notes: shipment?.notes || order.notes || null,
       };
 

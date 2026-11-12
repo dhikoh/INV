@@ -35,6 +35,20 @@ interface PendingPaymentItem {
   orderNo: string | null;
   customerName: string;
   salesName: string;
+  isBatch?: boolean;
+  batchId?: string | null;
+  batchTotalPaid?: number;
+  batchAllocatedTotal?: number;
+  batchCreditAmount?: number;
+  batchCreditOption?: boolean;
+  allocations?: {
+    id?: string;
+    invoiceId: string;
+    invoiceNumber: string | null;
+    orderId: string;
+    orderNo: string | null;
+    amount: number;
+  }[];
 }
 
 export default function PaymentsPage() {
@@ -242,6 +256,39 @@ export default function PaymentsPage() {
                     <span className="text-xs px-2 py-0.5 rounded font-semibold bg-slate-100 text-slate-700 shrink-0">
                       {p.method}
                     </span>
+                    {p.isBatch && p.allocations && (
+                      <span className="text-xs px-2 py-0.5 rounded font-semibold bg-indigo-100 text-indigo-800 shrink-0">
+                        Kolektif ({p.allocations.length} Faktur)
+                      </span>
+                    )}
+                    {p.isBatch && (p.batchCreditAmount ?? 0) > 0 && p.batchCreditOption && (
+                      <span className="text-xs px-2 py-0.5 rounded font-semibold bg-emerald-100 text-emerald-800 shrink-0">
+                        Kelebihan ke Saldo Kredit: {formatRupiah(p.batchCreditAmount ?? 0)}
+                      </span>
+                    )}
+                    {p.isBatch && p.allocations && p.allocations.length > 0 && (
+                      <div className="w-full mt-2 rounded-lg border border-indigo-100 bg-indigo-50/60 p-2.5 text-xs space-y-1">
+                        <div className="font-semibold text-indigo-900 flex flex-wrap items-center justify-between gap-2">
+                          <span>Rincian Alokasi Pembayaran Kolektif</span>
+                          <span>Total Transfer: {formatRupiah(p.batchTotalPaid ?? p.amount)}</span>
+                        </div>
+                        <div className="divide-y divide-indigo-100">
+                          {p.allocations.map((alloc) => (
+                            <div key={alloc.invoiceId} className="py-1 flex items-center justify-between gap-2">
+                              <span className="text-slate-700 truncate">
+                                <Link href={`/invoices/${alloc.invoiceId}`} className="font-semibold text-indigo-700 hover:underline">
+                                  {alloc.invoiceNumber || alloc.invoiceId}
+                                </Link>{' '}
+                                ({alloc.orderNo || alloc.orderId})
+                              </span>
+                              <span className="font-semibold text-slate-900 shrink-0">
+                                {formatRupiah(alloc.amount)}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <div className="text-xs text-slate-500 flex items-center gap-2">
@@ -342,10 +389,34 @@ export default function PaymentsPage() {
             </div>
 
             <p className="text-xs sm:text-sm text-slate-600">
-              Apakah Anda yakin ingin memverifikasi penerimaan dana sebesar{' '}
-              <strong className="text-slate-900">{formatRupiah(selectedVerify.amount)}</strong>{' '}
-              untuk pesanan{' '}
-              <strong className="text-slate-900">{selectedVerify.orderNo || selectedVerify.orderId}</strong>?
+              {selectedVerify.isBatch && selectedVerify.allocations ? (
+                <>
+                  Apakah Anda yakin ingin memverifikasi pembayaran kolektif sebesar{' '}
+                  <strong className="text-slate-900">
+                    {formatRupiah(selectedVerify.batchTotalPaid ?? selectedVerify.amount)}
+                  </strong>{' '}
+                  untuk <strong className="text-slate-900">{selectedVerify.allocations.length} faktur</strong>
+                  {(selectedVerify.batchCreditAmount ?? 0) > 0 && selectedVerify.batchCreditOption ? (
+                    <>
+                      {' '}
+                      (termasuk kelebihan{' '}
+                      <strong className="text-emerald-700">
+                        {formatRupiah(selectedVerify.batchCreditAmount ?? 0)}
+                      </strong>{' '}
+                      ke Saldo Kredit pelanggan)?
+                    </>
+                  ) : (
+                    '?'
+                  )}
+                </>
+              ) : (
+                <>
+                  Apakah Anda yakin ingin memverifikasi penerimaan dana sebesar{' '}
+                  <strong className="text-slate-900">{formatRupiah(selectedVerify.amount)}</strong>{' '}
+                  untuk pesanan{' '}
+                  <strong className="text-slate-900">{selectedVerify.orderNo || selectedVerify.orderId}</strong>?
+                </>
+              )}
             </p>
 
             <div className="bg-slate-50 p-3 rounded-lg text-xs space-y-1 text-slate-700">

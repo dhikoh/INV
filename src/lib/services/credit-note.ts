@@ -3,7 +3,6 @@ import {
   Role,
   CreditSettlement,
   OrderStatus,
-  ShipStatus,
   StockMoveType,
   PaymentType,
   PaymentMethod,
@@ -18,6 +17,7 @@ import { allocateCustomerCreditNoteSeq } from './counter';
 import { lockProducts, moveStock } from './stock';
 import { maybeComplete, recalculateOrderPayments } from './payment';
 import { recalculateOrderCommission } from './commission';
+import { getShippedQtySummary } from './shipmentSummary';
 
 export type TxClient = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
 
@@ -221,15 +221,15 @@ export async function createCreditNote(
   }
 
   // 3. Validasi status: Barang harus sudah dikirim (SHIPPED / DELIVERED / COMPLETED)
-  const shipment = await tx.shipment.findFirst({
-    where: { orderId: order.id, businessId },
-  });
+  const shippedSummary = await getShippedQtySummary(
+    tx,
+    businessId,
+    order.id,
+    order.items
+  );
 
   const isShippedOrDelivered =
-    order.status === OrderStatus.COMPLETED ||
-    (shipment &&
-      (shipment.status === ShipStatus.SHIPPED ||
-        shipment.status === ShipStatus.DELIVERED));
+    order.status === OrderStatus.COMPLETED || shippedSummary.hasAnyShipped;
 
   if (!isShippedOrDelivered) {
     throw new DomainError(
@@ -279,7 +279,11 @@ export async function createCreditNote(
     }
 
     const alreadyReturned = alreadyReturnedMap.get(orderItem.id) || 0;
-    const remainingQty = orderItem.qty - alreadyReturned;
+    const shippedForItem =
+      order.status === OrderStatus.COMPLETED
+        ? orderItem.qty
+        : (shippedSummary.byOrderItemId.get(orderItem.id) ?? 0);
+    const remainingQty = Math.max(0, shippedForItem - alreadyReturned);
 
     if (inputItem.qty <= 0 || inputItem.qty > remainingQty) {
       throw new DomainError(

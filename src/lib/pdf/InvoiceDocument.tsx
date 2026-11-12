@@ -3,23 +3,37 @@ import { InvoiceSnapshot } from './snapshot';
 import { getThemeTokens } from './themes';
 import { formatRupiah } from '../domain/money';
 import { terbilang } from '../domain/terbilang';
+import { resolvePaymentLegalNotice } from '../domain/paymentPolicy';
 
 export interface InvoiceDocumentProps {
   snapshot: InvoiceSnapshot;
   logoDataUri?: string | null;
   watermark?: string | null;
+  qrDataUri?: string | null;
+  verifyUrl?: string | null;
 }
 
 export function InvoiceDocument({
   snapshot,
   logoDataUri,
   watermark,
+  qrDataUri,
+  verifyUrl,
 }: InvoiceDocumentProps) {
   const theme = getThemeTokens(snapshot.theme);
   const { business, customer, items, totals, billing } = snapshot;
 
   const hasDiscount = totals.discountTotal > 0;
   const isDp = snapshot.type === 'DP';
+  const isProforma = snapshot.type === 'PROFORMA';
+  const docTitle = isProforma
+    ? 'PROFORMA ORDER'
+    : isDp
+    ? 'FAKTUR UANG MUKA'
+    : 'FAKTUR PENJUALAN';
+  const docNumber =
+    snapshot.number || (isProforma ? 'PROFORMA / DRAF' : 'PRATINJAU DRAF');
+  const resolvedLegalNotice = resolvePaymentLegalNotice(snapshot.legalNotice);
 
   const formattedIssueDate = new Date(snapshot.issueDate).toLocaleDateString('id-ID', {
     day: 'numeric',
@@ -197,18 +211,48 @@ export function InvoiceDocument({
           .signature-section {
             display: flex;
             justify-content: space-between;
-            margin-top: 40px;
+            align-items: flex-end;
+            gap: 12px;
+            margin-top: 32px;
             padding-top: 16px;
             break-inside: avoid;
           }
           .signature-box {
-            width: 200px;
+            width: 175px;
             text-align: center;
           }
           .signature-line {
             margin-top: 60px;
             border-bottom: 1px solid ${theme.textColor};
             padding-bottom: 4px;
+          }
+          .verify-qr-box {
+            width: 155px;
+            text-align: center;
+            padding: 8px;
+            border: 1px solid ${theme.borderColor};
+            border-radius: 6px;
+            background-color: #FFFFFF;
+          }
+          .verify-qr-img {
+            width: 82px;
+            height: 82px;
+            display: block;
+            margin: 0 auto 4px auto;
+          }
+          .verify-qr-title {
+            font-size: 8.5px;
+            font-weight: 700;
+            color: ${theme.primaryColor};
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+          }
+          .verify-qr-url {
+            font-size: 7px;
+            color: ${theme.mutedTextColor};
+            word-break: break-all;
+            margin-top: 2px;
+            line-height: 1.25;
           }
           .greeting-text {
             text-align: center;
@@ -268,10 +312,10 @@ export function InvoiceDocument({
               </div>
               <div style={{ textAlign: 'right' }}>
                 <div style={{ fontSize: '18px', fontWeight: 900, letterSpacing: '1px' }}>
-                  {isDp ? 'FAKTUR UANG MUKA' : 'FAKTUR PENJUALAN'}
+                  {docTitle}
                 </div>
                 <div style={{ fontSize: '12px', fontWeight: 700, opacity: 0.95 }}>
-                  {snapshot.number || 'PRATINJAU DRAF'}
+                  {docNumber}
                 </div>
               </div>
             </div>
@@ -297,14 +341,14 @@ export function InvoiceDocument({
 
               <div style={{ textAlign: 'right' }}>
                 <div className="invoice-title">
-                  {isDp ? 'FAKTUR UANG MUKA' : 'FAKTUR PENJUALAN'}
+                  {docTitle}
                 </div>
                 <div className="invoice-number">
-                  {snapshot.number || 'PRATINJAU DRAF'}
+                  {docNumber}
                 </div>
                 <div style={{ marginTop: '8px', fontSize: '10.5px' }}>
                   <div><strong>Tanggal:</strong> {formattedIssueDate}</div>
-                  <div><strong>Jatuh Tempo:</strong> {formattedDueDate}</div>
+                  <div><strong>{isProforma ? 'Berlaku s/d:' : 'Jatuh Tempo:'}</strong> {formattedDueDate}</div>
                 </div>
               </div>
             </div>
@@ -326,8 +370,18 @@ export function InvoiceDocument({
               <div className="meta-title">Alamat Pengiriman:</div>
               <div>{customer.shippingAddress || customer.billingAddress || 'Sesuai profil pelanggan'}</div>
               <div style={{ marginTop: '8px', fontSize: '10px', color: theme.mutedTextColor }}>
-                Tipe Dokumen: <strong>{isDp ? 'Uang Muka (DP)' : 'Pelunasan (FINAL)'}</strong> v{snapshot.billing.dpInvoiceNumber ? '2' : '1'}
+                Tipe Dokumen:{' '}
+                <strong>
+                  {isProforma
+                    ? 'Proforma Order (Estimasi Penawaran)'
+                    : `${isDp ? 'Uang Muka (DP)' : 'Pelunasan (FINAL)'} v${snapshot.billing.dpInvoiceNumber ? '2' : '1'}`}
+                </strong>
               </div>
+              {isProforma && snapshot.proformaApprovalPending && (
+                <div style={{ marginTop: '6px', padding: '4px 8px', backgroundColor: '#FEF3C7', border: '1px solid #F59E0B', borderRadius: '4px', color: '#92400E', fontWeight: 700, fontSize: '9.5px' }}>
+                  MENUNGGU PERSETUJUAN MANAJEMEN
+                </div>
+              )}
             </div>
           </div>
 
@@ -382,7 +436,28 @@ export function InvoiceDocument({
                 </div>
               ) : (
                 <div style={{ marginBottom: '10px', fontStyle: 'italic' }}>
-                  Silakan hubungi bagian keuangan untuk detail nomor rekening.
+                  {isProforma
+                    ? 'Nomor rekening resmi akan dicantumkan pada Faktur Resmi setelah pengajuan disetujui manajemen.'
+                    : 'Silakan hubungi bagian keuangan untuk detail nomor rekening.'}
+                </div>
+              )}
+
+              {resolvedLegalNotice && (
+                <div
+                  style={{
+                    marginTop: '8px',
+                    marginBottom: '8px',
+                    padding: '8px 10px',
+                    backgroundColor: '#FEF3C7',
+                    border: '1px solid #F59E0B',
+                    borderRadius: '4px',
+                    fontSize: '9.5px',
+                    color: '#78350F',
+                    fontWeight: 600,
+                    lineHeight: 1.4,
+                  }}
+                >
+                  {resolvedLegalNotice}
                 </div>
               )}
 
@@ -429,7 +504,7 @@ export function InvoiceDocument({
                   <td className="text-right">{formatRupiah(totals.grandTotal)}</td>
                 </tr>
 
-                {isDp && (
+                {(isDp || (isProforma && billing.dpBps > 0)) && (
                   <>
                     <tr>
                       <td style={{ color: theme.primaryColor, fontWeight: 700 }}>
@@ -445,7 +520,9 @@ export function InvoiceDocument({
                       </td>
                     </tr>
                     <tr style={{ backgroundColor: theme.accentColor }}>
-                      <td style={{ fontWeight: 800, fontSize: '12px' }}>Total Tagihan DP Ini</td>
+                      <td style={{ fontWeight: 800, fontSize: '12px' }}>
+                        {isProforma ? 'Estimasi Tagihan DP Ini' : 'Total Tagihan DP Ini'}
+                      </td>
                       <td className="text-right" style={{ fontWeight: 800, fontSize: '12px', color: theme.primaryColor }}>
                         {formatRupiah(billing.amountDue)}
                       </td>
@@ -453,7 +530,7 @@ export function InvoiceDocument({
                   </>
                 )}
 
-                {!isDp && billing.dpPaid > 0 && (
+                {!isDp && !isProforma && billing.dpPaid > 0 && (
                   <>
                     <tr>
                       <td style={{ color: '#16A34A', fontWeight: 600 }}>
@@ -472,9 +549,11 @@ export function InvoiceDocument({
                   </>
                 )}
 
-                {!isDp && billing.dpPaid === 0 && (
+                {((!isDp && !isProforma && billing.dpPaid === 0) || (isProforma && billing.dpBps === 0)) && (
                   <tr style={{ backgroundColor: theme.accentColor }}>
-                    <td style={{ fontWeight: 800, fontSize: '12px' }}>Total Tagihan Penuh</td>
+                    <td style={{ fontWeight: 800, fontSize: '12px' }}>
+                      {isProforma ? 'Estimasi Total Tagihan' : 'Total Tagihan Penuh'}
+                    </td>
                     <td className="text-right" style={{ fontWeight: 800, fontSize: '12px', color: theme.primaryColor }}>
                       {formatRupiah(billing.amountDue)}
                     </td>
@@ -490,13 +569,26 @@ export function InvoiceDocument({
             </div>
           )}
 
-          {/* Kolom Tanda Tangan */}
+          {/* Kolom Tanda Tangan & QR Verifikasi */}
           <div className="signature-section">
             <div className="signature-box">
               <div>Penerima / Pelanggan,</div>
               <div className="signature-line"></div>
               <div style={{ marginTop: '4px', fontSize: '10px' }}>({customer.contactName || customer.name})</div>
             </div>
+
+            {qrDataUri && (
+              <div className="verify-qr-box">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={qrDataUri}
+                  alt="QR Verifikasi Keaslian"
+                  className="verify-qr-img"
+                />
+                <div className="verify-qr-title">Verifikasi Resmi</div>
+                {verifyUrl && <div className="verify-qr-url">{verifyUrl}</div>}
+              </div>
+            )}
 
             <div className="signature-box">
               <div>Hormat Kami,</div>

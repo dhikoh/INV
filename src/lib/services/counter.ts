@@ -5,6 +5,7 @@ export const CounterScope = {
   ORDER_SEQ: 'ORDER_SEQ',
   PO_SEQ: 'PO_SEQ',
   CREDIT_NOTE_SEQ: 'CREDIT_NOTE_SEQ',
+  RECEIPT_SEQ: 'RECEIPT_SEQ',
 } as const;
 
 export type CounterScope = (typeof CounterScope)[keyof typeof CounterScope];
@@ -101,4 +102,16 @@ export async function allocateCustomerCreditNoteSeq(
   customerId: string
 ): Promise<number> {
   return nextSeq(tx, businessId, CounterScope.CREDIT_NOTE_SEQ, customerId);
+}
+
+/**
+ * Helper alokasi nomor urut kwitansi pembayaran resmi (scope RECEIPT_SEQ).
+ * Urutan per customer dan tidak pernah direset.
+ */
+export async function allocateCustomerReceiptSeq(
+  tx: Prisma.TransactionClient | QueryRawExecutor,
+  businessId: string,
+  customerId: string
+): Promise<number> {
+  return nextSeq(tx, businessId, CounterScope.RECEIPT_SEQ, customerId);
 }

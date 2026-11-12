@@ -8,6 +8,7 @@ import { Role, InvoiceStatus, ShipStatus } from '@prisma/client';
 import { DeliveryNoteDocument, DeliveryNoteData } from '@/lib/pdf/DeliveryNoteDocument';
 import { renderReactToPdf, renderReactToHtml } from '@/lib/pdf/engine';
 import { getLogoDataUri } from '@/lib/pdf/logo';
+import type { ShipmentWithOptionalItems } from '@/lib/services/shipmentSummary';
 
 export async function GET(
   req: NextRequest,
@@ -45,15 +46,41 @@ export async function GET(
       );
     }
 
-    const [shipment, invoices] = await Promise.all([
-      prisma.shipment.findFirst({
-        where: { orderId: order.id, businessId },
-      }),
+    const requestedShipmentId = req.nextUrl.searchParams.get('shipmentId');
+
+    const [shipments, invoices] = await Promise.all([
+      typeof (prisma.shipment as { findMany?: unknown })?.findMany === 'function'
+        ? prisma.shipment.findMany({
+            where: {
+              orderId: order.id,
+              businessId,
+              ...(requestedShipmentId ? { id: requestedShipmentId } : {}),
+            },
+            include: {
+              items: {
+                include: {
+                  orderItem: true,
+                },
+              },
+            },
+            orderBy: [{ kloterNo: 'desc' }, { createdAt: 'desc' }],
+          })
+        : prisma.shipment
+            .findFirst({
+              where: { orderId: order.id, businessId },
+            })
+            .then((s) => (s ? ([s] as ShipmentWithOptionalItems[]) : ([] as ShipmentWithOptionalItems[]))),
       prisma.invoice.findMany({
         where: { orderId: order.id, businessId, status: InvoiceStatus.APPROVED, deletedAt: null },
         orderBy: { createdAt: 'desc' },
       }),
     ]);
+
+    const shipment = requestedShipmentId
+      ? shipments[0] ?? null
+      : shipments.find(
+          (s) => s.status === ShipStatus.SHIPPED || s.status === ShipStatus.DELIVERED
+        ) ?? shipments[0] ?? null;
 
     // Surat Jalan HANYA boleh dicetak jika pengiriman sudah berstatus SHIPPED atau DELIVERED (Seksi 14.6)
     if (
@@ -72,6 +99,29 @@ export async function GET(
     const deliveryNo =
       shipment.deliveryNo ||
       `SJ/${order.orderNo || order.id.slice(0, 8).toUpperCase()}`;
+
+    const batchItems = Array.isArray(shipment.items) ? shipment.items : [];
+    const deliveryItems =
+      batchItems.length > 0
+        ? batchItems.map((si, idx) => {
+            const oi = si.orderItem ?? order.items.find((it) => it.id === si.orderItemId);
+            return {
+              no: idx + 1,
+              name: oi?.productName ?? si.orderItemId,
+              sku: oi?.sku ?? '-',
+              qty: si.qty,
+              unit: oi?.unit ?? '',
+              note: shipment.kloterNo > 1 ? `Kloter #${shipment.kloterNo}` : null,
+            };
+          })
+        : order.items.map((it, idx) => ({
+          no: idx + 1,
+          name: it.productName,
+          sku: it.sku,
+          qty: it.qty,
+          unit: it.unit,
+          note: null,
+        }));
 
     const deliveryData: DeliveryNoteData = {
       deliveryNo,
@@ -103,14 +153,7 @@ export async function GET(
         vehiclePlate: shipment.vehiclePlate,
         estimatedArrival: null,
       },
-      items: order.items.map((it, idx) => ({
-        no: idx + 1,
-        name: it.productName,
-        sku: it.sku,
-        qty: it.qty,
-        unit: it.unit,
-        note: null,
-      })),
+      items: deliveryItems,
       notes: shipment.notes || order.notes || null,
     };
 

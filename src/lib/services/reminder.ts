@@ -36,12 +36,12 @@ export async function updateRemindersForCompletedOrder(
   const order =
     typeof tx.order?.findFirst === 'function'
       ? await tx.order.findFirst({
-          where: orderWhere,
-          include: {
-            items: true,
-            business: true,
-          },
-        })
+        where: orderWhere,
+        include: {
+          items: true,
+          business: true,
+        },
+      })
       : null;
 
   if (!order || order.status !== OrderStatus.COMPLETED || !order.items) {
@@ -52,7 +52,10 @@ export async function updateRemindersForCompletedOrder(
 
   const shipment =
     typeof tx?.shipment?.findFirst === 'function'
-      ? await tx.shipment.findFirst({ where: { orderId, businessId: bizId } })
+      ? await tx.shipment.findFirst({
+        where: { orderId, businessId: bizId },
+        orderBy: { shippedAt: 'desc' },
+      })
       : null;
   const shipDate = shipment?.shippedAt || order.updatedAt || new Date();
   const fallbackDays =
@@ -72,29 +75,33 @@ export async function updateRemindersForCompletedOrder(
     const completedOrders =
       typeof tx.order?.findMany === 'function'
         ? await tx.order.findMany({
-            where: {
-              businessId: bizId,
-              customerId: order.customerId,
-              status: OrderStatus.COMPLETED,
-              deletedAt: null,
-              items: {
-                some: { productId },
-              },
+          where: {
+            businessId: bizId,
+            customerId: order.customerId,
+            status: OrderStatus.COMPLETED,
+            deletedAt: null,
+            items: {
+              some: { productId },
             },
-            orderBy: { createdAt: 'asc' },
-          })
+          },
+          orderBy: { createdAt: 'asc' },
+        })
         : [];
 
     const completedOrderIds = completedOrders.map((o) => o.id);
     const shipments =
       typeof tx?.shipment?.findMany === 'function' && completedOrderIds.length > 0
         ? await tx.shipment.findMany({
-            where: { orderId: { in: completedOrderIds }, businessId: bizId },
-          })
+          where: { orderId: { in: completedOrderIds }, businessId: bizId },
+        })
         : [];
-    const shipmentMap = new Map(
-      shipments.map((s: { orderId: string; shippedAt: Date | null }) => [s.orderId, s])
-    );
+    const shipmentMap = new Map<string, { orderId: string; shippedAt: Date | null }>();
+    for (const s of shipments as Array<{ orderId: string; shippedAt: Date | null }>) {
+      const prev = shipmentMap.get(s.orderId);
+      if (!prev || (s.shippedAt && (!prev.shippedAt || s.shippedAt > prev.shippedAt))) {
+        shipmentMap.set(s.orderId, s);
+      }
+    }
 
     const shipDates = completedOrders.map(
       (o) => shipmentMap.get(o.id)?.shippedAt || o.updatedAt || o.createdAt
@@ -176,9 +183,9 @@ export async function rebuildRemindersForCustomer(
   const customer =
     typeof tx.customer?.findFirst === 'function'
       ? await tx.customer.findFirst({
-          where: customerWhere,
-          include: { business: true },
-        })
+        where: customerWhere,
+        include: { business: true },
+      })
       : null;
 
   if (!customer) return;
@@ -206,8 +213,8 @@ export async function rebuildRemindersForCustomer(
   const shipments =
     typeof tx?.shipment?.findMany === 'function' && orderIds.length > 0
       ? await tx.shipment.findMany({
-          where: { orderId: { in: orderIds }, businessId: bizId },
-        })
+        where: { orderId: { in: orderIds }, businessId: bizId },
+      })
       : [];
   const shipmentMap = new Map(
     shipments.map((s: { orderId: string; shippedAt: Date | null }) => [s.orderId, s])
@@ -336,9 +343,9 @@ export async function scanRepeatReminders(
           const prod =
             typeof client?.product?.findFirst === 'function'
               ? await client.product.findFirst({
-                  where: { id: reminder.productId, businessId: reminder.businessId },
-                  select: { name: true, sku: true },
-                })
+                where: { id: reminder.productId, businessId: reminder.businessId },
+                select: { name: true, sku: true },
+              })
               : null;
           if (prod) {
             productInfo = `${prod.name} (${prod.sku})`;
@@ -391,15 +398,15 @@ export async function scanRepeatReminders(
           const sales =
             typeof client?.user?.findUnique === 'function'
               ? await client.user.findUnique({
-                  where: { id: reminder.salesId },
-                  select: { name: true },
-                })
+                where: { id: reminder.salesId },
+                select: { name: true },
+              })
               : typeof client?.user?.findFirst === 'function'
-              ? await client.user.findFirst({
+                ? await client.user.findFirst({
                   where: { id: reminder.salesId },
                   select: { name: true },
                 })
-              : null;
+                : null;
 
           for (const admin of superAdmins) {
             const dedupeKey = `REPEAT_ESCALATION:${reminder.id}:${admin.id}`;
@@ -478,9 +485,9 @@ export async function scanInvoicesDue(
     const orders =
       orderIds.length > 0
         ? await client.order.findMany({
-            where: ordWhere,
-            include: { customer: true },
-          })
+          where: ordWhere,
+          include: { customer: true },
+        })
         : [];
     const orderMap = new Map(orders.map((o) => [o.id, o]));
 

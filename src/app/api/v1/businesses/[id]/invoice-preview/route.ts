@@ -48,6 +48,7 @@ export async function GET(
         npwp: true,
         logoPath: true,
         invoiceTheme: true,
+        paymentLegalNotice: true,
       },
     });
 
@@ -72,6 +73,7 @@ export async function GET(
       npwp: business.npwp,
       logoPath: business.logoPath,
     });
+    dummySnapshot.legalNotice = business.paymentLegalNotice ?? null;
 
     const logoDataUri = getLogoDataUri(business.logoPath);
 

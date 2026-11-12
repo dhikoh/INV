@@ -1,14 +1,33 @@
-import { Role, OrderStatus, InvoiceType, InvoiceStatus, InvoiceTheme } from '@prisma/client';
-import { Ctx } from '@/lib/auth/context';
-import { DomainError } from '@/lib/domain/money';
+import {
+  Role,
+  OrderStatus,
+  InvoiceType,
+  InvoiceStatus,
+  InvoiceTheme,
+  PaymentMethod,
+  PaymentStatus,
+  PaymentType,
+  ShipStatus,
+} from '@prisma/client';
+import { Ctx, requireBusiness } from '@/lib/auth/context';
+import { DomainError, formatRupiah } from '@/lib/domain/money';
+import { generateVerifyToken } from '@/lib/domain/verify';
 import { calcLine, calcOrderTotals } from '@/lib/domain/order';
 import { baseFloor, lineFloor, isBelowFloor, isPromoActive, PromoRule } from '@/lib/domain/pricing';
 import { calcProfit } from '@/lib/domain/profit';
-import { formatRupiah } from '@/lib/domain/money';
 import { escapeHtml } from '@/lib/telegram/format';
-import { OrderCreateSchema, OrderRequestFinalInput } from '@/lib/validation/order';
+import {
+  OrderCreateSchema,
+  OrderRequestFinalInput,
+  OrderCancelInput,
+} from '@/lib/validation/order';
 import { prisma } from '@/lib/db';
-import { lockOrder, assertStatus } from './orderGuard';
+import { lockOrder, assertStatus, assertRev } from './orderGuard';
+import { releaseOrderStock } from './stock';
+import { reverseOrderCommission } from './commission';
+import { recalculateOrderPayments } from './payment';
+import { rebuildRemindersForCustomer } from './reminder';
+import { fetchOrderShipments } from './shipmentSummary';
 import { z } from 'zod';
 
 export type OrderInputType =
@@ -427,6 +446,9 @@ export function formatOrderDto(
     paidTotal: bigint | number;
     creditTotal: bigint | number;
     stockReserved: boolean;
+    verifyToken?: string | null;
+    cancelReason?: string | null;
+    cancelledAt?: Date | null;
     createdAt: Date;
     updatedAt: Date;
     items?: Array<{
@@ -514,6 +536,9 @@ export function formatOrderDto(
     paidTotal: Number(order.paidTotal),
     creditTotal: Number(order.creditTotal),
     stockReserved: order.stockReserved,
+    verifyToken: order.verifyToken ?? null,
+    cancelReason: order.cancelReason ?? null,
+    cancelledAt: order.cancelledAt ? order.cancelledAt.toISOString() : null,
     createdAt: order.createdAt,
     updatedAt: order.updatedAt,
     items,
@@ -707,6 +732,7 @@ export async function submitOrder(
       status: InvoiceStatus.PENDING_APPROVAL,
       version,
       amount: invoiceAmount,
+      verifyToken: generateVerifyToken(),
       requestedById: ctx.user.id,
       requestedAt: new Date(),
     },
@@ -1039,8 +1065,27 @@ export async function requestFinalOrder(
     });
   }
 
-  // Nilai invoice pelunasan: grandTotal - dpAmount - creditTotal (BLUEPRINT Bagian 5)
-  const invoiceAmount = finalGrandTotal - order.dpAmount - order.creditTotal;
+  // Cek tidak ada revisi pesanan yang masih menunggu persetujuan
+  if (typeof (tx as { orderRevision?: { findFirst?: unknown } }).orderRevision?.findFirst === 'function') {
+    const pendingRev = await tx.orderRevision.findFirst({
+      where: {
+        orderId: order.id,
+        businessId,
+        status: 'PENDING_APPROVAL',
+      },
+    });
+    if (pendingRev) {
+      throw new DomainError(
+        'REVISION_PENDING',
+        'Selesaikan persetujuan atau penolakan revisi pesanan terlebih dahulu sebelum mengajukan pelunasan',
+        409
+      );
+    }
+  }
+
+  // Nilai invoice pelunasan: grandTotal - MAX(dpAmount, paidTotal) - creditTotal (BLUEPRINT Bagian 5 & Fase 3)
+  const settledDp = order.paidTotal > order.dpAmount ? order.paidTotal : order.dpAmount;
+  const invoiceAmount = finalGrandTotal - settledDp - order.creditTotal;
   if (invoiceAmount <= BigInt(0)) {
     throw new DomainError('INVALID_STATE', 'Jumlah pelunasan tidak valid (sudah lunas oleh DP atau nota kredit)', 409);
   }
@@ -1068,6 +1113,7 @@ export async function requestFinalOrder(
       status: InvoiceStatus.PENDING_APPROVAL,
       version,
       amount: invoiceAmount,
+      verifyToken: generateVerifyToken(),
       requestedById: ctx.user.id,
       requestedAt: new Date(),
     },
@@ -1136,4 +1182,265 @@ export async function requestFinalOrder(
     order: formatOrderDto(refreshedOrder, ctx.user.role),
     invoice: formatInvoiceDto(refreshedInvoice),
   };
+}
+
+const CANCELLABLE_ORDER_STATUSES: OrderStatus[] = [
+  OrderStatus.DRAFT,
+  OrderStatus.REVISION_REQUIRED,
+  OrderStatus.PENDING_APPROVAL,
+  OrderStatus.AWAITING_DP,
+  OrderStatus.IN_PROCESS,
+  OrderStatus.FINAL_PENDING_APPROVAL,
+  OrderStatus.AWAITING_FINAL_PAYMENT,
+];
+
+/**
+ * Pembatalan resmi pesanan oleh Super Admin sebelum pengiriman (SHIPPED/DELIVERED).
+ * Mengelola pelepasan stok reservasi, void faktur, penarikan faktur pending,
+ * penyelesaian DP/pembayaran masuk (REFUND atau CUSTOMER_CREDIT), pembatalan komisi,
+ * pembangunan ulang pengingat repeat order, audit log, serta notifikasi ke Sales.
+ */
+export async function cancelOrder(
+  tx: TxClient,
+  ctx: Ctx,
+  orderId: string,
+  input: OrderCancelInput
+): Promise<ReturnType<typeof formatOrderDto>> {
+  if (ctx.user.role !== Role.SUPERADMIN) {
+    throw new DomainError(
+      'FORBIDDEN',
+      'Hanya Super Admin yang berwenang membatalkan pesanan secara resmi',
+      403
+    );
+  }
+
+  const businessId = requireBusiness(ctx);
+  await lockOrder(tx, orderId, businessId);
+
+  const [order, shipments, pendingPayment, approvedInvoices] = await Promise.all([
+    tx.order.findFirst({
+      where: { id: orderId, businessId, deletedAt: null },
+      include: { customer: true, items: true },
+    }),
+    fetchOrderShipments(tx, businessId, orderId),
+    tx.payment.findFirst({
+      where: { orderId, businessId, status: PaymentStatus.PENDING_VERIFICATION },
+      select: { id: true },
+    }),
+    tx.invoice.findMany({
+      where: {
+        orderId,
+        businessId,
+        status: InvoiceStatus.APPROVED,
+        deletedAt: null,
+      },
+      orderBy: { createdAt: 'asc' },
+    }),
+  ]);
+
+  if (!order) {
+    throw new DomainError('ORDER_NOT_FOUND', 'Pesanan tidak ditemukan', 404);
+  }
+
+  assertStatus(order.status, CANCELLABLE_ORDER_STATUSES, 'cancelOrder');
+
+  if (input.rev !== undefined) {
+    assertRev(input.rev, order.rev);
+  }
+
+  if (
+    shipments.some(
+      (s) => s.status === ShipStatus.SHIPPED || s.status === ShipStatus.DELIVERED
+    )
+  ) {
+    throw new DomainError(
+      'ALREADY_SHIPPED',
+      'Pesanan yang sudah dikirim tidak dapat dibatalkan; gunakan Retur/Credit Note',
+      409
+    );
+  }
+
+  if (pendingPayment) {
+    throw new DomainError(
+      'PENDING_PAYMENT_EXISTS',
+      'Masih ada pembayaran menunggu verifikasi. Tolak atau verifikasi terlebih dahulu sebelum membatalkan pesanan.',
+      409
+    );
+  }
+
+  const reason = input.reason.trim();
+  const now = new Date();
+  const paidTotalBigInt = order.paidTotal;
+
+  if (paidTotalBigInt > BigInt(0)) {
+    if (!input.dpSettlement) {
+      throw new DomainError(
+        'DP_SETTLEMENT_REQUIRED',
+        'Pesanan sudah memiliki dana masuk/DP. Pilih apakah dana dikembalikan (Refund) atau dijadikan Saldo Kredit Pelanggan.',
+        422
+      );
+    }
+
+    if (input.dpSettlement === 'REFUND') {
+      const method = (input.refundMethod as PaymentMethod | undefined) ?? PaymentMethod.TRANSFER;
+      const refundNotes = `Refund pembatalan pesanan: ${reason}`;
+      let remainingRefund = paidTotalBigInt;
+
+      for (const inv of approvedInvoices) {
+        if (remainingRefund <= BigInt(0) || inv.paidAmount <= BigInt(0)) continue;
+        const refundForInvoice =
+          inv.paidAmount <= remainingRefund ? inv.paidAmount : remainingRefund;
+        await tx.payment.create({
+          data: {
+            businessId,
+            orderId: order.id,
+            invoiceId: inv.id,
+            type: PaymentType.REFUND,
+            method,
+            status: PaymentStatus.VERIFIED,
+            amount: refundForInvoice,
+            paidAt: now,
+            reference: input.refundReference || null,
+            notes: refundNotes,
+            createdById: ctx.user.id,
+            verifiedById: ctx.user.id,
+            verifiedAt: now,
+          },
+        });
+        remainingRefund -= refundForInvoice;
+      }
+
+      if (remainingRefund > BigInt(0)) {
+        await tx.payment.create({
+          data: {
+            businessId,
+            orderId: order.id,
+            invoiceId: null,
+            type: PaymentType.REFUND,
+            method,
+            status: PaymentStatus.VERIFIED,
+            amount: remainingRefund,
+            paidAt: now,
+            reference: input.refundReference || null,
+            notes: refundNotes,
+            createdById: ctx.user.id,
+            verifiedById: ctx.user.id,
+            verifiedAt: now,
+          },
+        });
+      }
+
+      await recalculateOrderPayments(tx, order.id, businessId);
+    } else if (input.dpSettlement === 'CUSTOMER_CREDIT') {
+      await tx.customerCreditEntry.create({
+        data: {
+          businessId,
+          customerId: order.customerId,
+          amount: paidTotalBigInt,
+          reason: `Konversi dana masuk pembatalan pesanan ${order.orderNo || order.id}: ${reason}`,
+          orderId: order.id,
+          createdById: ctx.user.id,
+        },
+      });
+    }
+  }
+
+  // Tarik faktur yang masih menunggu persetujuan & void faktur yang sudah terbit
+  await Promise.all([
+    tx.invoice.updateMany({
+      where: {
+        orderId: order.id,
+        businessId,
+        status: InvoiceStatus.PENDING_APPROVAL,
+        deletedAt: null,
+      },
+      data: {
+        status: InvoiceStatus.WITHDRAWN,
+        rejectReason: `Pesanan dibatalkan: ${reason}`,
+        rev: { increment: 1 },
+      },
+    }),
+    tx.invoice.updateMany({
+      where: {
+        orderId: order.id,
+        businessId,
+        status: InvoiceStatus.APPROVED,
+        deletedAt: null,
+      },
+      data: {
+        status: InvoiceStatus.VOID,
+        voidReason: reason,
+        voidedAt: now,
+        rev: { increment: 1 },
+      },
+    }),
+  ]);
+
+  await releaseOrderStock(
+    tx,
+    { id: order.id, businessId, stockReserved: order.stockReserved },
+    order.items
+  );
+
+  await tx.order.updateMany({
+    where: { id: order.id, businessId },
+    data: {
+      status: OrderStatus.CANCELLED,
+      cancelReason: reason,
+      cancelledAt: now,
+      rev: { increment: 1 },
+    },
+  });
+
+  await reverseOrderCommission(tx, order.id, businessId, `Pesanan dibatalkan: ${reason}`);
+  await rebuildRemindersForCustomer(tx, order.customerId, businessId);
+
+  const settlementText =
+    paidTotalBigInt > BigInt(0)
+      ? input.dpSettlement === 'REFUND'
+        ? ` (Refund ${formatRupiah(Number(paidTotalBigInt))})`
+        : ` (Saldo Kredit Pelanggan ${formatRupiah(Number(paidTotalBigInt))})`
+      : '';
+
+  await tx.auditLog.create({
+    data: {
+      businessId,
+      actorId: ctx.user.id,
+      actorRole: ctx.user.role,
+      action: 'ORDER_CANCEL',
+      entityType: 'Order',
+      entityId: order.id,
+      summary: `Pesanan ${order.orderNo || order.id.slice(-6)} dibatalkan resmi${settlementText}`,
+      reason,
+      before: {
+        status: order.status,
+        paidTotal: Number(paidTotalBigInt),
+        stockReserved: order.stockReserved,
+      },
+      after: {
+        status: OrderStatus.CANCELLED,
+        dpSettlement: paidTotalBigInt > BigInt(0) ? input.dpSettlement : null,
+        stockReserved: false,
+      },
+    },
+  });
+
+  await tx.notification.create({
+    data: {
+      businessId,
+      userId: order.salesId,
+      type: 'ORDER_CANCELLED',
+      title: 'Pesanan Dibatalkan Resmi',
+      body: `Pesanan <b>${escapeHtml(order.orderNo || order.id.slice(-6))}</b> (${escapeHtml(order.customer?.name || '-')}) dibatalkan oleh Admin.${settlementText ? `\nPenyelesaian dana:${escapeHtml(settlementText)}` : ''}\nAlasan: ${escapeHtml(reason)}`,
+      linkPath: `/orders/${order.id}`,
+      dedupeKey: `order_cancel_${order.id}_${now.getTime()}`,
+    },
+  });
+
+  const refreshed = await tx.order.findFirstOrThrow({
+    where: { id: order.id, businessId },
+    include: { customer: true, items: true },
+  });
+
+  return formatOrderDto(refreshed, ctx.user.role);
 }

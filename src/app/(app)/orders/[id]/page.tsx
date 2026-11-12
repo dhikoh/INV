@@ -29,6 +29,8 @@ import {
   Printer,
   Eye,
   Plus,
+  MessageCircle,
+  Ban,
 } from 'lucide-react';
 import { Skeleton, ErrorState } from '@/components/ui/States';
 import { StatusBadge } from '@/components/ui/StatusBadge';
@@ -83,6 +85,8 @@ interface PaymentItemDto {
   verifiedById: string | null;
   verifiedAt: string | null;
   rejectReason: string | null;
+  receiptNo?: string | null;
+  verifyToken?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -117,11 +121,24 @@ interface OrderDetailDto {
   paidTotal: number;
   creditTotal: number;
   stockReserved: boolean;
+  cancelReason?: string | null;
+  cancelledAt?: string | null;
   createdAt: string;
   updatedAt: string;
   items?: OrderItemDto[];
+  revisions?: OrderRevisionItemDto[];
   profitSimulation?: ProfitSimulationDto;
   invoices?: InvoiceItemDto[];
+  shipments?: ShipmentDto[];
+  shipmentProgress?: OrderShipmentItemProgress[];
+  businessPolicy?: {
+    showBankOnProforma: boolean;
+    allowSalesCashPayment: boolean;
+    requireTransferProofForSales: boolean;
+    allowPartialShipment: boolean;
+    allowShipBeforeFinalInvoice: boolean;
+    requirePaidBeforeShip: boolean;
+  };
   pendingInvoice?: {
     id: string;
     type: 'DP' | 'FINAL';
@@ -130,6 +147,32 @@ interface OrderDetailDto {
     amount: number;
     number?: string | null;
   } | null;
+}
+
+interface OrderRevisionItemDto {
+  id: string;
+  revisionNo: number;
+  status: 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED';
+  reason: string;
+  belowMinReason: string | null;
+  rejectReason: string | null;
+  oldGrandTotal: number;
+  newGrandTotal: number;
+  deltaGrandTotal: number;
+  hasBelowMin: boolean;
+  requestedAt: string;
+  reviewedAt: string | null;
+  items: Array<{
+    id: string;
+    productId: string;
+    productName: string;
+    sku: string;
+    unit: string;
+    oldQty: number;
+    newQty: number;
+    unitPrice: number;
+    lineNet: number;
+  }>;
 }
 
 interface InvoiceItemDto {
@@ -145,9 +188,32 @@ interface InvoiceItemDto {
   rejectReason?: string | null;
 }
 
+interface ShipmentItemDto {
+  id: string;
+  shipmentId?: string;
+  orderItemId: string;
+  productId?: string;
+  productName?: string;
+  sku?: string;
+  unit?: string;
+  qty: number;
+}
+
+interface OrderShipmentItemProgress {
+  orderItemId: string;
+  productId: string;
+  productName: string;
+  sku: string;
+  unit: string;
+  orderedQty: number;
+  shippedQty: number;
+  remainingQty: number;
+}
+
 interface ShipmentDto {
   id: string;
   orderId: string;
+  kloterNo: number;
   method: 'OWN_FLEET' | 'EXPEDITION' | 'TRANSPORT_VENDOR';
   transporterId: string | null;
   trackingNo: string | null;
@@ -160,6 +226,7 @@ interface ShipmentDto {
   shippedAt: string | null;
   deliveredAt: string | null;
   notes: string | null;
+  items?: ShipmentItemDto[];
   createdAt: string;
   updatedAt: string;
 }
@@ -255,6 +322,15 @@ export default function OrderDetailPage() {
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
+  // Modal Batalkan Pesanan Resmi (Super Admin)
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelDpSettlement, setCancelDpSettlement] = useState<'REFUND' | 'CUSTOMER_CREDIT'>('REFUND');
+  const [cancelRefundMethod, setCancelRefundMethod] = useState<'TRANSFER' | 'CASH' | 'OTHER'>('TRANSFER');
+  const [cancelRefundReference, setCancelRefundReference] = useState('');
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
+
   // Modal Ajukan Pesanan (Submit)
   const [showSubmitModal, setShowSubmitModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -306,6 +382,12 @@ export default function OrderDetailPage() {
   const [paymentRejecting, setPaymentRejecting] = useState(false);
   const [paymentRejectError, setPaymentRejectError] = useState<string | null>(null);
 
+  // Modal Persetujuan / Penolakan Revisi Pesanan (Fase 3 - Super Admin)
+  const [processingRevisionId, setProcessingRevisionId] = useState<string | null>(null);
+  const [rejectRevisionTarget, setRejectRevisionTarget] = useState<OrderRevisionItemDto | null>(null);
+  const [revisionRejectReason, setRevisionRejectReason] = useState('');
+  const [revisionActionError, setRevisionActionError] = useState<string | null>(null);
+
   // Modal Void Pembayaran (Super Admin)
   const [selectedVoidPayment, setSelectedVoidPayment] = useState<PaymentItemDto | null>(null);
   const [paymentVoidReason, setPaymentVoidReason] = useState('');
@@ -327,6 +409,8 @@ export default function OrderDetailPage() {
 
   // Data Pengiriman & Surat Jalan (Shipment)
   const [shipment, setShipment] = useState<ShipmentDto | null>(null);
+  const [shipments, setShipments] = useState<ShipmentDto[]>([]);
+  const [editingShipmentId, setEditingShipmentId] = useState<string | null>(null);
   const [showShipmentModal, setShowShipmentModal] = useState(false);
   const [shipMethod, setShipMethod] = useState<'OWN_FLEET' | 'EXPEDITION' | 'TRANSPORT_VENDOR'>('OWN_FLEET');
   const [shipTrackingNo, setShipTrackingNo] = useState('');
@@ -340,11 +424,14 @@ export default function OrderDetailPage() {
 
   // Modal Kirim Pesanan (Ship)
   const [showShipModal, setShowShipModal] = useState(false);
+  const [activeShipTargetId, setActiveShipTargetId] = useState<string | null>(null);
+  const [shipItemQtys, setShipItemQtys] = useState<Record<string, number>>({});
   const [shippingOrder, setShippingOrder] = useState(false);
   const [shipOrderError, setShipOrderError] = useState<string | null>(null);
 
   // Modal Penerimaan Pesanan (Deliver)
   const [showDeliverModal, setShowDeliverModal] = useState(false);
+  const [activeDeliverShipmentId, setActiveDeliverShipmentId] = useState<string | null>(null);
   const [deliverReceiverName, setDeliverReceiverName] = useState('');
   const [deliveringOrder, setDeliveringOrder] = useState(false);
   const [deliverOrderError, setDeliverOrderError] = useState<string | null>(null);
@@ -438,10 +525,19 @@ export default function OrderDetailPage() {
         setPayments(payJson.data || []);
       }
 
+      let resolvedShipments: ShipmentDto[] = Array.isArray(orderJson.data?.shipments)
+        ? orderJson.data.shipments
+        : [];
       if (shipmentRes.ok) {
         const shipJson = await shipmentRes.json();
-        setShipment(shipJson.data || null);
+        if (resolvedShipments.length === 0 && shipJson.data) {
+          resolvedShipments = [shipJson.data];
+        }
+        setShipment(shipJson.data || resolvedShipments[resolvedShipments.length - 1] || null);
+      } else {
+        setShipment(resolvedShipments[resolvedShipments.length - 1] || null);
       }
+      setShipments(resolvedShipments);
 
       if (creditNotesRes.ok) {
         const cnJson = await creditNotesRes.json();
@@ -496,6 +592,57 @@ export default function OrderDetailPage() {
       setDeleteError(err instanceof Error ? err.message : 'Gagal menghapus pesanan.');
     } finally {
       setDeleting(false);
+    }
+  };
+
+  // Handle Batalkan Pesanan Resmi (Super Admin)
+  const handleCancelOrder = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!order) return;
+    if (cancelReason.trim().length < 5) {
+      setCancelError('Alasan pembatalan wajib diisi minimal 5 karakter');
+      return;
+    }
+
+    try {
+      setCancelling(true);
+      setCancelError(null);
+
+      const hasPaidFunds = (order.paidTotal || 0) > 0;
+      const payload: Record<string, unknown> = {
+        reason: cancelReason.trim(),
+        rev: order.rev,
+      };
+      if (hasPaidFunds) {
+        payload.dpSettlement = cancelDpSettlement;
+        if (cancelDpSettlement === 'REFUND') {
+          payload.refundMethod = cancelRefundMethod;
+          if (cancelRefundReference.trim()) {
+            payload.refundReference = cancelRefundReference.trim();
+          }
+        }
+      }
+
+      const res = await fetch(`/api/v1/orders/${order.id}/cancel`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(json.error?.message || 'Gagal membatalkan pesanan');
+      }
+
+      setShowCancelModal(false);
+      setCancelReason('');
+      setCancelRefundReference('');
+      setSubmitSuccess('Pesanan berhasil dibatalkan secara resmi');
+      fetchOrderDetail();
+    } catch (err) {
+      setCancelError(err instanceof Error ? err.message : 'Gagal membatalkan pesanan');
+    } finally {
+      setCancelling(false);
     }
   };
 
@@ -647,6 +794,17 @@ export default function OrderDetailPage() {
       const parsedAmount = Number(payAmount);
       if (isNaN(parsedAmount) || parsedAmount <= 0) {
         throw new Error('Jumlah pembayaran harus berupa angka positif');
+      }
+
+      const allowSalesCash = order.businessPolicy?.allowSalesCashPayment ?? false;
+      const requireSalesProof = order.businessPolicy?.requireTransferProofForSales ?? true;
+      if (currentUser?.role !== 'SUPERADMIN') {
+        if (payMethod === 'CASH' && !allowSalesCash) {
+          throw new Error('Metode pembayaran Tunai tidak diizinkan untuk Sales oleh kebijakan usaha.');
+        }
+        if (payMethod === 'TRANSFER' && requireSalesProof && !payFile) {
+          throw new Error('Sales wajib mengunggah bukti transfer sebelum mencatat pembayaran Transfer Bank.');
+        }
       }
 
       let res: Response;
@@ -879,6 +1037,46 @@ export default function OrderDetailPage() {
     }
   };
 
+  const openShipmentModal = (target?: ShipmentDto | null) => {
+    setEditingShipmentId(target?.id ?? null);
+    setShipMethod(target?.method || 'OWN_FLEET');
+    setShipTrackingNo(target?.trackingNo || '');
+    setShipDriverName(target?.driverName || '');
+    setShipVehiclePlate(target?.vehiclePlate || '');
+    setShipReceiverName(target?.receiverName || '');
+    setShipNotes(target?.notes || '');
+    setShipActualCost(target?.actualCost !== undefined ? String(target.actualCost) : '');
+    setShipmentError(null);
+    setShowShipmentModal(true);
+  };
+
+  const openShipModal = (targetShipmentId?: string | null) => {
+    const initialQtys: Record<string, number> = {};
+    const rows =
+      order?.shipmentProgress && order.shipmentProgress.length > 0
+        ? order.shipmentProgress
+        : (order?.items || []).map((item) => ({
+            orderItemId: item.id,
+            remainingQty: item.qty,
+          }));
+    for (const row of rows) {
+      if (row.remainingQty > 0) {
+        initialQtys[row.orderItemId] = row.remainingQty;
+      }
+    }
+    setActiveShipTargetId(targetShipmentId ?? null);
+    setShipItemQtys(initialQtys);
+    setShipOrderError(null);
+    setShowShipModal(true);
+  };
+
+  const openDeliverModal = (target: ShipmentDto) => {
+    setActiveDeliverShipmentId(target.id);
+    setDeliverOrderError(null);
+    setDeliverReceiverName(target.receiverName || '');
+    setShowDeliverModal(true);
+  };
+
   // Handle Simpan Konfigurasi Logistik Pengiriman (Upsert Shipment)
   const handleSaveShipment = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -895,6 +1093,9 @@ export default function OrderDetailPage() {
         receiverName: shipReceiverName.trim() || null,
         notes: shipNotes.trim() || null,
       };
+      if (editingShipmentId) {
+        body.shipmentId = editingShipmentId;
+      }
 
       if (isSuperAdmin && shipActualCost !== '') {
         body.actualCost = Number(shipActualCost);
@@ -921,15 +1122,29 @@ export default function OrderDetailPage() {
     }
   };
 
-  // Handle Eksekusi Kirim Barang (Ship Order)
+  // Handle Eksekusi Kirim Barang (Ship Order / Kloter)
   const handleShipOrder = async () => {
     if (!order) return;
     try {
       setShippingOrder(true);
       setShipOrderError(null);
 
+      const itemsPayload = Object.entries(shipItemQtys)
+        .filter(([, qty]) => qty > 0)
+        .map(([orderItemId, qty]) => ({ orderItemId, qty }));
+
+      const bodyPayload: Record<string, unknown> = {};
+      if (activeShipTargetId) {
+        bodyPayload.shipmentId = activeShipTargetId;
+      }
+      if (itemsPayload.length > 0) {
+        bodyPayload.items = itemsPayload;
+      }
+
       const res = await fetch(`/api/v1/orders/${order.id}/shipment/ship`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(bodyPayload),
       });
 
       const json = await res.json().catch(() => ({}));
@@ -937,7 +1152,7 @@ export default function OrderDetailPage() {
         throw new Error(json.error?.message || json.message || 'Gagal mengirim pesanan');
       }
 
-      setSubmitSuccess('Pesanan berhasil ditandai telah dikirim. Surat jalan resmi diterbitkan.');
+      setSubmitSuccess('Pengiriman berhasil diproses. Surat jalan resmi diterbitkan.');
       setShowShipModal(false);
       fetchOrderDetail();
     } catch (err: unknown) {
@@ -947,7 +1162,7 @@ export default function OrderDetailPage() {
     }
   };
 
-  // Handle Konfirmasi Barang Sampai (Deliver Order)
+  // Handle Konfirmasi Barang Sampai (Deliver Order / Kloter)
   const handleDeliverOrder = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!order) return;
@@ -959,6 +1174,7 @@ export default function OrderDetailPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          shipmentId: activeDeliverShipmentId || undefined,
           receiverName: deliverReceiverName.trim() || undefined,
         }),
       });
@@ -968,7 +1184,7 @@ export default function OrderDetailPage() {
         throw new Error(json.error?.message || json.message || 'Gagal menandai penerimaan');
       }
 
-      setSubmitSuccess('Pesanan berhasil ditandai telah sampai di tujuan.');
+      setSubmitSuccess('Pengiriman berhasil ditandai telah sampai di tujuan.');
       setShowDeliverModal(false);
       fetchOrderDetail();
     } catch (err: unknown) {
@@ -1039,6 +1255,58 @@ export default function OrderDetailPage() {
       setCreditNoteError(err instanceof Error ? err.message : 'Terjadi kesalahan sistem');
     } finally {
       setCreatingCreditNote(false);
+    }
+  };
+
+  const handleApproveRevision = async (revId: string) => {
+    try {
+      setProcessingRevisionId(revId);
+      setRevisionActionError(null);
+      const res = await fetch(`/api/v1/order-revisions/${revId}/approve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(json.error?.message || 'Gagal menyetujui revisi pesanan');
+      }
+      setSubmitSuccess('Revisi pesanan berhasil disetujui & stok reservasi telah disesuaikan.');
+      await fetchOrderDetail();
+    } catch (err) {
+      setRevisionActionError(err instanceof Error ? err.message : 'Gagal menyetujui revisi');
+    } finally {
+      setProcessingRevisionId(null);
+    }
+  };
+
+  const handleRejectRevision = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!rejectRevisionTarget) return;
+    if (revisionRejectReason.trim().length < 5) {
+      setRevisionActionError('Alasan penolakan revisi minimal 5 karakter');
+      return;
+    }
+    try {
+      setProcessingRevisionId(rejectRevisionTarget.id);
+      setRevisionActionError(null);
+      const res = await fetch(`/api/v1/order-revisions/${rejectRevisionTarget.id}/reject`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: revisionRejectReason.trim() }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(json.error?.message || 'Gagal menolak revisi pesanan');
+      }
+      setRejectRevisionTarget(null);
+      setRevisionRejectReason('');
+      setSubmitSuccess('Pengajuan revisi pesanan telah ditolak.');
+      await fetchOrderDetail();
+    } catch (err) {
+      setRevisionActionError(err instanceof Error ? err.message : 'Gagal menolak revisi');
+    } finally {
+      setProcessingRevisionId(null);
     }
   };
 
@@ -1200,9 +1468,33 @@ export default function OrderDetailPage() {
   }
 
   const isSuperAdmin = currentUser?.role === 'SUPERADMIN';
+  const allowSalesCash = order.businessPolicy?.allowSalesCashPayment ?? false;
+  const requireSalesProof = order.businessPolicy?.requireTransferProofForSales ?? true;
   const isDraftOrRevision = order.status === 'DRAFT' || order.status === 'REVISION_REQUIRED';
   const isPendingApproval = order.status === 'PENDING_APPROVAL' || order.status === 'FINAL_PENDING_APPROVAL';
-  const sisaPelunasan = Math.max(0, order.grandTotal - order.dpAmount);
+  const canPrintProforma = ['DRAFT', 'REVISION_REQUIRED', 'PENDING_APPROVAL'].includes(order.status);
+  const canDeleteDraft =
+    isSuperAdmin &&
+    isDraftOrRevision &&
+    !order.stockReserved &&
+    (order.invoices || []).every((inv) => inv.status !== 'APPROVED') &&
+    payments.every((p) => p.status !== 'VERIFIED');
+  const canCancelOrder =
+    isSuperAdmin &&
+    ['PENDING_APPROVAL', 'REVISION_REQUIRED', 'AWAITING_DP', 'IN_PROCESS', 'FINAL_PENDING_APPROVAL', 'AWAITING_FINAL_PAYMENT'].includes(order.status) &&
+    shipment?.status !== 'SHIPPED' &&
+    shipment?.status !== 'DELIVERED';
+  const proformaPdfUrl =
+    typeof window !== 'undefined'
+      ? `${window.location.origin}/api/v1/orders/${order.id}/proforma/pdf`
+      : `/api/v1/orders/${order.id}/proforma/pdf`;
+  const waProformaText = encodeURIComponent(
+    `Halo ${order.customer?.name || 'Pelanggan'}, berikut rincian Proforma Order senilai ${formatRupiah(order.grandTotal)}.${order.dpBps > 0 ? ` DP ${formatPercentFromBps(order.dpBps)}: ${formatRupiah(order.dpAmount)}.` : ''} Lihat dokumen PDF: ${proformaPdfUrl}`
+  );
+  const sisaPelunasan = Math.max(
+    0,
+    order.grandTotal - Math.max(order.dpAmount, order.paidTotal || 0)
+  );
   const balanceDue = Math.max(
     0,
     order.grandTotal - (order.paidTotal || 0) - (order.creditTotal || 0)
@@ -1231,6 +1523,9 @@ export default function OrderDetailPage() {
 
     setPayInvoiceId(preferredInvoice?.id || '');
     setPayAmount(String(defaultAmount));
+    if (!isSuperAdmin && !allowSalesCash && payMethod === 'CASH') {
+      setPayMethod('TRANSFER');
+    }
     setPayError(null);
     setShowPaymentModal(true);
   };
@@ -1240,16 +1535,67 @@ export default function OrderDetailPage() {
     !isPendingApproval &&
     order.status !== 'CANCELLED' &&
     balanceDue > 0;
+  const hasPendingRevision = (order.revisions ?? []).some(
+    (r) => r.status === 'PENDING_APPROVAL'
+  );
+  const canReviseOrder =
+    order.status === 'IN_PROCESS' &&
+    !hasPendingRevision &&
+    shipment?.status !== 'SHIPPED' &&
+    shipment?.status !== 'DELIVERED';
   const canRequestFinal =
     order.status === 'IN_PROCESS' &&
     (order.paidTotal || 0) >= order.dpAmount &&
-    !order.pendingInvoice;
-  const canManageShipment = ['IN_PROCESS', 'FINAL_PENDING_APPROVAL', 'AWAITING_FINAL_PAYMENT'].includes(order.status);
-  const canShip = order.status === 'AWAITING_FINAL_PAYMENT' && (!shipment || shipment.status === 'PREPARING');
-  const canDeliver = shipment?.status === 'SHIPPED';
+    !order.pendingInvoice &&
+    !hasPendingRevision;
+  const progressRows: OrderShipmentItemProgress[] =
+    order.shipmentProgress && order.shipmentProgress.length > 0
+      ? order.shipmentProgress
+      : (order.items || []).map((item) => {
+          const shippedQty = shipments
+            .filter((s) => s.status === 'SHIPPED' || s.status === 'DELIVERED')
+            .reduce((sum, s) => {
+              const found = s.items?.find((si) => si.orderItemId === item.id);
+              return sum + (found ? found.qty : s.items ? 0 : item.qty);
+            }, 0);
+          return {
+            orderItemId: item.id,
+            productId: item.productId,
+            productName: item.productName,
+            sku: item.sku,
+            unit: item.unit,
+            orderedQty: item.qty,
+            shippedQty,
+            remainingQty: Math.max(0, item.qty - shippedQty),
+          };
+        });
+
+  const allowPartialShipment = Boolean(order.businessPolicy?.allowPartialShipment);
+  const allowShipBeforeFinalInvoice = Boolean(order.businessPolicy?.allowShipBeforeFinalInvoice);
+  const preparingShipment = shipments.find((s) => s.status === 'PREPARING') || null;
+  const shippedShipments = shipments.filter((s) => s.status === 'SHIPPED');
+  const executedShipmentsCount = shipments.filter(
+    (s) => s.status === 'SHIPPED' || s.status === 'DELIVERED'
+  ).length;
+  const hasRemainingToShip = progressRows.some((r) => r.remainingQty > 0);
+  const canShipByStatus =
+    order.status === 'AWAITING_FINAL_PAYMENT' ||
+    (allowShipBeforeFinalInvoice &&
+      ['IN_PROCESS', 'FINAL_PENDING_APPROVAL'].includes(order.status));
+
+  const canManageShipment =
+    !hasPendingRevision &&
+    ['IN_PROCESS', 'FINAL_PENDING_APPROVAL', 'AWAITING_FINAL_PAYMENT'].includes(order.status) &&
+    (hasRemainingToShip || Boolean(preparingShipment)) &&
+    (allowPartialShipment || executedShipmentsCount === 0);
+  const canShip =
+    !hasPendingRevision &&
+    canShipByStatus &&
+    hasRemainingToShip &&
+    (allowPartialShipment || executedShipmentsCount === 0);
+  const canDeliver = shippedShipments.length > 0;
   const isOrderDeliveredOrShipped =
-    shipment?.status === 'SHIPPED' ||
-    shipment?.status === 'DELIVERED' ||
+    executedShipmentsCount > 0 ||
     order.status === 'COMPLETED' ||
     order.status === 'SHIPPED' ||
     order.status === 'DELIVERED';
@@ -1263,9 +1609,15 @@ export default function OrderDetailPage() {
       }, 0);
   };
 
+  const getShippedQtyForItem = (orderItemId: string, orderedQty: number) => {
+    if (order.status === 'COMPLETED') return orderedQty;
+    return progressRows.find((r) => r.orderItemId === orderItemId)?.shippedQty ?? 0;
+  };
+
   const hasReturnableItems = (order.items || []).some((item) => {
+    const shippedLimit = getShippedQtyForItem(item.id, item.qty);
     const returned = getAlreadyReturnedQty(item.id);
-    return item.qty - returned > 0;
+    return shippedLimit - returned > 0;
   });
 
   const canCreateCreditNote =
@@ -1410,10 +1762,7 @@ export default function OrderDetailPage() {
           {canShip && (
             <button
               type="button"
-              onClick={() => {
-                setShipOrderError(null);
-                setShowShipModal(true);
-              }}
+              onClick={() => openShipModal(preparingShipment?.id)}
               className="inline-flex items-center justify-center gap-1.5 min-h-[44px] px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg text-sm transition-colors shadow-sm"
             >
               <Truck className="w-4 h-4" />
@@ -1421,19 +1770,38 @@ export default function OrderDetailPage() {
             </button>
           )}
 
-          {canDeliver && (
+          {canDeliver && shippedShipments[0] && (
             <button
               type="button"
-              onClick={() => {
-                setDeliverOrderError(null);
-                setDeliverReceiverName(shipment?.receiverName || '');
-                setShowDeliverModal(true);
-              }}
+              onClick={() => openDeliverModal(shippedShipments[0])}
               className="inline-flex items-center justify-center gap-1.5 min-h-[44px] px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg text-sm transition-colors shadow-sm"
             >
               <CheckCircle2 className="w-4 h-4" />
               <span>Tandai Diterima</span>
             </button>
+          )}
+
+          {canPrintProforma && (
+            <>
+              <a
+                href={`/api/v1/orders/${order.id}/proforma/pdf`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center justify-center gap-1.5 min-h-[44px] px-3.5 py-2 border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-medium rounded-lg text-sm transition-colors shadow-sm"
+              >
+                <Printer className="w-4 h-4" />
+                <span>Cetak Proforma PDF</span>
+              </a>
+              <a
+                href={`https://wa.me/?text=${waProformaText}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center justify-center gap-1.5 min-h-[44px] px-3.5 py-2 border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-medium rounded-lg text-sm transition-colors shadow-sm"
+              >
+                <MessageCircle className="w-4 h-4" />
+                <span>Kirim WA</span>
+              </a>
+            </>
           )}
 
           {isDraftOrRevision && (
@@ -1446,7 +1814,17 @@ export default function OrderDetailPage() {
             </Link>
           )}
 
-          {isSuperAdmin && (
+          {canReviseOrder && (
+            <Link
+              href={`/orders/${order.id}/revise`}
+              className="inline-flex items-center justify-center gap-1.5 min-h-[44px] px-4 py-2 border border-indigo-300 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 font-medium rounded-lg text-sm transition-colors shadow-sm"
+            >
+              <Edit className="w-4 h-4" />
+              <span>Ajukan Revisi Item</span>
+            </Link>
+          )}
+
+          {canDeleteDraft && (
             <button
               type="button"
               onClick={() => setShowDeleteModal(true)}
@@ -1456,8 +1834,42 @@ export default function OrderDetailPage() {
               <span className="hidden sm:inline">Hapus Draf</span>
             </button>
           )}
+
+          {canCancelOrder && (
+            <button
+              type="button"
+              onClick={() => {
+                setCancelReason('');
+                setCancelDpSettlement('REFUND');
+                setCancelRefundMethod('TRANSFER');
+                setCancelRefundReference('');
+                setCancelError(null);
+                setShowCancelModal(true);
+              }}
+              className="inline-flex items-center justify-center gap-1.5 min-h-[44px] px-3.5 py-2 border border-rose-300 bg-rose-50 hover:bg-rose-100 text-rose-800 font-medium rounded-lg text-sm transition-colors shadow-sm"
+            >
+              <Ban className="w-4 h-4" />
+              <span>Batalkan Pesanan</span>
+            </button>
+          )}
         </div>
       </div>
+
+      {/* Alert Pesanan Dibatalkan Resmi */}
+      {order.status === 'CANCELLED' && (
+        <div className="p-4 bg-rose-50 border border-rose-300 rounded-xl flex items-start gap-3 text-rose-900 text-sm">
+          <Ban className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <p className="font-semibold">Pesanan Dibatalkan Resmi</p>
+            <p className="text-xs text-rose-800">
+              Alasan: {order.cancelReason || '-'}
+              {order.cancelledAt
+                ? ` • Pada ${new Date(order.cancelledAt).toLocaleString('id-ID')}`
+                : ''}
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Alert Umpan Balik Submit / Withdraw */}
       {submitSuccess && (
@@ -1740,6 +2152,127 @@ export default function OrderDetailPage() {
             </div>
           </div>
 
+          {/* Kartu Riwayat Revisi Pesanan (Fase 3) */}
+          {(order.revisions?.length ?? 0) > 0 && (
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+              <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between gap-2">
+                <h2 className="text-base font-bold text-slate-900">
+                  Riwayat Revisi Pesanan ({order.revisions!.length})
+                </h2>
+                {hasPendingRevision && (
+                  <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800">
+                    Menunggu Persetujuan
+                  </span>
+                )}
+              </div>
+
+              {revisionActionError && (
+                <div className="mx-4 mt-4 p-3 rounded-lg bg-rose-50 border border-rose-200 text-xs text-rose-800">
+                  {revisionActionError}
+                </div>
+              )}
+
+              <div className="divide-y divide-slate-100">
+                {order.revisions!.map((revItem) => (
+                  <div key={revItem.id} className="p-4 sm:p-5 space-y-2.5 text-xs sm:text-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-mono font-bold text-slate-800">
+                          Revisi #{revItem.revisionNo}
+                        </span>
+                        <StatusBadge status={revItem.status} />
+                        {revItem.hasBelowMin && (
+                          <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-800 text-[11px] font-semibold">
+                            Di Bawah Floor
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-xs text-slate-500">
+                        {new Date(revItem.requestedAt).toLocaleString('id-ID')}
+                      </span>
+                    </div>
+
+                    <p className="text-xs text-slate-700">
+                      <strong>Alasan:</strong> {revItem.reason}
+                    </p>
+                    {revItem.rejectReason && (
+                      <p className="text-xs text-rose-700 font-medium">
+                        Ditolak: {revItem.rejectReason}
+                      </p>
+                    )}
+
+                    <div className="flex flex-wrap items-center gap-4 text-xs bg-slate-50 border border-slate-200 rounded-lg p-3">
+                      <div>
+                        <span className="text-slate-500">Total Lama: </span>
+                        <span className="font-mono font-semibold text-slate-700">
+                          {formatRupiah(revItem.oldGrandTotal)}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500">Total Baru: </span>
+                        <span className="font-mono font-bold text-indigo-700">
+                          {formatRupiah(revItem.newGrandTotal)}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500">Selisih: </span>
+                        <span
+                          className={`font-mono font-bold ${
+                            revItem.deltaGrandTotal >= 0 ? 'text-emerald-700' : 'text-amber-700'
+                          }`}
+                        >
+                          {revItem.deltaGrandTotal >= 0 ? '+' : ''}
+                          {formatRupiah(revItem.deltaGrandTotal)}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1 text-xs text-slate-600">
+                      {revItem.items.map((ri) => (
+                        <div key={ri.id} className="flex items-center justify-between gap-2">
+                          <span>
+                            {ri.productName} ({ri.sku})
+                          </span>
+                          <span className="font-mono">
+                            {ri.oldQty} &rarr; <strong>{ri.newQty}</strong> {ri.unit} @{' '}
+                            {formatRupiah(ri.unitPrice)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {isSuperAdmin && revItem.status === 'PENDING_APPROVAL' && (
+                      <div className="flex flex-wrap items-center gap-2 pt-2">
+                        <button
+                          type="button"
+                          onClick={() => handleApproveRevision(revItem.id)}
+                          disabled={processingRevisionId === revItem.id}
+                          className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-semibold transition-colors"
+                        >
+                          {processingRevisionId === revItem.id
+                            ? 'Memproses...'
+                            : 'Setujui Revisi'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRejectRevisionTarget(revItem);
+                            setRevisionRejectReason('');
+                            setRevisionActionError(null);
+                          }}
+                          disabled={processingRevisionId === revItem.id}
+                          className="px-3 py-1.5 rounded-lg border border-rose-300 text-rose-700 hover:bg-rose-50 disabled:opacity-50 text-xs font-semibold transition-colors"
+                        >
+                          Tolak Revisi
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Kartu Riwayat Pembayaran */}
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
             <div className="p-4 sm:p-5 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
@@ -1792,6 +2325,11 @@ export default function OrderDetailPage() {
                           <span className="text-[11px] px-2 py-0.5 rounded font-semibold bg-slate-100 text-slate-700">
                             {p.method}
                           </span>
+                          {p.receiptNo && (
+                            <span className="text-[11px] px-2 py-0.5 rounded font-mono font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                              {p.receiptNo}
+                            </span>
+                          )}
                         </div>
 
                         <div className="text-xs text-slate-500 flex flex-wrap items-center gap-x-3 gap-y-0.5">
@@ -1822,49 +2360,63 @@ export default function OrderDetailPage() {
                         )}
                       </div>
 
-                      {/* Aksi Super Admin untuk pembayaran */}
-                      {isSuperAdmin && (
-                        <div className="flex items-center gap-2 self-start sm:self-center">
-                          {p.status === 'PENDING_VERIFICATION' && (
-                            <>
+                      {/* Aksi Pembayaran (Sales & Super Admin) */}
+                      <div className="flex flex-wrap items-center gap-2 self-start sm:self-center">
+                        {p.status === 'VERIFIED' && (
+                          <a
+                            href={`/api/v1/payments/${p.id}/receipt/pdf`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 text-xs font-semibold transition-colors"
+                          >
+                            <Printer className="w-3.5 h-3.5" />
+                            <span>Cetak Kwitansi</span>
+                          </a>
+                        )}
+
+                        {isSuperAdmin && (
+                          <>
+                            {p.status === 'PENDING_VERIFICATION' && (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedRejectPayment(p);
+                                    setPaymentRejectReason('');
+                                    setPaymentRejectError(null);
+                                  }}
+                                  className="px-2.5 py-1 rounded border border-rose-300 text-rose-700 hover:bg-rose-50 text-xs font-semibold transition-colors"
+                                >
+                                  Tolak
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedVerifyPayment(p);
+                                    setVerifyPaymentError(null);
+                                  }}
+                                  className="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold transition-colors"
+                                >
+                                  Verifikasi
+                                </button>
+                              </>
+                            )}
+                            {p.status === 'VERIFIED' && (
                               <button
                                 type="button"
                                 onClick={() => {
-                                  setSelectedRejectPayment(p);
-                                  setPaymentRejectReason('');
-                                  setPaymentRejectError(null);
+                                  setSelectedVoidPayment(p);
+                                  setPaymentVoidReason('');
+                                  setPaymentVoidError(null);
                                 }}
-                                className="px-2.5 py-1 rounded border border-rose-300 text-rose-700 hover:bg-rose-50 text-xs font-semibold transition-colors"
+                                className="px-2.5 py-1 rounded border border-slate-300 text-slate-600 hover:bg-slate-100 text-xs font-semibold transition-colors"
                               >
-                                Tolak
+                                Void
                               </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setSelectedVerifyPayment(p);
-                                  setVerifyPaymentError(null);
-                                }}
-                                className="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold transition-colors"
-                              >
-                                Verifikasi
-                              </button>
-                            </>
-                          )}
-                          {p.status === 'VERIFIED' && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setSelectedVoidPayment(p);
-                                setPaymentVoidReason('');
-                                setPaymentVoidError(null);
-                              }}
-                              className="px-2.5 py-1 rounded border border-slate-300 text-slate-600 hover:bg-slate-100 text-xs font-semibold transition-colors"
-                            >
-                              Void
-                            </button>
-                          )}
-                        </div>
-                      )}
+                            )}
+                          </>
+                        )}
+                      </div>
                     </div>
                   );
                 })}
@@ -1875,170 +2427,288 @@ export default function OrderDetailPage() {
           {/* Kartu Informasi Pengiriman & Surat Jalan */}
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
             <div className="p-4 sm:p-5 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <Truck className="w-5 h-5 text-indigo-600" />
                 <h2 className="text-base font-bold text-slate-900">
-                  Informasi Pengiriman & Surat Jalan
+                  Informasi Pengiriman &amp; Surat Jalan
                 </h2>
                 {shipment && <StatusBadge status={shipment.status} />}
+                {shipments.length > 0 && (
+                  <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700">
+                    {shipments.length} Kloter
+                  </span>
+                )}
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
                 {canManageShipment && (
                   <button
                     type="button"
-                    onClick={() => {
-                      setShipMethod(shipment?.method || 'OWN_FLEET');
-                      setShipTrackingNo(shipment?.trackingNo || '');
-                      setShipDriverName(shipment?.driverName || '');
-                      setShipVehiclePlate(shipment?.vehiclePlate || '');
-                      setShipReceiverName(shipment?.receiverName || '');
-                      setShipNotes(shipment?.notes || '');
-                      setShipActualCost(
-                        shipment?.actualCost !== undefined ? String(shipment.actualCost) : ''
-                      );
-                      setShipmentError(null);
-                      setShowShipmentModal(true);
-                    }}
+                    onClick={() => openShipmentModal(preparingShipment)}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 text-xs font-semibold transition-colors"
                   >
                     <Edit className="w-3.5 h-3.5" />
-                    <span>{shipment ? 'Ubah Pengiriman' : 'Atur Pengiriman'}</span>
+                    <span>
+                      {preparingShipment
+                        ? 'Ubah Pengiriman'
+                        : allowPartialShipment && executedShipmentsCount > 0
+                        ? 'Atur Kloter Berikutnya'
+                        : 'Atur Pengiriman'}
+                    </span>
                   </button>
                 )}
 
                 {canShip && (
                   <button
                     type="button"
-                    onClick={() => {
-                      setShipOrderError(null);
-                      setShowShipModal(true);
-                    }}
+                    onClick={() => openShipModal(preparingShipment?.id)}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold transition-colors shadow-sm"
                   >
                     <Truck className="w-3.5 h-3.5" />
-                    <span>Kirim Barang</span>
+                    <span>
+                      {allowPartialShipment && executedShipmentsCount > 0
+                        ? 'Kirim Kloter Berikutnya'
+                        : 'Kirim Barang'}
+                    </span>
                   </button>
-                )}
-
-                {canDeliver && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setDeliverOrderError(null);
-                      setDeliverReceiverName(shipment?.receiverName || '');
-                      setShowDeliverModal(true);
-                    }}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold transition-colors shadow-sm"
-                  >
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                    <span>Tandai Diterima</span>
-                  </button>
-                )}
-
-                {(shipment?.status === 'SHIPPED' || shipment?.status === 'DELIVERED') && (
-                  <a
-                    href={`/api/v1/orders/${order.id}/delivery-note/pdf`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 text-xs font-semibold transition-colors shadow-sm"
-                  >
-                    <Printer className="w-3.5 h-3.5" />
-                    <span>Cetak Surat Jalan</span>
-                  </a>
                 )}
               </div>
             </div>
 
-            <div className="p-4 sm:p-5">
-              {!shipment ? (
+            <div className="p-4 sm:p-5 space-y-4">
+              {progressRows.length > 0 && (
+                <div className="border border-slate-200 rounded-lg overflow-hidden">
+                  <div className="px-3 py-2 bg-slate-50 border-b border-slate-200 flex items-center justify-between gap-2">
+                    <span className="text-xs font-semibold text-slate-700">
+                      Progres Pengiriman Item
+                    </span>
+                    <span className="text-xs font-semibold text-indigo-700">
+                      {progressRows.reduce((s, r) => s + r.shippedQty, 0)} /{' '}
+                      {progressRows.reduce((s, r) => s + r.orderedQty, 0)} unit terkirim
+                    </span>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs text-left">
+                      <thead className="bg-slate-50/70 border-b border-slate-100 text-slate-500">
+                        <tr>
+                          <th className="px-3 py-2 font-medium">Produk</th>
+                          <th className="px-3 py-2 text-center font-medium">Dipesan</th>
+                          <th className="px-3 py-2 text-center font-medium">Terkirim</th>
+                          <th className="px-3 py-2 text-center font-medium">Sisa</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {progressRows.map((row) => (
+                          <tr key={row.orderItemId}>
+                            <td className="px-3 py-2">
+                              <span className="font-semibold text-slate-800 block">
+                                {row.productName}
+                              </span>
+                              <span className="text-[11px] text-slate-400 font-mono">
+                                {row.sku}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2 text-center text-slate-700">
+                              {row.orderedQty} {row.unit}
+                            </td>
+                            <td className="px-3 py-2 text-center font-semibold text-emerald-700">
+                              {row.shippedQty} {row.unit}
+                            </td>
+                            <td className="px-3 py-2 text-center font-semibold text-amber-700">
+                              {row.remainingQty} {row.unit}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {shipments.length === 0 ? (
                 <div className="text-xs text-slate-500 italic py-2">
                   Belum ada pengaturan logistik pengiriman untuk pesanan ini. Klik &quot;Atur Pengiriman&quot; untuk menyiapkan armada atau ekspedisi.
                 </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs sm:text-sm">
-                  <div>
-                    <span className="text-xs text-slate-400">Nomor Surat Jalan</span>
-                    <p className="font-bold text-slate-900 mt-0.5">
-                      {shipment.deliveryNo || 'Belum terbit (dibuat saat barang dikirim)'}
-                    </p>
-                  </div>
+                <div className="space-y-3">
+                  {shipments.map((sh) => {
+                    const itemMap = new Map(
+                      (order.items || []).map((item) => [item.id, item])
+                    );
+                    return (
+                      <div
+                        key={sh.id}
+                        className="p-3.5 sm:p-4 rounded-lg border border-slate-200 bg-slate-50/50 space-y-3"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-200/80">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="px-2 py-0.5 rounded bg-indigo-100 text-indigo-800 text-xs font-bold">
+                              Kloter #{sh.kloterNo || 1}
+                            </span>
+                            <StatusBadge status={sh.status} />
+                            {sh.deliveryNo && (
+                              <span className="font-mono text-xs font-semibold text-slate-700">
+                                {sh.deliveryNo}
+                              </span>
+                            )}
+                          </div>
 
-                  <div>
-                    <span className="text-xs text-slate-400">Metode Pengiriman</span>
-                    <p className="font-semibold text-slate-800 mt-0.5">
-                      {shipment.method === 'OWN_FLEET'
-                        ? 'Armada Sendiri'
-                        : shipment.method === 'TRANSPORT_VENDOR'
-                        ? 'Vendor Angkutan / Truk'
-                        : 'Ekspedisi / Kurir Luar'}
-                    </p>
-                  </div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            {sh.status === 'PREPARING' && canManageShipment && (
+                              <button
+                                type="button"
+                                onClick={() => openShipmentModal(sh)}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 text-xs font-semibold transition-colors"
+                              >
+                                <Edit className="w-3 h-3" />
+                                <span>Ubah Kloter</span>
+                              </button>
+                            )}
+                            {sh.status === 'PREPARING' && canShip && (
+                              <button
+                                type="button"
+                                onClick={() => openShipModal(sh.id)}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold transition-colors"
+                              >
+                                <Truck className="w-3 h-3" />
+                                <span>Kirim Kloter</span>
+                              </button>
+                            )}
+                            {sh.status === 'SHIPPED' && (
+                              <button
+                                type="button"
+                                onClick={() => openDeliverModal(sh)}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold transition-colors"
+                              >
+                                <CheckCircle2 className="w-3 h-3" />
+                                <span>Tandai Diterima</span>
+                              </button>
+                            )}
+                            {(sh.status === 'SHIPPED' || sh.status === 'DELIVERED') && (
+                              <a
+                                href={`/api/v1/orders/${order.id}/delivery-note/pdf?shipmentId=${sh.id}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 text-xs font-semibold transition-colors"
+                              >
+                                <Printer className="w-3 h-3" />
+                                <span>Cetak Surat Jalan</span>
+                              </a>
+                            )}
+                          </div>
+                        </div>
 
-                  {shipment.trackingNo && (
-                    <div>
-                      <span className="text-xs text-slate-400">Nomor Resi / AWB</span>
-                      <p className="font-mono font-semibold text-slate-800 mt-0.5">
-                        {shipment.trackingNo}
-                      </p>
-                    </div>
-                  )}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs sm:text-sm">
+                          <div>
+                            <span className="text-xs text-slate-400">Nomor Surat Jalan</span>
+                            <p className="font-bold text-slate-900 mt-0.5">
+                              {sh.deliveryNo || 'Belum terbit (dibuat saat barang dikirim)'}
+                            </p>
+                          </div>
 
-                  {(shipment.driverName || shipment.vehiclePlate) && (
-                    <div>
-                      <span className="text-xs text-slate-400">Kurir / Kendaraan</span>
-                      <p className="font-medium text-slate-800 mt-0.5">
-                        {[shipment.driverName, shipment.vehiclePlate].filter(Boolean).join(' • ')}
-                      </p>
-                    </div>
-                  )}
+                          <div>
+                            <span className="text-xs text-slate-400">Metode Pengiriman</span>
+                            <p className="font-semibold text-slate-800 mt-0.5">
+                              {sh.method === 'OWN_FLEET'
+                                ? 'Armada Sendiri'
+                                : sh.method === 'TRANSPORT_VENDOR'
+                                ? 'Vendor Angkutan / Truk'
+                                : 'Ekspedisi / Kurir Luar'}
+                            </p>
+                          </div>
 
-                  {shipment.receiverName && (
-                    <div>
-                      <span className="text-xs text-slate-400">Penerima Barang</span>
-                      <p className="font-semibold text-emerald-800 mt-0.5">
-                        {shipment.receiverName}
-                      </p>
-                    </div>
-                  )}
+                          {sh.trackingNo && (
+                            <div>
+                              <span className="text-xs text-slate-400">Nomor Resi / AWB</span>
+                              <p className="font-mono font-semibold text-slate-800 mt-0.5">
+                                {sh.trackingNo}
+                              </p>
+                            </div>
+                          )}
 
-                  {isSuperAdmin && shipment.actualCost !== undefined && (
-                    <div>
-                      <span className="text-xs text-emerald-700 font-semibold">
-                        Biaya Kirim Riil (Super Admin)
-                      </span>
-                      <p className="font-bold text-emerald-700 mt-0.5">
-                        {formatRupiah(shipment.actualCost)}
-                      </p>
-                    </div>
-                  )}
+                          {(sh.driverName || sh.vehiclePlate) && (
+                            <div>
+                              <span className="text-xs text-slate-400">Kurir / Kendaraan</span>
+                              <p className="font-medium text-slate-800 mt-0.5">
+                                {[sh.driverName, sh.vehiclePlate].filter(Boolean).join(' • ')}
+                              </p>
+                            </div>
+                          )}
 
-                  {shipment.shippedAt && (
-                    <div>
-                      <span className="text-xs text-slate-400">Waktu Dikirim</span>
-                      <p className="text-slate-700 mt-0.5">
-                        {shipment.shippedAt ? new Date(shipment.shippedAt).toLocaleString('id-ID') : '-'}
-                      </p>
-                    </div>
-                  )}
+                          {sh.receiverName && (
+                            <div>
+                              <span className="text-xs text-slate-400">Penerima Barang</span>
+                              <p className="font-semibold text-emerald-800 mt-0.5">
+                                {sh.receiverName}
+                              </p>
+                            </div>
+                          )}
 
-                  {shipment.deliveredAt && (
-                    <div>
-                      <span className="text-xs text-slate-400">Waktu Diterima</span>
-                      <p className="text-slate-700 mt-0.5">
-                        {shipment.deliveredAt ? new Date(shipment.deliveredAt).toLocaleString('id-ID') : '-'}
-                      </p>
-                    </div>
-                  )}
+                          {isSuperAdmin && sh.actualCost !== undefined && (
+                            <div>
+                              <span className="text-xs text-emerald-700 font-semibold">
+                                Biaya Kirim Riil (Super Admin)
+                              </span>
+                              <p className="font-bold text-emerald-700 mt-0.5">
+                                {formatRupiah(sh.actualCost)}
+                              </p>
+                            </div>
+                          )}
 
-                  {shipment.notes && (
-                    <div className="sm:col-span-2 pt-2 border-t border-slate-100">
-                      <span className="text-xs text-slate-400">Catatan Pengiriman</span>
-                      <p className="text-xs text-slate-600 italic mt-0.5">
-                        &quot;{shipment.notes}&quot;
-                      </p>
-                    </div>
-                  )}
+                          {sh.shippedAt && (
+                            <div>
+                              <span className="text-xs text-slate-400">Waktu Dikirim</span>
+                              <p className="text-slate-700 mt-0.5">
+                                {new Date(sh.shippedAt).toLocaleString('id-ID')}
+                              </p>
+                            </div>
+                          )}
+
+                          {sh.deliveredAt && (
+                            <div>
+                              <span className="text-xs text-slate-400">Waktu Diterima</span>
+                              <p className="text-slate-700 mt-0.5">
+                                {new Date(sh.deliveredAt).toLocaleString('id-ID')}
+                              </p>
+                            </div>
+                          )}
+
+                          {sh.items && sh.items.length > 0 && (
+                            <div className="sm:col-span-2 pt-2 border-t border-slate-200/70">
+                              <span className="text-xs text-slate-400 block mb-1">
+                                Item di Kloter Ini
+                              </span>
+                              <div className="flex flex-wrap gap-1.5">
+                                {sh.items.map((si) => {
+                                  const oi = itemMap.get(si.orderItemId);
+                                  return (
+                                    <span
+                                      key={si.id}
+                                      className="inline-flex items-center px-2 py-0.5 rounded bg-white border border-slate-200 text-xs text-slate-700"
+                                    >
+                                      {oi?.productName || si.orderItemId}:{' '}
+                                      <strong className="ml-1">
+                                        {si.qty} {oi?.unit || ''}
+                                      </strong>
+                                    </span>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+
+                          {sh.notes && (
+                            <div className="sm:col-span-2 pt-2 border-t border-slate-200/70">
+                              <span className="text-xs text-slate-400">Catatan Pengiriman</span>
+                              <p className="text-xs text-slate-600 italic mt-0.5">
+                                &quot;{sh.notes}&quot;
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -2761,6 +3431,156 @@ export default function OrderDetailPage() {
         loading={deleting}
       />
 
+      {/* Modal Batalkan Pesanan Resmi (Super Admin) */}
+      {showCancelModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-xl shadow-xl border border-slate-200 w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-rose-50/70">
+              <div className="flex items-center gap-2 text-rose-700">
+                <Ban className="w-5 h-5" />
+                <h3 className="font-semibold text-slate-800">Batalkan Pesanan Resmi</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowCancelModal(false);
+                  setCancelError(null);
+                }}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-rose-100/50 min-h-[44px] min-w-[44px] flex items-center justify-center"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCancelOrder} className="p-5 space-y-4">
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-800 space-y-1">
+                <p className="font-semibold">Konsekuensi Pembatalan Resmi:</p>
+                <ul className="list-disc list-inside space-y-0.5">
+                  <li>Seluruh faktur resmi aktif di-VOID otomatis dan ditarik dari tagihan berjalan.</li>
+                  <li>Reservasi stok produk dilepaskan kembali dan komisi pesanan dibalikkan.</li>
+                  <li>Riwayat audit & notifikasi pembatalan dikirimkan ke Sales terkait.</li>
+                </ul>
+              </div>
+
+              {(order.paidTotal || 0) > 0 && (
+                <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-lg space-y-3">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-semibold text-amber-900">Dana Masuk / DP Terverifikasi:</span>
+                    <span className="font-bold text-amber-900">{formatRupiah(order.paidTotal)}</span>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="block text-xs font-semibold text-slate-700">
+                      Penyelesaian Dana DP <span className="text-rose-500">*</span>
+                    </label>
+                    <label className="flex items-start gap-2 text-xs text-slate-700 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="dpSettlement"
+                        value="REFUND"
+                        checked={cancelDpSettlement === 'REFUND'}
+                        onChange={() => setCancelDpSettlement('REFUND')}
+                        className="mt-0.5"
+                      />
+                      <span>
+                        <strong>Kembalikan Dana (Refund)</strong> — Mencatat transaksi refund keluar agar saldo tagihan menjadi Rp 0.
+                      </span>
+                    </label>
+                    <label className="flex items-start gap-2 text-xs text-slate-700 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="dpSettlement"
+                        value="CUSTOMER_CREDIT"
+                        checked={cancelDpSettlement === 'CUSTOMER_CREDIT'}
+                        onChange={() => setCancelDpSettlement('CUSTOMER_CREDIT')}
+                        className="mt-0.5"
+                      />
+                      <span>
+                        <strong>Simpan sebagai Saldo Kredit Pelanggan</strong> — Dana tetap di perusahaan untuk pesanan berikutnya.
+                      </span>
+                    </label>
+                  </div>
+
+                  {cancelDpSettlement === 'REFUND' && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 mb-1">
+                          Metode Refund
+                        </label>
+                        <select
+                          value={cancelRefundMethod}
+                          onChange={(e) =>
+                            setCancelRefundMethod(e.target.value as 'TRANSFER' | 'CASH' | 'OTHER')
+                          }
+                          className="w-full text-xs p-2 rounded-lg border border-slate-300 bg-white text-slate-800"
+                        >
+                          <option value="TRANSFER">Transfer Bank</option>
+                          <option value="CASH">Tunai (Cash)</option>
+                          <option value="OTHER">Lainnya</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 mb-1">
+                          No. Referensi Refund
+                        </label>
+                        <input
+                          type="text"
+                          value={cancelRefundReference}
+                          onChange={(e) => setCancelRefundReference(e.target.value)}
+                          placeholder="Opsional (mis: TRF-001)"
+                          className="w-full text-xs p-2 rounded-lg border border-slate-300 bg-white text-slate-800"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Alasan Pembatalan Resmi <span className="text-rose-500">*</span>
+                </label>
+                <textarea
+                  value={cancelReason}
+                  onChange={(e) => setCancelReason(e.target.value)}
+                  placeholder="Jelaskan alasan pembatalan pesanan (min. 5 karakter)..."
+                  rows={3}
+                  className="w-full text-xs p-2.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-rose-500 text-slate-800"
+                  required
+                />
+              </div>
+
+              {cancelError && (
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-700 flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>{cancelError}</span>
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowCancelModal(false);
+                    setCancelError(null);
+                  }}
+                  className="min-h-[44px] px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                >
+                  Tutup
+                </button>
+                <button
+                  type="submit"
+                  disabled={cancelling}
+                  className="min-h-[44px] px-4 py-2 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5 shadow-sm"
+                >
+                  {cancelling && <Loader2 className="w-4 h-4 animate-spin" />}
+                  <span>{cancelling ? 'Membatalkan...' : 'Konfirmasi Batalkan Pesanan'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Modal Ajukan Pesanan (Submit) */}
       {showSubmitModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
@@ -3242,12 +4062,19 @@ export default function OrderDetailPage() {
                     className="w-full text-xs p-2.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-800"
                   >
                     <option value="TRANSFER">Transfer Bank</option>
-                    <option value="CASH">Tunai (Cash)</option>
+                    {(isSuperAdmin || allowSalesCash) && (
+                      <option value="CASH">Tunai (Cash)</option>
+                    )}
                     {isSuperAdmin && (
                       <option value="CREDIT">Saldo Kredit Pelanggan</option>
                     )}
                     <option value="OTHER">Lainnya</option>
                   </select>
+                  {!isSuperAdmin && !allowSalesCash && (
+                    <span className="text-[11px] text-amber-700 mt-1 block">
+                      Pembayaran tunai oleh Sales dinonaktifkan oleh kebijakan usaha.
+                    </span>
+                  )}
                 </div>
 
                 <div>
@@ -3279,7 +4106,10 @@ export default function OrderDetailPage() {
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Unggah Bukti Transfer (Gambar / PDF, maks 5 MB)
+                  Unggah Bukti Transfer (Gambar / PDF, maks 5 MB){' '}
+                  {!isSuperAdmin && requireSalesProof && payMethod === 'TRANSFER' && (
+                    <span className="text-rose-600">* Wajib untuk Sales</span>
+                  )}
                 </label>
                 <input
                   type="file"
@@ -3870,21 +4700,82 @@ export default function OrderDetailPage() {
         </div>
       )}
 
-      {/* Modal Konfirmasi Kirim Barang (Ship Order) */}
+      {/* Modal Konfirmasi Kirim Barang (Ship Order / Kloter) */}
       {showShipModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white rounded-xl shadow-xl border border-slate-200 w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200 p-5 space-y-4">
+          <div className="bg-white rounded-xl shadow-xl border border-slate-200 w-full max-w-lg max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200 p-5 space-y-4">
             <div className="flex items-center gap-2 text-indigo-700">
               <Truck className="w-6 h-6 shrink-0" />
               <h3 className="font-semibold text-slate-800 text-base">
-                Kirim Pesanan & Terbitkan Surat Jalan
+                Kirim Pesanan &amp; Terbitkan Surat Jalan
               </h3>
             </div>
 
             <p className="text-xs sm:text-sm text-slate-600">
-              Apakah Anda yakin ingin memberangkatkan pesanan ini? Sistem akan mengalokasikan{' '}
-              <strong>Nomor Surat Jalan resmi</strong> dan <strong>memotong stok fisik gudang</strong> secara otomatis.
+              Sistem akan mengalokasikan <strong>Nomor Surat Jalan resmi</strong> dan{' '}
+              <strong>memotong stok fisik gudang</strong> hanya untuk kuantitas yang dikirim pada kloter ini.
             </p>
+
+            {!allowPartialShipment && (
+              <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-600">
+                Mode pengiriman penuh aktif (pengiriman parsial dinonaktifkan di pengaturan bisnis). Seluruh sisa qty akan dikirim sekaligus.
+              </div>
+            )}
+
+            <div className="border border-slate-200 rounded-lg overflow-x-auto">
+              <table className="w-full text-xs text-left">
+                <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
+                  <tr>
+                    <th className="p-2.5">Produk</th>
+                    <th className="p-2.5 text-center">Sisa</th>
+                    <th className="p-2.5 text-center w-28">Qty Dikirim</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {progressRows
+                    .filter((r) => r.remainingQty > 0)
+                    .map((row) => {
+                      const val = shipItemQtys[row.orderItemId] ?? row.remainingQty;
+                      return (
+                        <tr key={row.orderItemId}>
+                          <td className="p-2.5">
+                            <span className="font-semibold text-slate-800 block">
+                              {row.productName}
+                            </span>
+                            <span className="text-[11px] text-slate-400 font-mono">
+                              {row.sku}
+                            </span>
+                          </td>
+                          <td className="p-2.5 text-center text-slate-600">
+                            {row.remainingQty} {row.unit}
+                          </td>
+                          <td className="p-2.5 text-center">
+                            <input
+                              type="number"
+                              min={0}
+                              max={row.remainingQty}
+                              aria-label={`Qty dikirim ${row.productName}`}
+                              value={val}
+                              disabled={!allowPartialShipment}
+                              onChange={(e) => {
+                                const parsed = Math.max(
+                                  0,
+                                  Math.min(row.remainingQty, Math.floor(Number(e.target.value) || 0))
+                                );
+                                setShipItemQtys((prev) => ({
+                                  ...prev,
+                                  [row.orderItemId]: parsed,
+                                }));
+                              }}
+                              className="w-20 p-1.5 text-center border border-slate-300 rounded text-xs font-semibold disabled:bg-slate-100"
+                            />
+                          </td>
+                        </tr>
+                      );
+                    })}
+                </tbody>
+              </table>
+            </div>
 
             {shipOrderError && (
               <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-700 flex items-center gap-2">
@@ -3905,7 +4796,10 @@ export default function OrderDetailPage() {
               <button
                 type="button"
                 onClick={handleShipOrder}
-                disabled={shippingOrder}
+                disabled={
+                  shippingOrder ||
+                  Object.values(shipItemQtys).reduce((s, q) => s + q, 0) <= 0
+                }
                 className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition-colors shadow-sm"
               >
                 {shippingOrder ? 'Memproses Pengiriman...' : 'Konfirmasi Kirim'}
@@ -4101,7 +4995,8 @@ export default function OrderDetailPage() {
                       <tbody className="divide-y divide-slate-100">
                         {order.items?.map((item) => {
                           const alreadyReturned = getAlreadyReturnedQty(item.id);
-                          const returnable = Math.max(0, item.qty - alreadyReturned);
+                          const shippedLimit = getShippedQtyForItem(item.id, item.qty);
+                          const returnable = Math.max(0, shippedLimit - alreadyReturned);
                           const currentQty = cnItems[item.id]?.qty || 0;
                           const currentRestock = cnItems[item.id]?.restock ?? true;
 
@@ -4449,6 +5344,53 @@ export default function OrderDetailPage() {
                   ) : (
                     <span>Konfirmasi Bayar</span>
                   )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Tolak Revisi Pesanan (Fase 3 - Super Admin) */}
+      {rejectRevisionTarget && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-5 sm:p-6 shadow-xl space-y-4">
+            <h3 className="text-base font-bold text-slate-900">
+              Tolak Pengajuan Revisi #{rejectRevisionTarget.revisionNo}
+            </h3>
+            <form onSubmit={handleRejectRevision} className="space-y-4">
+              {revisionActionError && (
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-700">
+                  {revisionActionError}
+                </div>
+              )}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Alasan Penolakan (Min 5 karakter) *
+                </label>
+                <textarea
+                  rows={3}
+                  required
+                  value={revisionRejectReason}
+                  onChange={(e) => setRevisionRejectReason(e.target.value)}
+                  placeholder="Jelaskan alasan penolakan revisi..."
+                  className="w-full px-3 py-2 text-xs sm:text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500"
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setRejectRevisionTarget(null)}
+                  className="px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-lg"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={processingRevisionId === rejectRevisionTarget.id}
+                  className="px-4 py-2 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white text-xs font-semibold rounded-lg"
+                >
+                  Konfirmasi Tolak
                 </button>
               </div>
             </form>

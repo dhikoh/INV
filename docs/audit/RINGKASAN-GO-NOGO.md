@@ -5,7 +5,7 @@
 **Auditor**: Tim Audit Independen QA & Software Engineering  
 **Aplikasi**: OmniCat (Sistem Order, CRM & Invoice Multi-Usaha)  
 **Branch Kerja**: `main` (lanjutan `fix/pra-launching`)  
-**Basis Commit**: `83465c4` + pembaruan siap-rilis (Nota Kredit PDF, Standalone Fix, Sanitasi Env E2E)  
+**Basis Commit**: `3599cce` + implementasi Fase 1–5 (Anti-Fraud Proforma/Pembayaran, QR Verifikasi Publik & Kwitansi, Revisi `IN_PROCESS`, Pengiriman Parsial Multi-Kloter, Pembayaran Kolektif + Saldo Kredit & Riwayat Harga Bebas HPP)  
 
 ---
 
@@ -33,10 +33,10 @@ Seluruh **6 Blocker Utama (3 S1 Kritis & 3 S2 Tinggi)** yang sebelumnya memicu k
 
 Kesiapan peluncuran didukung oleh hasil eksekusi pengujian nyata (diperbarui pasca-audit final **12 November 2026** pada branch `main`):
 
-- **Pengujian Unit & Integrasi (Vitest)**: **95/95 berkas tes lulus, 801/801 pengujian lulus 100%** (termasuk `credit-note-pdf.test.ts`, `commission-tiers-ui.test.ts`, dan `rate-limit.test.ts`).
-- **Pengujian Resmi E2E (Playwright `playwright test`)**: **50/50 skenario peramban Chromium lulus 100%** (`core-business-flows`, `sales-journey`, dan `ui-crawler-and-routes` di viewport Desktop & Mobile `360px`).
-- **Audit Interaktif Bi-Direksional Browser (Staging Lokal)**: **0 temuan gagal** pada seluruh **12 rute Sales**, **22 rute Admin**, skenario Order/DP/Pelunasan/`TRANSPORT_VENDOR`/Nota Kredit PDF/`Void`/Komisi/Revisi/Katalog PDF/PO/CRM/DataTransfer Dry-Run/Export ZIP/`/tg/*`.
-- **Kompilasi Rilis Produksi (Next.js Standalone Build)**: **Sukses terkompilasi, 83 rute statis & dinamis** lengkap dengan sinkronisasi aset & biner `sharp` (`scripts/prepare-standalone.js`).
+- **Pengujian Unit & Integrasi (Vitest)**: **105/105 berkas tes lulus (54 unit + 51 integrasi), 850/850 pengujian lulus 100%** (mencakup seluruh suite Fase 1–5, `credit-note-pdf.test.ts`, `commission-tiers-ui.test.ts`, dan `rate-limit.test.ts`).
+- **Pengujian Resmi E2E (Playwright `playwright test`)**: **60/60 skenario peramban Chromium lulus 100%** (`core-business-flows`, `login-and-navigation`, `sales-journey`, `ui-crawler-and-routes`, serta `phase1-ui` s/d `phase5-ui` di viewport Desktop `1280px` & Mobile `360px`).
+- **Audit Interaktif Bi-Direksional Browser (Staging Lokal)**: **0 temuan gagal** pada seluruh **12 rute Sales**, **22 rute Admin**, skenario Order/DP/Pelunasan/`TRANSPORT_VENDOR`/Nota Kredit PDF/`Void`/Komisi/Revisi/Katalog PDF/PO/CRM/DataTransfer Dry-Run/Export ZIP/`/tg/*`, serta verifikasi publik `/verify/[token]`, revisi `/orders/[id]/revise`, pengiriman parsial multi-kloter, dan pembayaran kolektif + kredit.
+- **Kompilasi Rilis Produksi (Next.js Standalone Build)**: **Sukses terkompilasi, 84 rute statis & dinamis** lengkap dengan sinkronisasi aset & biner `sharp` (`scripts/prepare-standalone.js`).
 - **Analisis Tipe TypeScript**: **0 kesalahan (`tsc --noEmit` strict mode)**.
 - **Kepatuhan Linter ESLint**: **0 peringatan, 0 kesalahan**.
 - **Isolasi Tenant AST Checker**: **100% lulus (`tests/unit/no-unscoped-lookups.test.ts`)**.

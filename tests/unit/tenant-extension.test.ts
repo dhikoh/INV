@@ -9,7 +9,9 @@ describe('Prisma Multi-Tenant Extension Guard (T0.3)', () => {
     expect(TENANT_MODELS.has('Invoice')).toBe(true);
     expect(TENANT_MODELS.has('StockMovement')).toBe(true);
     expect(TENANT_MODELS.has('Reminder')).toBe(true);
-    expect(TENANT_MODELS.size).toBe(29);
+    expect(TENANT_MODELS.has('OrderRevision')).toBe(true);
+    expect(TENANT_MODELS.has('PaymentBatch')).toBe(true);
+    expect(TENANT_MODELS.size).toBe(31);
   });
 
   it('mendaftarkan semua operasi pencarian dan mutasi massal yang diawasi', () => {

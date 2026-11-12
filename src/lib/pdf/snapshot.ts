@@ -1,6 +1,8 @@
 import { InvoiceTheme, InvoiceType } from '@prisma/client';
 import { prisma } from '@/lib/db';
 import { DomainError } from '../domain/money';
+import { resolvePaymentLegalNotice } from '../domain/paymentPolicy';
+import { generateVerifyToken } from '../domain/verify';
 
 export type TxClient = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
 
@@ -14,8 +16,8 @@ export type TxClient = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
  */
 export interface InvoiceSnapshot {
   schemaVersion: 1;
-  number: string | null; // null hanya untuk pratinjau sebelum disetujui
-  type: 'DP' | 'FINAL';
+  number: string | null; // null untuk pratinjau atau proforma
+  type: 'DP' | 'FINAL' | 'PROFORMA';
   issueDate: string; // ISO string
   dueDate: string; // ISO string
   theme: 'PROFESIONAL' | 'FAMILY' | 'MINIMALIS' | 'MODERN' | 'KLASIK';
@@ -68,6 +70,9 @@ export interface InvoiceSnapshot {
     accountHolder: string;
   }[];
   note: string | null;
+  legalNotice?: string | null;
+  proformaApprovalPending?: boolean;
+  verifyToken?: string | null;
 }
 
 export interface BuildSnapshotOptions {
@@ -76,6 +81,130 @@ export interface BuildSnapshotOptions {
   issueDate?: Date;
   dueDate?: Date;
   theme?: InvoiceTheme;
+}
+
+function mapSnapshotFromEntities(params: {
+  number: string | null;
+  type: 'DP' | 'FINAL' | 'PROFORMA';
+  issueDate: string;
+  dueDate: string;
+  theme: InvoiceSnapshot['theme'];
+  business: {
+    name: string;
+    legalName: string | null;
+    address: string | null;
+    phone: string | null;
+    email: string | null;
+    npwp: string | null;
+    logoPath: string | null;
+    invoiceFooterNote: string | null;
+    paymentLegalNotice?: string | null;
+  };
+  order: {
+    deliveryAddress: string | null;
+    subtotal: bigint;
+    discountTotal: bigint;
+    shippingCharge: bigint;
+    ppnEnabled: boolean;
+    ppnRateBps: number;
+    ppnAmount: bigint;
+    grandTotal: bigint;
+    dpBps: number;
+    dpAmount: bigint;
+    customer: {
+      code: string;
+      name: string;
+      contactName: string | null;
+      address: string | null;
+      billingAddress: string | null;
+      shippingAddress: string | null;
+      npwp: string | null;
+    };
+    items: {
+      productName: string;
+      sku: string;
+      qty: number;
+      unit: string;
+      unitPrice: bigint;
+      lineDiscount: bigint;
+      lineNet: bigint;
+    }[];
+  };
+  amountDue: number;
+  dpInvoiceNumber: string | null;
+  dpPaid: number;
+  bankAccounts: {
+    bankName: string;
+    accountNumber: string;
+    accountHolder: string;
+  }[];
+  proformaApprovalPending?: boolean;
+  verifyToken?: string | null;
+}): InvoiceSnapshot {
+  const { order, business, bankAccounts } = params;
+  return {
+    schemaVersion: 1,
+    number: params.number,
+    type: params.type,
+    issueDate: params.issueDate,
+    dueDate: params.dueDate,
+    theme: params.theme,
+    business: {
+      name: business.name,
+      legalName: business.legalName,
+      address: business.address,
+      phone: business.phone,
+      email: business.email,
+      npwp: business.npwp,
+      logoPath: business.logoPath,
+    },
+    customer: {
+      code: order.customer.code,
+      name: order.customer.name,
+      contactName: order.customer.contactName,
+      billingAddress: order.customer.billingAddress || order.customer.address,
+      shippingAddress:
+        order.customer.shippingAddress ||
+        order.deliveryAddress ||
+        order.customer.address,
+      npwp: order.customer.npwp,
+    },
+    items: order.items.map((item, idx) => ({
+      no: idx + 1,
+      name: item.productName,
+      sku: item.sku,
+      qty: item.qty,
+      unit: item.unit,
+      unitPrice: Number(item.unitPrice),
+      lineDiscount: Number(item.lineDiscount),
+      lineNet: Number(item.lineNet),
+    })),
+    totals: {
+      subtotal: Number(order.subtotal),
+      discountTotal: Number(order.discountTotal),
+      shippingCharge: Number(order.shippingCharge),
+      ppnEnabled: order.ppnEnabled,
+      ppnRateBps: order.ppnRateBps,
+      ppnAmount: Number(order.ppnAmount),
+      grandTotal: Number(order.grandTotal),
+    },
+    billing: {
+      dpBps: order.dpBps,
+      dpAmount: Number(order.dpAmount),
+      amountDue: params.amountDue,
+      dpInvoiceNumber: params.dpInvoiceNumber,
+      dpPaid: params.dpPaid,
+    },
+    banks: bankAccounts.map((b) => ({
+      bankName: b.bankName,
+      accountNumber: b.accountNumber,
+      accountHolder: b.accountHolder,
+    })),
+    note: business.invoiceFooterNote ?? null,
+    legalNotice: resolvePaymentLegalNotice(business.paymentLegalNotice),
+    ...(params.proformaApprovalPending ? { proformaApprovalPending: true } : {}),
+    ...(params.verifyToken ? { verifyToken: params.verifyToken } : {}),
+  };
 }
 
 /**
@@ -168,66 +297,105 @@ export async function buildInvoiceSnapshot(
     dpPaid = Number(order.paidTotal);
   }
 
-  // Pemetaan baris produk (hanya field publik tanpa informasi harga modal/floor/rahasia)
-  const items = order.items.map((item, idx) => ({
-    no: idx + 1,
-    name: item.productName,
-    sku: item.sku,
-    qty: item.qty,
-    unit: item.unit,
-    unitPrice: Number(item.unitPrice),
-    lineDiscount: Number(item.lineDiscount),
-    lineNet: Number(item.lineNet),
-  }));
+  let invoiceVerifyToken = invoice.verifyToken ?? null;
+  if (!invoiceVerifyToken && typeof tx.invoice?.updateMany === 'function') {
+    invoiceVerifyToken = generateVerifyToken();
+    await tx.invoice.updateMany({
+      where: { id: invoice.id, businessId: invoice.businessId },
+      data: { verifyToken: invoiceVerifyToken },
+    });
+  }
 
-  const snapshot: InvoiceSnapshot = {
-    schemaVersion: 1,
+  return mapSnapshotFromEntities({
     number: finalNumber ?? null,
     type: invoice.type as 'DP' | 'FINAL',
     issueDate,
     dueDate,
     theme,
-    business: {
-      name: business.name,
-      legalName: business.legalName,
-      address: business.address,
-      phone: business.phone,
-      email: business.email,
-      npwp: business.npwp,
-      logoPath: business.logoPath,
-    },
-    customer: {
-      code: order.customer.code,
-      name: order.customer.name,
-      contactName: order.customer.contactName,
-      billingAddress: order.customer.billingAddress || order.customer.address,
-      shippingAddress: order.customer.shippingAddress || order.deliveryAddress || order.customer.address,
-      npwp: order.customer.npwp,
-    },
-    items,
-    totals: {
-      subtotal: Number(order.subtotal),
-      discountTotal: Number(order.discountTotal),
-      shippingCharge: Number(order.shippingCharge),
-      ppnEnabled: order.ppnEnabled,
-      ppnRateBps: order.ppnRateBps,
-      ppnAmount: Number(order.ppnAmount),
-      grandTotal: Number(order.grandTotal),
-    },
-    billing: {
-      dpBps: order.dpBps,
-      dpAmount: Number(order.dpAmount),
-      amountDue: Number(invoice.amount),
-      dpInvoiceNumber,
-      dpPaid,
-    },
-    banks: bankAccounts.map((b) => ({
-      bankName: b.bankName,
-      accountNumber: b.accountNumber,
-      accountHolder: b.accountHolder,
-    })),
-    note: business.invoiceFooterNote ?? null,
-  };
+    business,
+    order: { ...order, customer: order.customer },
+    amountDue: Number(invoice.amount),
+    dpInvoiceNumber,
+    dpPaid,
+    bankAccounts,
+    verifyToken: invoiceVerifyToken,
+  });
+}
 
-  return snapshot;
+/**
+ * Membangun snapshot Proforma Order PDF sebelum order disetujui.
+ * Bebas data rahasia internal dan mematuhi toggle `showBankOnProforma` usaha.
+ */
+export async function buildProformaSnapshot(
+  tx: TxClient,
+  orderId: string,
+  options: { businessId: string; theme?: InvoiceTheme }
+): Promise<InvoiceSnapshot> {
+  const [order, business, bankAccounts] = await Promise.all([
+    tx.order.findFirst({
+      where: { id: orderId, businessId: options.businessId, deletedAt: null },
+      include: {
+        customer: true,
+        items: {
+          orderBy: { sortOrder: 'asc' },
+        },
+      },
+    }),
+    tx.business.findUnique({
+      where: { id: options.businessId },
+    }),
+    tx.bankAccount.findMany({
+      where: { businessId: options.businessId, deletedAt: null },
+      orderBy: [{ isDefault: 'desc' }],
+    }),
+  ]);
+
+  if (!order || !order.customer) {
+    throw new DomainError(
+      'ORDER_NOT_FOUND',
+      'Pesanan atau data pelanggan tidak ditemukan',
+      404
+    );
+  }
+
+  if (!business) {
+    throw new DomainError('BUSINESS_NOT_FOUND', 'Data usaha tidak ditemukan', 404);
+  }
+
+  const now = new Date();
+  const issueDate = now.toISOString();
+  const dueDate = new Date(
+    now.getTime() + (business.dueDays ?? 7) * 24 * 60 * 60 * 1000
+  ).toISOString();
+  const theme = (options.theme ||
+    business.invoiceTheme ||
+    InvoiceTheme.PROFESIONAL) as InvoiceSnapshot['theme'];
+
+  const amountDue =
+    order.dpBps > 0 ? Number(order.dpAmount) : Number(order.grandTotal);
+
+  let orderVerifyToken = order.verifyToken ?? null;
+  if (!orderVerifyToken && typeof tx.order?.updateMany === 'function') {
+    orderVerifyToken = generateVerifyToken();
+    await tx.order.updateMany({
+      where: { id: order.id, businessId: options.businessId },
+      data: { verifyToken: orderVerifyToken },
+    });
+  }
+
+  return mapSnapshotFromEntities({
+    number: order.orderNo || `PROFORMA-${order.id.slice(-6).toUpperCase()}`,
+    type: 'PROFORMA',
+    issueDate,
+    dueDate,
+    theme,
+    business,
+    order: { ...order, customer: order.customer },
+    amountDue,
+    dpInvoiceNumber: null,
+    dpPaid: 0,
+    bankAccounts: business.showBankOnProforma ? bankAccounts : [],
+    proformaApprovalPending: order.hasBelowMin,
+    verifyToken: orderVerifyToken,
+  });
 }

@@ -25,6 +25,11 @@ import {
 } from 'lucide-react';
 import { Skeleton, EmptyState, ErrorState } from '@/components/ui/States';
 import { formatRupiah, formatPercentFromBps } from '@/lib/domain/money';
+import {
+  buildCrmTaskWaMessage,
+  buildRepeatReminderWaMessage,
+  buildWaUrl,
+} from '@/lib/domain/whatsapp';
 
 // Types for Super Admin Dashboard DTO
 interface SuperAdminSummary {
@@ -1008,7 +1013,16 @@ function SalesView({ data }: { data: SalesDashboardData }) {
                   <div className="flex items-center gap-2 shrink-0">
                     {rem.customerPhone && (
                       <a
-                        href={`https://wa.me/${rem.customerPhone.replace(/[^0-9]/g, '')}`}
+                        href={
+                          buildWaUrl(
+                            rem.customerPhone,
+                            buildRepeatReminderWaMessage({
+                              customerName: rem.customerName,
+                              intervalDays: rem.intervalDays,
+                              lastOrderDate: rem.lastOrderDate,
+                            })
+                          ) || '#'
+                        }
                         target="_blank"
                         rel="noreferrer"
                         className="p-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-lg text-xs font-semibold transition min-h-[44px] min-w-[44px] flex items-center justify-center border border-emerald-200"
@@ -1064,7 +1078,15 @@ function SalesView({ data }: { data: SalesDashboardData }) {
                     </div>
                     {task.customerPhone && (
                       <a
-                        href={`https://wa.me/${task.customerPhone.replace(/[^0-9]/g, '')}`}
+                        href={
+                          buildWaUrl(
+                            task.customerPhone,
+                            buildCrmTaskWaMessage({
+                              customerName: task.customerName,
+                              taskTitle: task.title,
+                            })
+                          ) || '#'
+                        }
                         target="_blank"
                         rel="noreferrer"
                         className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs transition min-h-[44px] min-w-[44px] flex items-center justify-center"

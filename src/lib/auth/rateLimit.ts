@@ -63,6 +63,7 @@ export async function recordLoginAttempt(
 export const GENERAL_RATE_LIMIT_PER_MINUTE = 120;
 export const UPLOAD_RATE_LIMIT_PER_MINUTE = 20;
 export const READ_RATE_LIMIT_PER_MINUTE = 600;
+export const PUBLIC_VERIFY_RATE_LIMIT_PER_MINUTE = 60;
 
 interface TokenBucket {
   tokens: number;
@@ -131,6 +132,17 @@ export function checkUserReadRateLimit(userId: string): void {
     `${userId}:read`,
     READ_RATE_LIMIT_PER_MINUTE,
     'Batas permintaan baca terlampaui (maksimal 600 per menit). Coba lagi beberapa saat lagi.'
+  );
+}
+
+/**
+ * Token bucket rate limiter untuk halaman & API verifikasi publik `/verify/[token]` per IP.
+ */
+export function checkPublicVerifyRateLimit(ip: string): void {
+  consumeTokenBucket(
+    `public_verify:${ip || 'unknown'}`,
+    PUBLIC_VERIFY_RATE_LIMIT_PER_MINUTE,
+    'Terlalu banyak permintaan verifikasi. Coba lagi sebentar lagi.'
   );
 }
 

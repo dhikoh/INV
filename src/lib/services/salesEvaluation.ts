@@ -466,9 +466,12 @@ export async function getSalesPerformanceReport(
     creditNoteMap.set(cn.orderId, list);
   }
 
-  const shipmentMap = new Map<string, (typeof shipments)[0]>();
+  const shipmentCostMap = new Map<string, number>();
   for (const sh of shipments) {
-    shipmentMap.set(sh.orderId, sh);
+    shipmentCostMap.set(
+      sh.orderId,
+      (shipmentCostMap.get(sh.orderId) ?? 0) + Number(sh.actualCost ?? 0)
+    );
   }
 
   const orderCostMap = new Map<string, typeof orderCosts>();
@@ -520,8 +523,7 @@ export async function getSalesPerformanceReport(
         creditExPpn: Number(cn.amountExPpn),
         cogsReversed: Number(cn.cogsReversed ?? 0),
       }));
-      const sh = shipmentMap.get(ord.id);
-      const actualCost = Number(sh?.actualCost ?? 0);
+      const actualCost = shipmentCostMap.get(ord.id) ?? 0;
       const extraCosts = (orderCostMap.get(ord.id) || []).map((c) => Number(c.amount));
 
       const profitRes = calcProfit({

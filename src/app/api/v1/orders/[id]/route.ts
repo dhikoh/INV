@@ -3,8 +3,10 @@ import { requireBusiness } from '@/lib/auth/context';
 import { prisma } from '@/lib/db';
 import { OrderUpdateSchema, OrderDeleteSchema } from '@/lib/validation/order';
 import { buildOrderSnapshot, formatOrderDto, formatInvoiceDto } from '@/lib/services/order';
+import { formatOrderRevisionDto } from '@/lib/services/revision';
+import { formatShipmentDto, listOrderShipments, TxClient } from '@/lib/services/shipment';
 import { formatRupiah, DomainError } from '@/lib/domain/money';
-import { OrderStatus, InvoiceStatus, Role } from '@prisma/client';
+import { OrderStatus, InvoiceStatus, PaymentStatus, Role } from '@prisma/client';
 import { reverseOrderCommission } from '@/lib/services/commission';
 
 /**
@@ -21,37 +23,37 @@ export const GET = withApi(
     roles: [Role.SUPERADMIN, Role.SALES],
   },
   async ({ ctx, params }) => {
-  const businessId = requireBusiness(ctx);
-  const { id } = params;
+    const businessId = requireBusiness(ctx);
+    const { id } = params;
 
-  const order = await prisma.order.findFirst({
-    where: {
-      id,
-      businessId,
-      deletedAt: null,
-    },
-    include: {
-      customer: {
-        select: { id: true, code: true, name: true },
+    const order = await prisma.order.findFirst({
+      where: {
+        id,
+        businessId,
+        deletedAt: null,
       },
-      items: {
-        orderBy: { sortOrder: 'asc' },
+      include: {
+        customer: {
+          select: { id: true, code: true, name: true },
+        },
+        items: {
+          orderBy: { sortOrder: 'asc' },
+        },
       },
-    },
-  });
+    });
 
-  if (!order) {
-    throw new DomainError('ORDER_NOT_FOUND', 'Order tidak ditemukan', 404);
-  }
+    if (!order) {
+      throw new DomainError('ORDER_NOT_FOUND', 'Order tidak ditemukan', 404);
+    }
 
-  // Isolasi hak akses Sales: Sales hanya melihat order miliknya sendiri
-  if (ctx.user.role === Role.SALES && order.salesId !== ctx.user.id) {
-    throw new DomainError('ORDER_NOT_FOUND', 'Order tidak ditemukan', 404);
-  }
+    // Isolasi hak akses Sales: Sales hanya melihat order miliknya sendiri
+    if (ctx.user.role === Role.SALES && order.salesId !== ctx.user.id) {
+      throw new DomainError('ORDER_NOT_FOUND', 'Order tidak ditemukan', 404);
+    }
 
-  // Ambil semua invoice untuk order ini
-  const allInvoices = typeof prisma.invoice?.findMany === 'function'
-    ? await prisma.invoice.findMany({
+    // Ambil semua invoice untuk order ini
+    const allInvoices = typeof prisma.invoice?.findMany === 'function'
+      ? await prisma.invoice.findMany({
         where: {
           orderId: order.id,
           businessId,
@@ -59,12 +61,12 @@ export const GET = withApi(
         },
         orderBy: [{ createdAt: 'asc' }],
       })
-    : [];
+      : [];
 
-  const pendingInvoice = allInvoices.find(
-    (inv) => inv.status === InvoiceStatus.PENDING_APPROVAL
-  ) ?? (typeof prisma.invoice?.findFirst === 'function'
-    ? await prisma.invoice.findFirst({
+    const pendingInvoice = allInvoices.find(
+      (inv) => inv.status === InvoiceStatus.PENDING_APPROVAL
+    ) ?? (typeof prisma.invoice?.findFirst === 'function'
+      ? await prisma.invoice.findFirst({
         where: {
           orderId: order.id,
           businessId,
@@ -73,17 +75,57 @@ export const GET = withApi(
         },
         orderBy: { requestedAt: 'desc' },
       })
-    : null);
+      : null);
 
-  return {
-    status: 200,
-    data: {
-      ...formatOrderDto(order, ctx.user.role),
-      pendingInvoice: pendingInvoice ? formatInvoiceDto(pendingInvoice) : null,
-      invoices: allInvoices.map(formatInvoiceDto),
-    },
-  };
-});
+    const businessRow = typeof prisma.business?.findFirst === 'function'
+      ? await prisma.business.findFirst({
+        where: { id: businessId },
+        select: {
+          showBankOnProforma: true,
+          allowSalesCashPayment: true,
+          requireTransferProofForSales: true,
+          allowPartialShipment: true,
+          allowShipBeforeFinalInvoice: true,
+          requirePaidBeforeShip: true,
+        },
+      })
+      : null;
+
+    const revisions = typeof prisma.orderRevision?.findMany === 'function'
+      ? await prisma.orderRevision.findMany({
+        where: { businessId, orderId: order.id },
+        include: { items: { orderBy: { sortOrder: 'asc' } } },
+        orderBy: { revisionNo: 'desc' },
+      })
+      : [];
+
+    const shipmentInfo = typeof prisma.shipment?.findMany === 'function'
+      ? await listOrderShipments(prisma as unknown as TxClient, ctx, order.id)
+      : { primary: null, shipments: [], itemProgress: [] };
+
+    // Keep formatShipmentDto referenced cleanly even when mock omits shipment.findMany
+    void formatShipmentDto;
+
+    return {
+      status: 200,
+      data: {
+        ...formatOrderDto(order, ctx.user.role),
+        pendingInvoice: pendingInvoice ? formatInvoiceDto(pendingInvoice) : null,
+        invoices: allInvoices.map(formatInvoiceDto),
+        revisions: revisions.map((r) => formatOrderRevisionDto(r, ctx.user.role)),
+        shipments: shipmentInfo.shipments,
+        shipmentProgress: shipmentInfo.itemProgress,
+        businessPolicy: {
+          showBankOnProforma: businessRow?.showBankOnProforma ?? false,
+          allowSalesCashPayment: businessRow?.allowSalesCashPayment ?? false,
+          requireTransferProofForSales: businessRow?.requireTransferProofForSales ?? true,
+          allowPartialShipment: businessRow?.allowPartialShipment ?? false,
+          allowShipBeforeFinalInvoice: businessRow?.allowShipBeforeFinalInvoice ?? false,
+          requirePaidBeforeShip: businessRow?.requirePaidBeforeShip ?? false,
+        },
+      },
+    };
+  });
 
 /**
  * PATCH /api/v1/orders/:id
@@ -259,6 +301,58 @@ export const DELETE = withApi(
 
     if (!existing) {
       throw new DomainError('ORDER_NOT_FOUND', 'Order tidak ditemukan', 404);
+    }
+
+    // Hanya draf / revisi yang belum memiliki faktur disetujui, pembayaran terverifikasi, atau reservasi stok yang boleh dihapus sebagai draf.
+    if (
+      existing.status !== OrderStatus.DRAFT &&
+      existing.status !== OrderStatus.REVISION_REQUIRED
+    ) {
+      throw new DomainError(
+        'INVALID_STATE',
+        'Hanya draf atau pesanan revisi yang dapat dihapus. Gunakan fitur Batalkan Pesanan untuk membatalkan pesanan aktif secara resmi.',
+        409
+      );
+    }
+
+    if (existing.stockReserved === true) {
+      throw new DomainError(
+        'INVALID_STATE',
+        'Pesanan masih memiliki reservasi stok aktif. Gunakan fitur Batalkan Pesanan resmi.',
+        409
+      );
+    }
+
+    const [approvedInv, verifiedPay] = await Promise.all([
+      typeof prisma.invoice?.findFirst === 'function'
+        ? prisma.invoice.findFirst({
+          where: {
+            orderId: existing.id,
+            businessId,
+            status: InvoiceStatus.APPROVED,
+            deletedAt: null,
+          },
+          select: { id: true },
+        })
+        : Promise.resolve(null),
+      typeof prisma.payment?.findFirst === 'function'
+        ? prisma.payment.findFirst({
+          where: {
+            orderId: existing.id,
+            businessId,
+            status: PaymentStatus.VERIFIED,
+          },
+          select: { id: true },
+        })
+        : Promise.resolve(null),
+    ]);
+
+    if (approvedInv || verifiedPay) {
+      throw new DomainError(
+        'INVALID_STATE',
+        'Pesanan sudah memiliki faktur resmi atau pembayaran terverifikasi. Gunakan fitur Batalkan Pesanan resmi.',
+        409
+      );
     }
 
     // Validasi konfirmasi ketik ulang nomor dokumen (atau id bila belum memiliki orderNo)

@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import {
   Printer,
+  MessageSquare,
   ArrowLeft,
   CheckCircle2,
   XCircle,
@@ -18,6 +19,7 @@ import {
 import { Skeleton, ErrorState } from '@/components/ui/States';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { formatRupiah, formatPercentFromBps } from '@/lib/domain/money';
+import { buildInvoiceWaMessage, buildWaShareUrl } from '@/lib/domain/whatsapp';
 
 interface InvoiceDetailResponse {
   id: string;
@@ -35,6 +37,7 @@ interface InvoiceDetailResponse {
   rejectedAt: string | null;
   rejectionReason: string | null;
   voidReason: string | null;
+  verifyToken?: string | null;
   overrideNote: string | null;
   createdAt: string;
   updatedAt: string;
@@ -93,6 +96,17 @@ interface InvoiceDetailResponse {
     accountNumber: string;
     accountHolder: string;
     isDefault: boolean;
+  }>;
+  payments?: Array<{
+    id: string;
+    invoiceId: string | null;
+    receiptNo: string | null;
+    verifyToken: string | null;
+    method: string;
+    status: string;
+    amount: number;
+    paidAt: string;
+    reference: string | null;
   }>;
   profitSimulation: {
     goodsRevenue: number;
@@ -291,18 +305,54 @@ export default function InvoiceDetailPage() {
         </div>
 
         {/* Tombol Aksi Header */}
-        <div className="flex items-center gap-2">
-          {/* Tombol Cetak PDF */}
-          {isApproved ? (
-            <a
-              href={`/api/v1/invoices/${data.id}/pdf`}
+        <div className="flex flex-wrap items-center gap-2">
+          {data.verifyToken && (
+            <Link
+              href={`/verify/${data.verifyToken}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold min-h-[44px] flex items-center gap-1.5 shadow-sm transition-colors"
+              className="px-3.5 py-2 border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 rounded-lg text-sm font-semibold min-h-[44px] flex items-center gap-1.5 transition-colors"
             >
-              <Printer className="w-4 h-4" />
-              <span>Cetak PDF Faktur</span>
-            </a>
+              <ExternalLink className="w-4 h-4" />
+              <span>Link Verifikasi QR</span>
+            </Link>
+          )}
+
+          {/* Tombol Cetak PDF */}
+          {isApproved ? (
+            <>
+              <a
+                href={`/api/v1/invoices/${data.id}/pdf`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold min-h-[44px] flex items-center gap-1.5 shadow-sm transition-colors"
+              >
+                <Printer className="w-4 h-4" />
+                <span>Cetak PDF Faktur</span>
+              </a>
+              <a
+                href={buildWaShareUrl(
+                  buildInvoiceWaMessage({
+                    customerName: data.customer.name,
+                    invoiceNumber: data.invoiceNo || data.id,
+                    type: data.type,
+                    remainingAmount: Math.max(0, data.amount - data.paidAmount),
+                    grandTotal: data.order?.grandTotal ?? data.amount,
+                    verifyUrl:
+                      typeof window !== 'undefined' && data.verifyToken
+                        ? `${window.location.origin}/verify/${data.verifyToken}`
+                        : null,
+                  }),
+                  data.customer?.phone
+                )}
+                target="_blank"
+                rel="noreferrer"
+                className="px-4 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg text-sm font-semibold min-h-[44px] flex items-center gap-1.5 transition-colors"
+              >
+                <MessageSquare className="w-4 h-4" />
+                <span>Kirim via WhatsApp</span>
+              </a>
+            </>
           ) : (
             <button
               type="button"
@@ -679,6 +729,57 @@ export default function InvoiceDetailPage() {
               </div>
             </div>
           </div>
+
+          {/* Riwayat Pembayaran & Kwitansi Resmi */}
+          {data.payments && data.payments.length > 0 && (
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 sm:p-5 space-y-3">
+              <h3 className="font-bold text-slate-900 text-sm pb-2 border-b border-slate-100">
+                Riwayat Pembayaran & Kwitansi
+              </h3>
+              <div className="space-y-2.5">
+                {data.payments.map((p) => (
+                  <div
+                    key={p.id}
+                    className="p-3 rounded-lg bg-slate-50 border border-slate-200 space-y-2 text-xs"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-bold text-slate-900">
+                        {formatRupiah(p.amount)}
+                      </span>
+                      <StatusBadge status={p.status} />
+                    </div>
+                    <div className="text-slate-500 flex flex-wrap items-center gap-2">
+                      <span>{p.method}</span>
+                      <span>•</span>
+                      <span>
+                        {new Date(p.paidAt).toLocaleDateString('id-ID', {
+                          day: 'numeric',
+                          month: 'short',
+                          year: 'numeric',
+                        })}
+                      </span>
+                    </div>
+                    {p.receiptNo && (
+                      <div className="font-mono text-[11px] font-semibold text-emerald-700">
+                        {p.receiptNo}
+                      </div>
+                    )}
+                    {p.status === 'VERIFIED' && (
+                      <a
+                        href={`/api/v1/payments/${p.id}/receipt/pdf`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 text-xs font-semibold transition-colors"
+                      >
+                        <Printer className="w-3.5 h-3.5" />
+                        <span>Cetak Kwitansi</span>
+                      </a>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Panel Khusus Super Admin: Profit */}
           {data.profitSimulation && (

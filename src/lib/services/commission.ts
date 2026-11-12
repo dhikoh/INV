@@ -16,6 +16,7 @@ import {
   pickTierRate,
 } from '@/lib/domain/commission';
 import { wibParts } from '@/lib/domain/numbering';
+import { fetchOrderShipments } from './shipmentSummary';
 
 export type TxClient = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
 
@@ -54,7 +55,7 @@ export async function calculateOrderProfitData(
   orderId: string,
   businessId: string
 ) {
-  const [order, items, creditNotes, shipment, orderCosts] = await Promise.all([
+  const [order, items, creditNotes, shipments, orderCosts] = await Promise.all([
     tx.order.findFirstOrThrow({
       where: { id: orderId, businessId, deletedAt: null },
     }),
@@ -65,14 +66,17 @@ export async function calculateOrderProfitData(
     tx.creditNote.findMany({
       where: { orderId, businessId, voidedAt: null },
     }),
-    tx.shipment.findFirst({
-      where: { orderId, businessId },
-    }),
+    fetchOrderShipments(tx, businessId, orderId),
     tx.orderCost.findMany({
       where: { orderId, businessId },
       orderBy: { createdAt: 'asc' },
     }),
   ]);
+
+  const totalShippingActualCost = shipments.reduce(
+    (sum, s) => sum + Number(s.actualCost ?? 0),
+    0
+  );
 
   const profitInput = {
     items: items.map((i) => ({
@@ -87,7 +91,7 @@ export async function calculateOrderProfitData(
       cogsReversed: Number(cn.cogsReversed ?? 0),
     })),
     shippingCharge: Number(order.shippingCharge),
-    shippingActualCost: Number(shipment?.actualCost ?? 0),
+    shippingActualCost: totalShippingActualCost,
     extraCosts: orderCosts.map((c) => Number(c.amount)),
   };
 
@@ -97,7 +101,8 @@ export async function calculateOrderProfitData(
     order,
     items,
     creditNotes,
-    shipment,
+    shipment: shipments[0] ?? null,
+    shipments,
     orderCosts,
     profitResult,
   };

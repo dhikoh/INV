@@ -4,6 +4,7 @@ import { prisma } from '@/lib/db';
 import { OrderCreateSchema } from '@/lib/validation/order';
 import { buildOrderSnapshot, formatOrderDto } from '@/lib/services/order';
 import { formatRupiah } from '@/lib/domain/money';
+import { generateVerifyToken } from '@/lib/domain/verify';
 import { OrderStatus, Prisma, Role } from '@prisma/client';
 
 /**
@@ -180,6 +181,7 @@ export const POST = withApi(
           dpAmount: BigInt(snapshot.totals.dpAmount),
           hasBelowMin: snapshot.hasBelowMin,
           belowMinReason: body.belowMinReason ?? null,
+          verifyToken: generateVerifyToken(),
           items: {
             create: snapshot.lines.map((l) => ({
               businessId,

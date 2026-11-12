@@ -10,10 +10,25 @@ import {
 } from '@/lib/services/payment';
 import { PaymentMethod, PaymentStatus, Role } from '@prisma/client';
 
+export interface PendingBatchAllocationView {
+  invoiceId: string;
+  invoiceNumber: string;
+  orderId: string;
+  orderNo: string | null;
+  amount: number;
+}
+
 export interface PendingPaymentQueueItem extends PaymentDto {
   orderNo: string | null;
   customerName: string;
   salesName: string;
+  isBatch?: boolean;
+  batchId?: string | null;
+  batchTotalPaid?: number;
+  batchAllocatedTotal?: number;
+  batchCreditAmount?: number;
+  batchCreditOption?: boolean;
+  allocations?: PendingBatchAllocationView[];
 }
 
 /**
@@ -37,9 +52,37 @@ export const GET = withApi(
       orderBy: { createdAt: 'asc' },
     });
 
+    const batchIds = Array.from(
+      new Set(
+        pendingPayments
+          .map((p) => (p as { batchId?: string | null }).batchId)
+          .filter((id): id is string => Boolean(id))
+      )
+    );
+
+    const batches =
+      batchIds.length > 0 &&
+        typeof (prisma as { paymentBatch?: { findMany?: unknown } }).paymentBatch
+          ?.findMany === 'function'
+        ? await prisma.paymentBatch.findMany({
+          where: { id: { in: batchIds }, businessId },
+          include: { allocations: true },
+        })
+        : [];
+    const batchMap = new Map(batches.map((b) => [b.id, b]));
+
     const results: PendingPaymentQueueItem[] = [];
+    const seenBatchIds = new Set<string>();
 
     for (const p of pendingPayments) {
+      const pBatchId = (p as { batchId?: string | null }).batchId ?? null;
+      if (pBatchId && seenBatchIds.has(pBatchId)) {
+        continue;
+      }
+      if (pBatchId) {
+        seenBatchIds.add(pBatchId);
+      }
+
       const order = await prisma.order.findFirst({
         where: { id: p.orderId, businessId, deletedAt: null },
         select: {
@@ -66,12 +109,58 @@ export const GET = withApi(
         if (sales) salesName = sales.name;
       }
 
-      results.push({
-        ...formatPaymentDto(p),
-        orderNo: order ? order.orderNo : null,
-        customerName,
-        salesName,
-      });
+      const batch = pBatchId ? batchMap.get(pBatchId) : undefined;
+      if (batch) {
+        const batchInvoiceIds = batch.allocations.map((a) => a.invoiceId);
+        const batchOrderIds = Array.from(
+          new Set(batch.allocations.map((a) => a.orderId))
+        );
+        const [batchInvoices, batchOrders] = await Promise.all([
+          batchInvoiceIds.length > 0
+            ? prisma.invoice.findMany({
+              where: { businessId, id: { in: batchInvoiceIds }, deletedAt: null },
+              select: { id: true, number: true },
+            })
+            : [],
+          batchOrderIds.length > 0
+            ? prisma.order.findMany({
+              where: { businessId, id: { in: batchOrderIds }, deletedAt: null },
+              select: { id: true, orderNo: true },
+            })
+            : [],
+        ]);
+        const invNumMap = new Map(batchInvoices.map((i) => [i.id, i.number]));
+        const ordNoMap = new Map(batchOrders.map((o) => [o.id, o.orderNo]));
+
+        results.push({
+          ...formatPaymentDto(p),
+          amount: Number(batch.totalPaid),
+          orderNo: `${batch.allocations.length} Faktur Kolektif`,
+          customerName,
+          salesName,
+          isBatch: true,
+          batchId: batch.id,
+          batchTotalPaid: Number(batch.totalPaid),
+          batchAllocatedTotal: Number(batch.allocatedTotal),
+          batchCreditAmount: Number(batch.creditAmount),
+          batchCreditOption: batch.creditOption,
+          allocations: batch.allocations.map((a) => ({
+            invoiceId: a.invoiceId,
+            invoiceNumber: invNumMap.get(a.invoiceId) ?? a.invoiceId,
+            orderId: a.orderId,
+            orderNo: ordNoMap.get(a.orderId) ?? null,
+            amount: Number(a.amount),
+          })),
+        });
+      } else {
+        results.push({
+          ...formatPaymentDto(p),
+          orderNo: order ? order.orderNo : null,
+          customerName,
+          salesName,
+          isBatch: false,
+        });
+      }
     }
 
     return {

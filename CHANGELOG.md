@@ -8,6 +8,24 @@ dan proyek ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- **Fase 1–5 Peningkatan Anti-Fraud, Verifikasi QR Publik, Revisi `IN_PROCESS`, Pengiriman Parsial Multi-Kloter, & Pembayaran Kolektif**:
+  - **Fase 1 — Proforma Non-Faktur, Pembatalan Resmi Ber-DP, & Kebijakan Pembayaran Sales (`20261112000004_phase1_proforma_antifraud`)**:
+    - Menambahkan endpoint & cetak PDF **Proforma Order** (`GET /api/v1/orders/:id/proforma/pdf`) yang tidak memajukan `DocumentCounter`, menyembunyikan rekening bank secara default (`showBankOnProforma = false`), dan menampilkan disclaimer hukum (`paymentLegalNotice`, template bawaan dapat diubah Super Admin).
+    - Menambahkan penegakan kebijakan pembayaran Sales (`allowSalesCashPayment`, `requireTransferProofForSales`) pada pembuatan pembayaran (`src/lib/services/payment.ts`), menjaga `DELETE /api/v1/orders/:id` hanya untuk draf bersih, dan menambahkan pembatalan resmi `POST /api/v1/orders/:id/cancel` lengkap dengan penyelesaian DP (`REFUND` / `CUSTOMER_CREDIT`), void faktur, lepas reservasi stok, pembalikan komisi, dan rebuild pengingat.
+    - Menambahkan kartu Kebijakan Proforma, Pembayaran Sales, & Pengiriman di `/settings/business` serta tombol Cetak Proforma PDF, Kirim WA, dan Pembatalan Resmi di `/orders/:id`.
+  - **Fase 2 — Verifikasi QR Publik (`/verify/:token`) & Kwitansi Pembayaran Resmi (`20261112000005_phase2_qr_verify_receipt`)**:
+    - Menambahkan kolom `verifyToken` & `receiptNo` (`RECEIPT_SEQ` format `KODE/KWT/DD/MM/YYYY/NNNN`), layanan `src/lib/services/verify.ts`, endpoint publik `GET /api/v1/public/verify/:token` (terlindungi rate limit IP & penyamaran PII via `src/lib/domain/verify.ts`), dan halaman publik `/verify/:token`.
+    - Menambahkan generator PDF Kwitansi Resmi (`src/lib/pdf/ReceiptDocument.tsx`, `GET /api/v1/payments/:id/receipt/pdf`) khusus pembayaran berstatus `VERIFIED` serta penyematan QR verifikasi pada Faktur & Kwitansi.
+  - **Fase 3 — Alur Revisi Pesanan `IN_PROCESS` Berpersetujuan (`20261112000006_phase3_order_revision`)**:
+    - Menambahkan model `OrderRevision` & `OrderRevisionItem`, layanan `src/lib/services/revision.ts`, endpoint `GET/POST /api/v1/orders/:id/revisions`, `POST /api/v1/order-revisions/:id/approve`, dan `POST /api/v1/order-revisions/:id/reject`, serta halaman `/orders/:id/revise`.
+    - Melindungi DP terbayar (`TOTAL_BELOW_PAID`), menyesuaikan delta `reservedQty` produk, mengunci pengajuan pelunasan saat ada revisi pending (`REVISION_PENDING`), dan menolak penurunan qty di bawah qty terkirim (`ITEM_ALREADY_SHIPPED`).
+  - **Fase 4 — Pengiriman Parsial Multi-Kloter (`20261112000007_phase4_partial_shipment`)**:
+    - Menambahkan toggle `allowPartialShipment` (default `false`), model `ShipmentItem`, dan kolom `kloterNo` untuk pengiriman bertahap per kloter di `src/lib/services/shipment.ts` & `src/lib/services/shipmentSummary.ts`.
+    - Menyesuaikan Surat Jalan PDF (`delivery-note/pdf`) dengan badge kloter & catatan item belum terkirim serta memperbarui UI `/orders/:id`.
+  - **Fase 5 — Pembayaran Kolektif Multi-Faktur, Kredit Kelebihan, & Riwayat Harga Bebas HPP (`20261112000008_phase5_collective_payments`)**:
+    - Menambahkan model `PaymentBatch` & `PaymentAllocation`, endpoint `GET/POST /api/v1/payments/collective`, verifikasi/penolakan/void kolektif 1-klik per batch di `/payments`, dan opsi pencatatan kelebihan bayar menjadi `CustomerCreditEntry`.
+    - Menambahkan endpoint & komponen riwayat harga transaksi pelanggan bebas HPP (`GET /api/v1/customers/:id/transaction-prices`, `src/lib/services/customerPricingHistory.ts`) pada `/customers/:id` & `/orders/new`, utilitas WhatsApp pre-filled (`src/lib/domain/whatsapp.ts`), penyelarasan `TABLES` backup registry (`src/lib/transfer/registry.ts`), serta suite pengujian unit, integrasi, dan E2E Fase 1–5.
+
 - **Cetak & Token Unduh PDF Nota Kredit (`CREDIT_NOTE_PDF`) & Akses Cepat Sales Mobile**:
   - Menambahkan endpoint resmi `GET /api/v1/credit-notes/:id/pdf` beserta generator JSX (`src/lib/pdf/CreditNoteDocument.tsx`, `src/lib/pdf/creditNotePdf.ts`), dukungan token unduh bertanda tangan `/api/v1/downloads` -> `/api/v1/dl/[token]` untuk tipe `CREDIT_NOTE_PDF`, watermark pembatalan (`VOID`), dan tombol `"Cetak PDF"` di halaman detail pesanan `src/app/(app)/orders/[id]/page.tsx` dengan isolasi peran serta zero-leakage HPP (`cogsReversed` dirahasiakan dari Sales).
   - Menambahkan kartu `"Akses Cepat Menu Sales"` pada `src/app/(app)/profile/page.tsx` untuk mempermudah akses cepat menu operasional Sales pada perangkat mobile/tablet.

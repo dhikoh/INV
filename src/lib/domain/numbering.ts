@@ -14,7 +14,7 @@ export function wibParts(d: Date) {
 
 export function formatDocNumber(a: {
   code: string;
-  kind: 'INV' | 'PO' | 'CN' | 'SJ';
+  kind: 'INV' | 'PO' | 'CN' | 'SJ' | 'KWT';
   date: Date;
   seq: number;
 }): string {
@@ -78,6 +78,19 @@ export function purchaseOrderNumber(
   return formatDocNumber({
     code: vendorCode,
     kind: 'PO',
+    date,
+    seq,
+  });
+}
+
+export function receiptNumber(
+  customerCode: string,
+  date: Date,
+  seq: number
+): string {
+  return formatDocNumber({
+    code: customerCode,
+    kind: 'KWT',
     date,
     seq,
   });

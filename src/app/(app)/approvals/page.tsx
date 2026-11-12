@@ -66,11 +66,38 @@ interface ApprovalItem {
   }>;
 }
 
+interface ApprovalRevisionItem {
+  id: string;
+  orderId: string;
+  orderNo: string | null;
+  revisionNo: number;
+  status: string;
+  reason: string;
+  oldGrandTotal: number;
+  newGrandTotal: number;
+  deltaGrandTotal: number;
+  hasBelowMin: boolean;
+  belowMinReason: string | null;
+  requestedAt: string;
+  customer?: {
+    id: string;
+    code: string;
+    name: string;
+  };
+  sales?: {
+    id: string;
+    name: string;
+    username: string;
+  } | null;
+}
+
 interface ApprovalsResponse {
   items: ApprovalItem[];
+  revisions?: ApprovalRevisionItem[];
   summary: {
     totalPending: number;
     totalBelowMin: number;
+    totalPendingRevisions?: number;
   };
   pagination: {
     total: number;
@@ -255,7 +282,7 @@ export default function ApprovalsPage() {
           message={error}
           onRetry={fetchApprovals}
         />
-      ) : !data || data.items.length === 0 ? (
+      ) : !data || (data.items.length === 0 && (!data.revisions || data.revisions.length === 0)) ? (
         <EmptyState
           title="Tidak Ada Antrean Persetujuan"
           description={
@@ -266,6 +293,68 @@ export default function ApprovalsPage() {
         />
       ) : (
         <div className="space-y-4">
+          {/* Antrean Revisi Pesanan Berjalan (Fase 3) */}
+          {data.revisions && data.revisions.length > 0 && (
+            <div className="space-y-3">
+              <h2 className="text-sm font-bold uppercase tracking-wider text-indigo-800 flex items-center gap-2">
+                <span>Pengajuan Revisi Pesanan ({data.revisions.length})</span>
+              </h2>
+              {data.revisions.map((revItem) => (
+                <div
+                  key={revItem.id}
+                  className="bg-indigo-50/40 rounded-xl border border-indigo-200 p-4 sm:p-5 shadow-sm space-y-3"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-mono text-xs font-bold bg-indigo-100 text-indigo-900 px-2 py-0.5 rounded">
+                          {revItem.orderNo || `ORD #${revItem.orderId.slice(-6)}`} • Revisi #{revItem.revisionNo}
+                        </span>
+                        <StatusBadge status={revItem.status} />
+                        {revItem.hasBelowMin && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                            <AlertTriangle className="w-3 h-3 text-amber-600" />
+                            <span>Di Bawah Floor</span>
+                          </span>
+                        )}
+                      </div>
+                      <h3 className="font-bold text-slate-900 text-base mt-1.5">
+                        {revItem.customer?.name} ({revItem.customer?.code})
+                      </h3>
+                      <p className="text-xs text-slate-600 mt-0.5">
+                        Diajukan oleh <strong>{revItem.sales?.name || 'Sales'}</strong> • Alasan: {revItem.reason}
+                      </p>
+                    </div>
+                    <Link
+                      href={`/orders/${revItem.orderId}`}
+                      className="min-h-[44px] px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-semibold flex items-center gap-1.5 shadow-sm transition-colors shrink-0"
+                    >
+                      <span>Tinjau & Putuskan Revisi</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </Link>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3 pt-2 border-t border-indigo-100 text-xs">
+                    <div>
+                      <div className="text-slate-500">Total Lama</div>
+                      <div className="font-mono font-semibold text-slate-800">{formatRupiah(revItem.oldGrandTotal)}</div>
+                    </div>
+                    <div>
+                      <div className="text-slate-500">Total Baru</div>
+                      <div className="font-mono font-bold text-indigo-700">{formatRupiah(revItem.newGrandTotal)}</div>
+                    </div>
+                    <div>
+                      <div className="text-slate-500">Selisih</div>
+                      <div className={`font-mono font-bold ${revItem.deltaGrandTotal >= 0 ? 'text-emerald-700' : 'text-amber-700'}`}>
+                        {revItem.deltaGrandTotal >= 0 ? '+' : ''}
+                        {formatRupiah(revItem.deltaGrandTotal)}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
           {data.items.map((item) => {
             const hasBelowMin = item.hasBelowMin;
             return (

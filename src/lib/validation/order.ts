@@ -63,10 +63,60 @@ export const OrderRequestFinalSchema = z
   .strict()
   .optional();
 
+export const OrderCancelSchema = z
+  .object({
+    reason: z
+      .string()
+      .trim()
+      .min(5, 'Alasan pembatalan wajib diisi minimal 5 karakter')
+      .max(1000),
+    dpSettlement: z.enum(['REFUND', 'CUSTOMER_CREDIT']).optional(),
+    refundMethod: z.enum(['TRANSFER', 'CASH', 'OTHER']).optional(),
+    refundReference: z.string().trim().max(150).optional(),
+    rev: z.number().int().min(0).optional(),
+  })
+  .strict();
+
+export const OrderRevisionCreateSchema = z
+  .object({
+    rev: z.number().int().min(0),
+    reason: z
+      .string()
+      .trim()
+      .min(5, 'Alasan revisi pesanan minimal 5 karakter')
+      .max(1000),
+    items: z.array(OrderLineSchema).min(1).max(200),
+    shippingCharge: z.number().int().min(0).default(0),
+    deliveryAddress: z.string().max(1000).optional(),
+    belowMinReason: z.string().trim().min(5).max(1000).optional(),
+  })
+  .strict();
+
+export const OrderRevisionApproveSchema = z
+  .object({
+    overrideNote: z.string().trim().max(1000).optional(),
+  })
+  .strict()
+  .optional();
+
+export const OrderRevisionRejectSchema = z
+  .object({
+    reason: z
+      .string()
+      .trim()
+      .min(5, 'Alasan penolakan revisi wajib minimal 5 karakter')
+      .max(1000),
+  })
+  .strict();
+
 export type OrderLineInput = z.infer<typeof OrderLineSchema>;
 export type OrderCreateInput = z.infer<typeof OrderCreateSchema>;
 export type OrderUpdateInput = z.infer<typeof OrderUpdateSchema>;
 export type OrderDeleteInput = z.infer<typeof OrderDeleteSchema>;
 export type OrderSubmitInput = z.infer<typeof OrderSubmitSchema>;
 export type OrderRequestFinalInput = z.infer<typeof OrderRequestFinalSchema>;
+export type OrderCancelInput = z.infer<typeof OrderCancelSchema>;
+export type OrderRevisionCreateInput = z.infer<typeof OrderRevisionCreateSchema>;
+export type OrderRevisionApproveInput = z.infer<typeof OrderRevisionApproveSchema>;
+export type OrderRevisionRejectInput = z.infer<typeof OrderRevisionRejectSchema>;
 

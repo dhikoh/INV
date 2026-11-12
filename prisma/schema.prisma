@@ -81,6 +81,12 @@ enum OrderStatus {
   CANCELLED
 }
 
+enum OrderRevisionStatus {
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+}
+
 enum InvoiceType {
   DP
   FINAL
@@ -178,12 +184,18 @@ model Business {
   email                 String?
   npwp                  String?
   logoPath              String?
-  invoiceTheme          InvoiceTheme      @default(PROFESIONAL)
-  invoiceFooterNote     String?           @db.Text
-  ppnEnabled            Boolean           @default(false)
+  invoiceTheme                InvoiceTheme      @default(PROFESIONAL)
+  invoiceFooterNote           String?           @db.Text
+  showBankOnProforma          Boolean           @default(false)
+  paymentLegalNotice          String?           @db.Text
+  allowSalesCashPayment       Boolean           @default(false)
+  requireTransferProofForSales Boolean          @default(true)
+  ppnEnabled                  Boolean           @default(false)
   ppnRateBps            Int               @default(1100)
-  allowNegativeStock    Boolean           @default(false)
-  requirePaidBeforeShip Boolean           @default(false)
+  allowNegativeStock         Boolean           @default(false)
+  requirePaidBeforeShip      Boolean           @default(false)
+  allowPartialShipment       Boolean           @default(false)
+  allowShipBeforeFinalInvoice Boolean          @default(false)
   defaultDpBps          Int               @default(5000) // 0 = tanpa DP
   dueDays               Int               @default(7) // tempo invoice pelunasan
   defaultRepeatDays     Int               @default(30)
@@ -202,7 +214,9 @@ model Business {
   products              Product[]
   customers             Customer[]
   orders                Order[]
+  orderRevisions        OrderRevision[]
   invoices              Invoice[]
+  paymentBatches        PaymentBatch[]
   payments              Payment[]
   shipments             Shipment[]
   creditNotes           CreditNote[]
@@ -407,6 +421,7 @@ model Customer {
   crmTasks              CrmTask[]
   orders                Order[]
   customerCreditEntries CustomerCreditEntry[]
+  paymentBatches        PaymentBatch[]
   reminders             Reminder[]
 
   @@unique([businessId, code])
@@ -540,12 +555,14 @@ model Order {
   paidTotal          BigInt      @default(0) // pembayaran VERIFIED dikurangi refund VERIFIED
   creditTotal        BigInt      @default(0) // total credit note bersettlement OFFSET
   stockReserved      Boolean     @default(false)
+  verifyToken        String?     @unique
   cancelReason       String?     @db.Text
   cancelledAt        DateTime?
   createdAt          DateTime    @default(now())
-  updatedAt          DateTime    @updatedAt
+  updatedAt          DateTime        @updatedAt
   deletedAt          DateTime?
   items              OrderItem[]
+  revisions          OrderRevision[]
 
   @@unique([businessId, orderNo])
   @@unique([businessId, customerId, customerSeq])
@@ -575,6 +592,7 @@ model OrderItem {
   floorPrice     BigInt // snapshot harga minimal efektif per unit
   belowMin       Boolean        @default(false)
   sortOrder      Int            @default(0)
+  shipmentItems  ShipmentItem[]
 
   @@index([businessId, orderId])
 }
@@ -589,6 +607,70 @@ model OrderCost {
   createdAt   DateTime @default(now())
 
   @@index([businessId, orderId])
+}
+
+model OrderRevision {
+  id               String              @id @default(cuid())
+  businessId       String
+  business         Business            @relation(fields: [businessId], references: [id])
+  orderId          String
+  order            Order               @relation(fields: [orderId], references: [id])
+  revisionNo       Int
+  status           OrderRevisionStatus @default(PENDING_APPROVAL)
+  reason           String              @db.Text
+  belowMinReason   String?             @db.Text
+  overrideNote     String?             @db.Text
+  rejectReason     String?             @db.Text
+  deliveryAddress  String?             @db.Text
+  shippingCharge   BigInt              @default(0)
+  ppnEnabled       Boolean             @default(false)
+  ppnRateBps       Int                 @default(0)
+  oldSubtotal      BigInt
+  oldDiscountTotal BigInt              @default(0)
+  oldPpnAmount     BigInt              @default(0)
+  oldGrandTotal    BigInt
+  newSubtotal      BigInt
+  newDiscountTotal BigInt              @default(0)
+  newPpnAmount     BigInt              @default(0)
+  newGrandTotal    BigInt
+  hasBelowMin      Boolean             @default(false)
+  requestedById    String
+  requestedAt      DateTime            @default(now())
+  reviewedById     String?
+  reviewedAt       DateTime?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  items            OrderRevisionItem[]
+
+  @@unique([businessId, orderId, revisionNo])
+  @@index([businessId, status])
+  @@index([orderId])
+}
+
+model OrderRevisionItem {
+  id             String         @id @default(cuid())
+  revisionId     String
+  revision       OrderRevision  @relation(fields: [revisionId], references: [id], onDelete: Cascade)
+  productId      String
+  productName    String
+  sku            String
+  unit           String
+  oldQty         Int            @default(0)
+  newQty         Int
+  listPrice      BigInt
+  unitPrice      BigInt
+  discountType   DiscountType   @default(NONE)
+  discountValue  BigInt         @default(0)
+  discountSource DiscountSource @default(MANUAL)
+  lineSubtotal   BigInt
+  lineDiscount   BigInt
+  lineNet        BigInt
+  costPrice      BigInt
+  floorPrice     BigInt
+  belowMin       Boolean        @default(false)
+  sortOrder      Int            @default(0)
+
+  @@index([revisionId])
 }
 
 model Invoice {
@@ -616,6 +698,7 @@ model Invoice {
   voidedAt      DateTime?
   printedCount  Int           @default(0)
   lastPrintedAt DateTime?
+  verifyToken   String?       @unique
   rev           Int           @default(0)
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
@@ -626,10 +709,57 @@ model Invoice {
   @@index([orderId])
 }
 
+model PaymentBatch {
+  id             String              @id @default(cuid())
+  businessId     String
+  business       Business            @relation(fields: [businessId], references: [id])
+  customerId     String
+  customer       Customer            @relation(fields: [customerId], references: [id])
+  method         PaymentMethod       @default(TRANSFER)
+  status         PaymentStatus       @default(PENDING_VERIFICATION)
+  totalPaid      BigInt
+  allocatedTotal BigInt
+  creditAmount   BigInt              @default(0)
+  creditOption   Boolean             @default(false)
+  paidAt         DateTime
+  reference      String?
+  proofPath      String?
+  notes          String?             @db.Text
+  createdById    String
+  verifiedById   String?
+  verifiedAt     DateTime?
+  rejectReason   String?             @db.Text
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  payments       Payment[]
+  allocations    PaymentAllocation[]
+
+  @@index([businessId, customerId])
+  @@index([businessId, status])
+}
+
+model PaymentAllocation {
+  id        String       @id @default(cuid())
+  batchId   String
+  batch     PaymentBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  paymentId String       @unique
+  payment   Payment      @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  orderId   String
+  invoiceId String
+  amount    BigInt
+
+  @@index([batchId])
+  @@index([orderId])
+  @@index([invoiceId])
+}
+
 model Payment {
   id           String        @id @default(cuid())
   businessId   String
   business     Business      @relation(fields: [businessId], references: [id])
+  batchId      String?
+  batch        PaymentBatch? @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  allocation   PaymentAllocation?
   orderId      String
   invoiceId    String?
   type         PaymentType   @default(RECEIPT)
@@ -644,32 +774,53 @@ model Payment {
   verifiedById String?
   verifiedAt   DateTime?
   rejectReason String?       @db.Text
+  receiptNo    String? // KODECUST/KWT/DD/MM/YYYY/NNNN, diisi saat VERIFIED
+  verifyToken  String?       @unique
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 
+  @@unique([businessId, receiptNo])
   @@index([businessId, orderId])
+  @@index([businessId, batchId])
   @@index([businessId, status])
 }
 
 model Shipment {
-  id            String     @id @default(cuid())
+  id            String         @id @default(cuid())
   businessId    String
-  business      Business   @relation(fields: [businessId], references: [id])
-  orderId       String     @unique // satu pengiriman per order di versi ini
-  deliveryNo    String?    @unique // nomor surat jalan, diisi saat SHIPPED
+  business      Business       @relation(fields: [businessId], references: [id])
+  orderId       String
+  kloterNo      Int            @default(1)
+  deliveryNo    String?        @unique // nomor surat jalan, diisi saat SHIPPED
   method        ShipMethod
   transporterId String? // Vendor kind TRANSPORT
   trackingNo    String?
   driverName    String?
   vehiclePlate  String?
   receiverName  String?
-  status        ShipStatus @default(PREPARING)
-  actualCost    BigInt     @default(0) // RAHASIA: ongkir yang dibayar usaha
+  status        ShipStatus     @default(PREPARING)
+  actualCost    BigInt         @default(0) // RAHASIA: ongkir yang dibayar usaha
   shippedAt     DateTime?
   deliveredAt   DateTime?
-  notes         String?    @db.Text
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
+  notes         String?        @db.Text
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  items         ShipmentItem[]
+
+  @@index([businessId, orderId])
+  @@index([orderId, kloterNo])
+}
+
+model ShipmentItem {
+  id          String    @id @default(cuid())
+  shipmentId  String
+  shipment    Shipment  @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  orderItemId String
+  orderItem   OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
+  qty         Int
+
+  @@unique([shipmentId, orderItemId])
+  @@index([orderItemId])
 }
 
 model CreditNote {

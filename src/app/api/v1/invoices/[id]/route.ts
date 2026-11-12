@@ -67,7 +67,7 @@ export const GET = withApi(
       );
     }
 
-    const [sales, bankAccounts] = await Promise.all([
+    const [sales, bankAccounts, payments] = await Promise.all([
       prisma.user.findFirst({
         where: { id: order.salesId },
         select: { id: true, name: true, username: true },
@@ -86,6 +86,26 @@ export const GET = withApi(
         },
         orderBy: { isDefault: 'desc' },
       }),
+      typeof prisma.payment?.findMany === 'function'
+        ? prisma.payment.findMany({
+            where: {
+              businessId,
+              orderId: order.id,
+            },
+            orderBy: [{ paidAt: 'desc' }, { createdAt: 'desc' }],
+            select: {
+              id: true,
+              invoiceId: true,
+              receiptNo: true,
+              verifyToken: true,
+              method: true,
+              status: true,
+              amount: true,
+              paidAt: true,
+              reference: true,
+            },
+          })
+        : Promise.resolve([]),
     ]);
 
     const isSuperAdmin = ctx.user.role === Role.SUPERADMIN;
@@ -257,6 +277,7 @@ export const GET = withApi(
             : null,
         rejectionReason: invoice.rejectReason,
         voidReason: invoice.voidReason,
+        verifyToken: invoice.verifyToken ?? null,
         overrideNote: isSuperAdmin ? order.overrideNote : null,
         snapshot: invoice.snapshot,
         createdAt: invoice.createdAt.toISOString(),
@@ -292,6 +313,17 @@ export const GET = withApi(
           items,
         },
         bankAccounts,
+        payments: (payments ?? []).map((p) => ({
+          id: p.id,
+          invoiceId: p.invoiceId,
+          receiptNo: p.receiptNo ?? null,
+          verifyToken: p.verifyToken ?? null,
+          method: p.method,
+          status: p.status,
+          amount: Number(p.amount),
+          paidAt: p.paidAt.toISOString(),
+          reference: p.reference,
+        })),
         profitSimulation,
         belowMinItems,
         customerStats,

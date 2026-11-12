@@ -32,6 +32,7 @@ import {
 import { Skeleton, EmptyState, ErrorState } from '@/components/ui/States';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { formatRupiah } from '@/lib/domain/money';
+import { buildWaUrl } from '@/lib/domain/whatsapp';
 import { MoneyInput } from '@/components/ui/MoneyInput';
 import { PercentInput } from '@/components/ui/PercentInput';
 
@@ -173,6 +174,41 @@ interface SalesOption {
   username: string;
 }
 
+export interface CustomerTransactionPriceDto {
+  orderItemId: string;
+  orderId: string;
+  orderNo: string | null;
+  orderDate: string;
+  orderStatus: string;
+  salesName: string;
+  productId: string;
+  productSku: string;
+  productName: string;
+  unit: string;
+  qty: number;
+  listPrice: number;
+  unitPrice: number;
+  discountType: string;
+  discountSource: string;
+  lineDiscount: number;
+  lineNet: number;
+  effectiveUnitPrice: number;
+}
+
+export interface UnpaidCustomerInvoiceDto {
+  invoiceId: string;
+  invoiceNumber: string;
+  type: 'DP' | 'FINAL';
+  orderId: string;
+  orderNo: string | null;
+  orderStatus: string;
+  invoiceAmount: number;
+  paidAmount: number;
+  remainingInvoice: number;
+  orderBalanceDue: number;
+  dueDate: string | null;
+}
+
 export default function CustomerDetailPage() {
   const router = useRouter();
   const params = useParams();
@@ -192,6 +228,27 @@ export default function CustomerDetailPage() {
   const [pricingList, setPricingList] = useState<CustomerProductPricingDto[]>([]);
   const [promosList, setPromosList] = useState<CustomerPromoItem[]>([]);
   const [priceHistoryList, setPriceHistoryList] = useState<PriceHistoryItem[]>([]);
+  const [transactionPrices, setTransactionPrices] = useState<CustomerTransactionPriceDto[]>([]);
+  const [txPriceFilterProductId, setTxPriceFilterProductId] = useState<string>('');
+
+  // State Modal Pembayaran Kolektif (Fase 5)
+  const [showCollectiveModal, setShowCollectiveModal] = useState(false);
+  const [loadingUnpaidInvoices, setLoadingUnpaidInvoices] = useState(false);
+  const [unpaidInvoices, setUnpaidInvoices] = useState<UnpaidCustomerInvoiceDto[]>([]);
+  const [selectedInvoiceIds, setSelectedInvoiceIds] = useState<Record<string, boolean>>({});
+  const [collectiveAllocations, setCollectiveAllocations] = useState<Record<string, string>>({});
+  const [collectiveTotalPaid, setCollectiveTotalPaid] = useState<string>('');
+  const [collectiveCreditOption, setCollectiveCreditOption] = useState<boolean>(true);
+  const [collectiveMethod, setCollectiveMethod] = useState<'TRANSFER' | 'CASH'>('TRANSFER');
+  const [collectivePaidAt, setCollectivePaidAt] = useState<string>(() =>
+    new Date().toISOString().slice(0, 10)
+  );
+  const [collectiveReference, setCollectiveReference] = useState<string>('');
+  const [collectiveNotes, setCollectiveNotes] = useState<string>('');
+  const [collectiveProofFile, setCollectiveProofFile] = useState<File | null>(null);
+  const [submittingCollective, setSubmittingCollective] = useState(false);
+  const [collectiveError, setCollectiveError] = useState<string | null>(null);
+  const [collectiveSuccess, setCollectiveSuccess] = useState<string | null>(null);
 
   const [currentUserRole, setCurrentUserRole] = useState<'SUPERADMIN' | 'SALES'>('SALES');
   const [currentUserId, setCurrentUserId] = useState<string>('');
@@ -344,6 +401,13 @@ export default function CustomerDetailPage() {
         setPricingList(pricingJson.data?.pricing || []);
       }
 
+      // 5b. Riwayat harga transaksi riil customer ini (Fase 5 - Sales & Super Admin)
+      const txPriceRes = await fetch(`/api/v1/customers/${customerId}/transaction-prices?limit=50`);
+      if (txPriceRes.ok) {
+        const txPriceJson = await txPriceRes.json();
+        setTransactionPrices(txPriceJson.data || []);
+      }
+
       // 6. Data khusus Super Admin (Promos, Price History, Sales List)
       if (role === 'SUPERADMIN') {
         const [promosRes, historyRes, usersRes] = await Promise.all([
@@ -380,6 +444,140 @@ export default function CustomerDetailPage() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  const openCollectivePaymentModal = async () => {
+    setShowCollectiveModal(true);
+    setCollectiveError(null);
+    setCollectiveSuccess(null);
+    setLoadingUnpaidInvoices(true);
+    setCollectiveProofFile(null);
+    setCollectiveReference('');
+    setCollectiveNotes('');
+    setCollectiveCreditOption(true);
+    setCollectiveMethod('TRANSFER');
+    setCollectivePaidAt(new Date().toISOString().slice(0, 10));
+
+    try {
+      const res = await fetch(`/api/v1/payments/collective?customerId=${customerId}`);
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        throw new Error(json.error?.message || 'Gagal memuat daftar faktur belum lunas');
+      }
+      const list: UnpaidCustomerInvoiceDto[] = json.data || [];
+      setUnpaidInvoices(list);
+
+      const nextSelected: Record<string, boolean> = {};
+      const nextAllocs: Record<string, string> = {};
+      for (const inv of list) {
+        nextSelected[inv.invoiceId] = false;
+        nextAllocs[inv.invoiceId] = String(inv.remainingInvoice);
+      }
+      setSelectedInvoiceIds(nextSelected);
+      setCollectiveAllocations(nextAllocs);
+      setCollectiveTotalPaid('');
+    } catch (err: unknown) {
+      setCollectiveError(err instanceof Error ? err.message : 'Gagal memuat faktur');
+    } finally {
+      setLoadingUnpaidInvoices(false);
+    }
+  };
+
+  const toggleCollectiveInvoice = (inv: UnpaidCustomerInvoiceDto) => {
+    const next = {
+      ...selectedInvoiceIds,
+      [inv.invoiceId]: !selectedInvoiceIds[inv.invoiceId],
+    };
+    setSelectedInvoiceIds(next);
+    const sum = unpaidInvoices.reduce((acc, item) => {
+      if (!next[item.invoiceId]) return acc;
+      const val = Number(collectiveAllocations[item.invoiceId] || 0);
+      return acc + (Number.isFinite(val) && val > 0 ? val : 0);
+    }, 0);
+    setCollectiveTotalPaid(sum > 0 ? String(sum) : '');
+  };
+
+  const handleCollectiveAllocChange = (invoiceId: string, rawValue: string) => {
+    const clean = rawValue.replace(/[^0-9]/g, '');
+    const updated = { ...collectiveAllocations, [invoiceId]: clean };
+    setCollectiveAllocations(updated);
+    const sum = unpaidInvoices.reduce((acc, item) => {
+      if (!selectedInvoiceIds[item.invoiceId]) return acc;
+      const val = Number(updated[item.invoiceId] || 0);
+      return acc + (Number.isFinite(val) && val > 0 ? val : 0);
+    }, 0);
+    setCollectiveTotalPaid(sum > 0 ? String(sum) : '');
+  };
+
+  const collectiveAllocatedSum = unpaidInvoices.reduce((acc, item) => {
+    if (!selectedInvoiceIds[item.invoiceId]) return acc;
+    const val = Number(collectiveAllocations[item.invoiceId] || 0);
+    return acc + (Number.isFinite(val) && val > 0 ? val : 0);
+  }, 0);
+
+  const collectiveTotalPaidNum = Number(collectiveTotalPaid.replace(/[^0-9]/g, '') || 0);
+  const collectiveExcessAmount = Math.max(0, collectiveTotalPaidNum - collectiveAllocatedSum);
+
+  const handleSubmitCollectivePayment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCollectiveError(null);
+
+    const selectedAllocs = unpaidInvoices
+      .filter((inv) => selectedInvoiceIds[inv.invoiceId])
+      .map((inv) => ({
+        invoiceId: inv.invoiceId,
+        amount: Number(collectiveAllocations[inv.invoiceId] || 0),
+      }))
+      .filter((a) => Number.isFinite(a.amount) && a.amount > 0);
+
+    if (selectedAllocs.length === 0) {
+      setCollectiveError('Pilih minimal 1 faktur dan isi nominal alokasinya.');
+      return;
+    }
+
+    if (collectiveTotalPaidNum < collectiveAllocatedSum) {
+      setCollectiveError('Total transfer tidak boleh kurang dari total alokasi faktur.');
+      return;
+    }
+
+    try {
+      setSubmittingCollective(true);
+      const formData = new FormData();
+      formData.append('customerId', customerId);
+      formData.append('totalPaid', String(collectiveTotalPaidNum));
+      formData.append('creditOption', String(collectiveCreditOption));
+      formData.append('method', collectiveMethod);
+      formData.append('paidAt', new Date(`${collectivePaidAt}T12:00:00`).toISOString());
+      if (collectiveReference.trim()) formData.append('reference', collectiveReference.trim());
+      if (collectiveNotes.trim()) formData.append('notes', collectiveNotes.trim());
+      formData.append('allocations', JSON.stringify(selectedAllocs));
+      if (collectiveProofFile) {
+        formData.append('proof', collectiveProofFile);
+      }
+
+      const res = await fetch('/api/v1/payments/collective', {
+        method: 'POST',
+        body: formData,
+      });
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        throw new Error(json.error?.message || 'Gagal mencatat pembayaran kolektif');
+      }
+
+      setShowCollectiveModal(false);
+      setCollectiveSuccess(
+        currentUserRole === 'SUPERADMIN'
+          ? 'Pembayaran kolektif berhasil dicatat dan menunggu verifikasi di antrean Pembayaran.'
+          : 'Pembayaran kolektif berhasil diajukan dan menunggu verifikasi Super Admin.'
+      );
+      await loadData();
+    } catch (err: unknown) {
+      setCollectiveError(
+        err instanceof Error ? err.message : 'Gagal mengirim pembayaran kolektif'
+      );
+    } finally {
+      setSubmittingCollective(false);
+    }
+  };
 
   // Aksi Penyelesaian Verifikasi Tabrakan Toko (NAV-004)
   const handleVerifyCollision = async (
@@ -1704,6 +1902,106 @@ export default function CustomerDetailPage() {
               </div>
             )}
           </div>
+
+          {/* BAGIAN 3: RIWAYAT HARGA TRANSAKSI RIIL PELANGGAN (FASE 5 - AMAN UNTUK SALES & SUPER ADMIN) */}
+          <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h2 className="text-base font-bold text-slate-900">
+                  Riwayat Harga Transaksi Pelanggan
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Harga jual riil pada pesanan sebelumnya (tidak termasuk draft atau dibatalkan) untuk referensi penawaran.
+                </p>
+              </div>
+              {transactionPrices.length > 0 && (
+                <select
+                  value={txPriceFilterProductId}
+                  onChange={(e) => setTxPriceFilterProductId(e.target.value)}
+                  aria-label="Filter Produk Riwayat Harga"
+                  className="text-xs px-3 py-2 border border-slate-300 rounded-xl bg-white min-h-[40px]"
+                >
+                  <option value="">Semua Produk</option>
+                  {Array.from(
+                    new Map(
+                      transactionPrices.map((tp) => [
+                        tp.productId,
+                        `${tp.productSku} - ${tp.productName}`,
+                      ])
+                    ).entries()
+                  ).map(([pid, label]) => (
+                    <option key={pid} value={pid}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+
+            {transactionPrices.length === 0 ? (
+              <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-600 text-center">
+                Belum ada riwayat harga transaksi untuk pelanggan ini.
+              </div>
+            ) : (
+              <div className="overflow-x-auto -mx-2 px-2">
+                <table className="w-full text-left border-collapse text-xs sm:text-sm min-w-[640px]">
+                  <thead>
+                    <tr className="border-b border-slate-200 text-slate-500 font-semibold">
+                      <th className="py-2.5 pr-3">Tanggal</th>
+                      <th className="py-2.5 px-3">No. Order</th>
+                      <th className="py-2.5 px-3">Produk</th>
+                      <th className="py-2.5 px-3 text-right">Qty</th>
+                      <th className="py-2.5 px-3 text-right">Harga Satuan</th>
+                      <th className="py-2.5 pl-3 text-right">Harga Net / Unit</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {transactionPrices
+                      .filter(
+                        (tp) =>
+                          !txPriceFilterProductId || tp.productId === txPriceFilterProductId
+                      )
+                      .map((tp) => (
+                        <tr key={tp.orderItemId} className="hover:bg-slate-50/70">
+                          <td className="py-2.5 pr-3 whitespace-nowrap text-slate-600">
+                            {new Date(tp.orderDate).toLocaleDateString('id-ID', {
+                              day: '2-digit',
+                              month: 'short',
+                              year: 'numeric',
+                            })}
+                          </td>
+                          <td className="py-2.5 px-3 whitespace-nowrap">
+                            <Link
+                              href={`/orders/${tp.orderId}`}
+                              className="font-semibold text-indigo-600 hover:underline"
+                            >
+                              {tp.orderNo || tp.orderId}
+                            </Link>
+                          </td>
+                          <td className="py-2.5 px-3">
+                            <div className="font-semibold text-slate-900">
+                              {tp.productName}
+                            </div>
+                            <div className="text-[11px] text-slate-500 font-mono">
+                              {tp.productSku}
+                            </div>
+                          </td>
+                          <td className="py-2.5 px-3 text-right whitespace-nowrap font-medium text-slate-700">
+                            {tp.qty} {tp.unit}
+                          </td>
+                          <td className="py-2.5 px-3 text-right whitespace-nowrap text-slate-700">
+                            {formatRupiah(tp.unitPrice)}
+                          </td>
+                          <td className="py-2.5 pl-3 text-right whitespace-nowrap font-bold text-slate-900">
+                            {formatRupiah(tp.effectiveUnitPrice)}
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -1740,7 +2038,12 @@ export default function CustomerDetailPage() {
                       <Phone className="w-3.5 h-3.5" />
                     </a>
                     <a
-                      href={`https://wa.me/${customer.phone.replace(/[^0-9]/g, '')}`}
+                      href={
+                        buildWaUrl(
+                          customer.phone,
+                          `Halo ${customer.name}, kami dari tim penjualan ingin menindaklanjuti kebutuhan pesanan Anda.`
+                        ) || '#'
+                      }
                       target="_blank"
                       rel="noopener noreferrer"
                       className="p-1.5 rounded-lg bg-green-50 hover:bg-green-100 text-green-700 min-h-[36px] min-w-[36px] flex items-center justify-center transition-colors"
@@ -1814,11 +2117,24 @@ export default function CustomerDetailPage() {
       {/* KONTEN TAB 5: ORDER */}
       {activeTab === 'orders' && (
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="text-base font-bold text-slate-900">
               Riwayat Pesanan Pelanggan
             </h2>
+            <button
+              type="button"
+              onClick={openCollectivePaymentModal}
+              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs sm:text-sm font-semibold shadow-xs transition-colors min-h-[44px] flex items-center gap-1.5"
+            >
+              <span>+ Catat Pembayaran Kolektif</span>
+            </button>
           </div>
+
+          {collectiveSuccess && (
+            <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs sm:text-sm font-medium">
+              {collectiveSuccess}
+            </div>
+          )}
 
           {timeline.filter((t) => t.kind === 'ORDER').length === 0 ? (
             <EmptyState
@@ -2610,6 +2926,238 @@ export default function CustomerDetailPage() {
                 {verifyingCollision ? 'Memproses...' : 'Simpan & Alihkan'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL PEMBAYARAN KOLEKTIF MULTI-FAKTUR (FASE 5) */}
+      {showCollectiveModal && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-2xl w-full max-h-[90vh] overflow-y-auto p-5 sm:p-6 space-y-4">
+            <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="text-base sm:text-lg font-bold text-slate-900">
+                  Catat Pembayaran Kolektif (Multi-Faktur)
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Pilih beberapa faktur resmi dari 1 transfer pembayaran pelanggan, lalu atur alokasi per faktur.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCollectiveModal(false)}
+                className="p-2 text-slate-400 hover:text-slate-600 rounded-lg min-h-[40px] min-w-[40px]"
+              >
+                ✕
+              </button>
+            </div>
+
+            {collectiveError && (
+              <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-medium">
+                {collectiveError}
+              </div>
+            )}
+
+            {loadingUnpaidInvoices ? (
+              <div className="py-8 text-center text-sm text-slate-500">
+                Memuat daftar faktur resmi belum lunas...
+              </div>
+            ) : unpaidInvoices.length === 0 ? (
+              <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-center text-sm text-slate-600">
+                Tidak ada faktur resmi (DP / Final) yang masih memiliki sisa tagihan untuk pelanggan ini.
+              </div>
+            ) : (
+              <form onSubmit={handleSubmitCollectivePayment} className="space-y-4">
+                <div className="space-y-2">
+                  <div className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                    Pilih Faktur & Nominal Alokasi
+                  </div>
+                  <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden">
+                    {unpaidInvoices.map((inv) => {
+                      const checked = Boolean(selectedInvoiceIds[inv.invoiceId]);
+                      return (
+                        <div
+                          key={inv.invoiceId}
+                          className={`p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                            checked ? 'bg-indigo-50/40' : 'bg-white'
+                          }`}
+                        >
+                          <label className="flex items-start gap-2.5 cursor-pointer min-w-0 flex-1">
+                            <input
+                              type="checkbox"
+                              aria-label={`Pilih faktur ${inv.invoiceNumber}`}
+                              checked={checked}
+                              onChange={() => toggleCollectiveInvoice(inv)}
+                              className="mt-1 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                            />
+                            <div className="min-w-0">
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <span className="text-sm font-bold text-slate-900">
+                                  {inv.invoiceNumber}
+                                </span>
+                                <span className="text-[11px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 font-semibold">
+                                  {inv.type}
+                                </span>
+                                <span className="text-xs text-slate-500">
+                                  ({inv.orderNo || inv.orderId})
+                                </span>
+                              </div>
+                              <div className="text-xs text-slate-600 mt-0.5">
+                                Sisa Faktur: <strong>{formatRupiah(inv.remainingInvoice)}</strong> · Sisa Order:{' '}
+                                {formatRupiah(inv.orderBalanceDue)}
+                              </div>
+                            </div>
+                          </label>
+                          <div className="sm:w-44 shrink-0">
+                            <label className="block text-[11px] font-semibold text-slate-500 mb-0.5">
+                              Alokasi (Rp)
+                            </label>
+                            <input
+                              type="number"
+                              min={1}
+                              max={inv.orderBalanceDue}
+                              disabled={!checked}
+                              value={collectiveAllocations[inv.invoiceId] || ''}
+                              onChange={(e) =>
+                                handleCollectiveAllocChange(inv.invoiceId, e.target.value)
+                              }
+                              className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg disabled:bg-slate-100 disabled:text-slate-400 min-h-[42px]"
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Total Nominal Diterima / Transfer (Rp) <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      min={1}
+                      value={collectiveTotalPaid}
+                      onChange={(e) => setCollectiveTotalPaid(e.target.value)}
+                      placeholder="Contoh: 500000"
+                      className="w-full px-3.5 py-2.5 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 min-h-[44px]"
+                    />
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      Total teralokasi ke faktur: <strong>{formatRupiah(collectiveAllocatedSum)}</strong>
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Tanggal Pembayaran <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={collectivePaidAt}
+                      onChange={(e) => setCollectivePaidAt(e.target.value)}
+                      className="w-full px-3.5 py-2.5 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 min-h-[44px]"
+                    />
+                  </div>
+                </div>
+
+                {collectiveExcessAmount > 0 && (
+                  <div className="p-3 rounded-xl border border-emerald-200 bg-emerald-50 space-y-2">
+                    <div className="text-xs font-bold text-emerald-900">
+                      Kelebihan Pembayaran Terdeteksi: {formatRupiah(collectiveExcessAmount)}
+                    </div>
+                    <label className="flex items-start gap-2 text-xs text-emerald-800 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={collectiveCreditOption}
+                        onChange={(e) => setCollectiveCreditOption(e.target.checked)}
+                        className="mt-0.5 h-4 w-4 rounded border-emerald-300 text-emerald-600 focus:ring-emerald-500"
+                      />
+                      <span>
+                        Simpan kelebihan dana ke <strong>Saldo Kredit Pelanggan</strong> saat Super Admin memverifikasi pembayaran ini.
+                      </span>
+                    </label>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Metode Pembayaran
+                    </label>
+                    <select
+                      value={collectiveMethod}
+                      onChange={(e) => setCollectiveMethod(e.target.value as 'TRANSFER' | 'CASH')}
+                      className="w-full px-3.5 py-2.5 text-sm border border-slate-300 rounded-xl bg-white min-h-[44px]"
+                    >
+                      <option value="TRANSFER">Transfer Bank</option>
+                      <option value="CASH">Tunai (Sesuai Kebijakan Bisnis)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      No. Referensi / Mutasi (Opsional)
+                    </label>
+                    <input
+                      type="text"
+                      value={collectiveReference}
+                      onChange={(e) => setCollectiveReference(e.target.value)}
+                      placeholder="Contoh: TRF-BCA-1112"
+                      className="w-full px-3.5 py-2.5 text-sm border border-slate-300 rounded-xl min-h-[44px]"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Bukti Transfer {currentUserRole === 'SALES' && collectiveMethod === 'TRANSFER' ? '(Wajib untuk Sales)' : '(Opsional)'}
+                  </label>
+                  <input
+                    type="file"
+                    accept="image/*,application/pdf"
+                    onChange={(e) => setCollectiveProofFile(e.target.files?.[0] || null)}
+                    className="w-full text-xs text-slate-600 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Catatan (Opsional)
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={collectiveNotes}
+                    onChange={(e) => setCollectiveNotes(e.target.value)}
+                    placeholder="Contoh: Pelanggan transfer 1 kali untuk melunasi 2 faktur sekaligus..."
+                    className="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-xl"
+                  />
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setShowCollectiveModal(false)}
+                    className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 min-h-[44px]"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={submittingCollective}
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-xs disabled:opacity-50 min-h-[44px]"
+                  >
+                    {submittingCollective ? 'Menyimpan...' : 'Kirim Pembayaran Kolektif'}
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}

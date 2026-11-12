@@ -100,15 +100,15 @@ erDiagram
 
 Daftar tabel inti:
 
-1. `Business`: Profil unit bisnis (kode unik, tema invoice, NPWP, toggle PPN, toggle stok minus, toggle DP wajib).
+1. `Business`: Profil unit bisnis (kode unik, tema invoice, NPWP, toggle PPN, toggle stok minus, toggle DP wajib, serta toggle kebijakan anti-fraud Proforma/pembayaran/pengiriman parsial: `showBankOnProforma`, `paymentLegalNotice`, `allowSalesCashPayment`, `requireTransferProofForSales`, `allowPartialShipment`).
 2. `User`: Akun pengguna (Super Admin dan Sales), tautan Telegram, last login.
 3. `Session`: Sesi login pengguna (token hash, expiry, IP, user-agent).
 4. `Customer`: Data pelanggan per usaha dengan kode unik (contoh: TEROBOS).
 5. `Product`: Master produk, HPP rahasia (`costPrice`), harga dasar (`basePrice`), harga minimal (`minPrice`).
-6. `Order` & `OrderItem`: Dokumen pesanan dan rincian baris barang dengan snapshot harga.
-7. `Invoice`: Tagihan bertahap (`DP` dan `FINAL`/Pelunasan).
-8. `Payment`: Transaksi pembayaran dan bukti bayar.
-9. `Shipment`: Surat jalan pengiriman fisik barang.
+6. `Order`, `OrderItem`, `OrderRevision`, & `OrderRevisionItem`: Dokumen pesanan (termasuk `verifyToken`, `cancelReason`, `cancelledAt`), rincian baris barang dengan snapshot harga, serta riwayat pengajuan revisi item/qty/harga/ongkir pasca-`IN_PROCESS`.
+7. `Invoice`: Tagihan bertahap (`DP` dan `FINAL`/Pelunasan, dilengkapi `verifyToken`, `voidReason`, dan snapshot anti-bocor).
+8. `Payment`, `PaymentBatch`, & `PaymentAllocation`: Transaksi pembayaran tunggal maupun kolektif multi-faktur, bukti bayar, nomor kwitansi resmi (`receiptNo`), `verifyToken`, dan alokasi kelebihan ke saldo kredit pelanggan.
+9. `Shipment` & `ShipmentItem`: Surat jalan pengiriman fisik barang (mendukung multi-kloter `kloterNo` dan rincian qty parsial per item saat `allowPartialShipment` aktif).
 10. `CreditNote`: Retur barang dan koreksi tagihan.
 11. `StockMovement`: Buku besar pergerakan stok barang.
 12. `AuditLog`: Log mutasi append-only yang tidak dapat diubah.
@@ -158,8 +158,12 @@ Daftar tabel inti:
    - Format penomoran dokumen resmi: `KODE/JENIS/DD/MM/YYYY/NNNN` berbasis tanggal lokal WIB (`Asia/Jakarta`).
    - Nomor order (`Order.orderNo`) dialokasikan saat invoice pertama disetujui (bukan saat draft). Urutan nomor berjalan per customer dan tidak pernah direset (`DocumentCounter` scope `ORDER_SEQ`).
    - Nomor invoice: `orderNo-DP` untuk uang muka dan `orderNo-LNS` untuk pelunasan, dengan akhiran versi revisi `-R1`, `-R2` bila versi > 1.
-   - Surat jalan menggunakan jenis `SJ` dengan urutan order yang sama; Credit Note menggunakan jenis `CN` (`CREDIT_NOTE_SEQ`); PO vendor menggunakan jenis `PO` (`PO_SEQ`).
+   - Surat jalan menggunakan jenis `SJ` dengan urutan order yang sama (mendukung multi-kloter `SJ-...-K1`, `K2` saat pengiriman parsial diaktifkan); Credit Note menggunakan jenis `CN` (`CREDIT_NOTE_SEQ`); Kwitansi pembayaran resmi menggunakan jenis `KWT` (`RECEIPT_SEQ`) saat status `VERIFIED`; PO vendor menggunakan jenis `PO` (`PO_SEQ`).
    - Alokasi dieksekusi melalui PostgreSQL UPSERT atomik (`nextSeq`) di dalam transaksi database yang sama dengan persetujuan dokumen. Transaksi yang rollback tidak menghanguskan nomor urut dan mencegah race condition pada alokasi serentak.
+7. **Proteksi Anti-Fraud, Verifikasi QR Publik, Revisi, Pengiriman Parsial, & Pembayaran Kolektif (Fase 1–5)**:
+   - **Proforma & Kebijakan Pembayaran**: PDF Proforma Order tidak memajukan `DocumentCounter`, menyembunyikan rekening bank secara default (`showBankOnProforma=false`), dan menyertakan disclaimer hukum (`paymentLegalNotice`). Saat `allowSalesCashPayment=false` (default) dan `requireTransferProofForSales=true`, Sales diblokir mencatat pembayaran tunai maupun transfer tanpa bukti gambar. Hapus (`DELETE`) hanya diizinkan pada draf bersih; pesanan aktif wajib dibatalkan resmi melalui `/cancel` dengan penyelesaian DP eksplisit (`REFUND` / `CUSTOMER_CREDIT`).
+   - **Verifikasi QR Publik & Kwitansi**: Endpoint publik `/api/v1/public/verify/:token` & halaman `/verify/:token` menampilkan status keaslian Proforma, Faktur, dan Kwitansi dengan penyamaran PII (telepon, alamat, NPWP) dan tanpa HPP/margin. Kwitansi PDF resmi hanya terbit untuk pembayaran `VERIFIED`.
+   - **Revisi `IN_PROCESS`, Pengiriman Parsial, & Pembayaran Kolektif**: Perubahan pesanan pasca-`IN_PROCESS` melewati alur approval `OrderRevision` dengan proteksi total >= `paidTotal`, penyesuaian delta `reservedQty`, dan blokir penurunan item di bawah qty terkirim. Pengiriman multi-kloter (`allowPartialShipment`) melacak sisa kirim per item sebelum finalisasi `AWAITING_FINAL_PAYMENT` / `COMPLETED`. Pembayaran kolektif (`/api/v1/payments/collective`) mengalokasikan dana ke beberapa faktur secara atomik dengan dukungan saldo kredit atas kelebihan bayar dan verifikasi/penolakan 1-klik per batch.
 
 ---
 
@@ -247,6 +251,7 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
 | `GET/POST` | `/api/v1/customers/:id/promos` | Super Admin        | Kelola promo & subsidi khusus pelanggan (CustomerPromo) |
 | `GET/PATCH/DELETE` | `/api/v1/customer-promos/:id` | Super Admin | Detail, perbarui status/tenggat, soft delete promo pelanggan |
 | `GET`      | `/api/v1/customers/:id/price-history` | Super Admin | Riwayat penyesuaian harga minimal customer (CUSTOMER_MIN) |
+| `GET`      | `/api/v1/customers/:id/transaction-prices` | Super Admin, Sales | Riwayat harga transaksi riil customer untuk referensi Sales & pemilik (tanpa HPP/margin) |
 | `GET/POST` | `/api/v1/crm/tasks`            | Super Admin, Sales | Daftar tugas CRM (filter status & isolasi sales)     |
 | `GET/PATCH/DELETE` | `/api/v1/crm/tasks/:id` | Super Admin, Sales | Detail, centang selesai (doneAt), tenggat, hapus tugas |
 | `GET`      | `/api/v1/stock`                | Super Admin        | Daftar stok produk, reserved, available, dan status minus |
@@ -263,18 +268,26 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
 | `POST`     | `/api/v1/orders/preview`       | Super Admin, Sales | Pratinjau hitungan total, floor, diskon, dan PPN |
 | `GET/POST` | `/api/v1/orders`               | Super Admin, Sales | Buat draf (201) & daftar order (isolasi sales) |
 | `GET/PATCH`| `/api/v1/orders/:id`           | Super Admin, Sales | Detail (DTO per role) & ubah draf (kunci rev)  |
-| `DELETE`   | `/api/v1/orders/:id`           | Super Admin        | Soft delete order ke Tempat Sampah (wajib confirm) |
+| `DELETE`   | `/api/v1/orders/:id`           | Super Admin        | Soft delete draf/revisi order ke Tempat Sampah (ditolak bila sudah ada transaksi/reservasi) |
+| `POST`     | `/api/v1/orders/:id/cancel`    | Super Admin        | Pembatalan resmi pesanan aktif (lepas reservasi stok, void faktur, refund/kredit DP, balik komisi) |
+| `GET/POST` | `/api/v1/orders/:id/revisions` | Super Admin, Sales | Daftar & ajukan revisi item/qty/harga/ongkir pesanan IN_PROCESS (memerlukan persetujuan Super Admin) |
+| `POST`     | `/api/v1/order-revisions/:id/approve` | Super Admin  | Setujui revisi pesanan (sesuaikan delta reservasi stok & total pesanan tanpa hapus DP) |
+| `POST`     | `/api/v1/order-revisions/:id/reject` | Super Admin   | Tolak revisi pesanan tanpa mengubah stok maupun total pesanan |
 | `POST`     | `/api/v1/orders/:id/submit`    | Super Admin, Sales | Mengajukan order ke Super Admin (buat Invoice PENDING_APPROVAL) |
 | `POST`     | `/api/v1/orders/:id/withdraw`  | Super Admin, Sales | Menarik pengajuan order kembali ke DRAFT (Invoice WITHDRAWN) |
+| `GET`      | `/api/v1/orders/:id/proforma/pdf` | Super Admin, Sales | Unduh/cetak PDF Proforma Order non-faktur (draf/revisi/pending, tanpa increment counter faktur) |
 | `GET`      | `/api/v1/approvals`            | Super Admin        | Antrean pesanan & faktur pending approval (FIFO, filter belowMin, profit) |
 | `POST`     | `/api/v1/invoices/:id/approve` | Super Admin        | Persetujuan faktur (kunci pesimistik, alokasi nomor resmi, reservasi stok, snapshot anti-bocor) |
 | `POST`     | `/api/v1/invoices/:id/reject`  | Super Admin        | Penolakan faktur & pengembalian status order ke revisi (alasan min 5 karakter) |
 | `GET/POST` | `/api/v1/orders/:id/payments`  | Super Admin, Sales | Riwayat pembayaran pesanan & pencatatan bayar baru (multipart/JSON) |
 | `GET`      | `/api/v1/payments`             | Super Admin        | Antrean pembayaran menunggu verifikasi (filter order/customer/sales) |
+| `GET/POST` | `/api/v1/payments/collective`  | Super Admin, Sales | Daftar faktur open pelanggan & pencatatan pembayaran kolektif multi-faktur (+ opsi overpayment saldo kredit) |
 | `POST`     | `/api/v1/payments`             | Super Admin, Sales | Pencatatan pembayaran pelanggan & bukti transfer        |
-| `POST`     | `/api/v1/payments/:id/verify`  | Super Admin        | Verifikasi pelunasan/pembayaran (kunci pesanan, hitung ulang paidTotal, transisi status) |
+| `POST`     | `/api/v1/payments/:id/verify`  | Super Admin        | Verifikasi pelunasan/pembayaran (kunci pesanan, hitung ulang paidTotal, transisi status, terbit nomor kwitansi) |
 | `POST`     | `/api/v1/payments/:id/reject`  | Super Admin        | Penolakan bukti transfer (alasan min 5 karakter, rollback kredit) |
 | `POST`     | `/api/v1/payments/:id/void`    | Super Admin        | Pembatalan pembayaran diverifikasi (recalculate, rollback order status) |
+| `GET`      | `/api/v1/payments/:id/receipt/pdf` | Super Admin, Sales | Unduh/cetak PDF Kwitansi Pembayaran Resmi (khusus status VERIFIED) |
+| `GET`      | `/api/v1/public/verify/:token` | Publik (No Auth)   | Verifikasi keaslian Proforma, Faktur & Kwitansi via QR (rate limit IP, masking PII) |
 | `GET`      | `/api/v1/invoices`             | Super Admin, Sales | Daftar invoice dengan filter status, tipe, pencarian, dan paginasi (isolasi sales) |
 | `GET`      | `/api/v1/invoices/:id`         | Super Admin, Sales | Detail invoice lengkap, bank usaha, pratinjau, dan inspeksi persetujuan (profit, belowMin, stok, piutang customer khusus SA) |
 | `POST`     | `/api/v1/orders/:id/request-final` | Super Admin, Sales | Pengajuan faktur pelunasan (buat FINAL invoice PENDING_APPROVAL, opsi penyesuaian ongkir) |
@@ -336,7 +349,8 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
 | Path                   | Hak Akses          | Deskripsi                                                        |
 | ---------------------- | ------------------ | ---------------------------------------------------------------- |
 | `/login`               | Publik             | Halaman login dengan rate-limiting & proteksi timing attack      |
-| `/dashboard`           | Super Admin, Sales | Dashboard operasional & keuangan (Super Admin: omzet, HPP, profit, leaderboard, antrean approval; Sales: fokus hari ini, target, estimasi komisi, Zero-Leakage) |
+| `/verify/:token`       | Publik (No Auth)   | Halaman verifikasi keaslian Proforma, Faktur & Kwitansi via QR (masking PII, anti-leak HPP) |
+| `/dashboard`           | Super Admin, Sales | Dashboard operasional & keuangan (Super Admin: omzet, HPP, profit, leaderboard, antrean approval & pembayaran pending; Sales: fokus hari ini, target, estimasi komisi, Zero-Leakage) |
 | `/reports`             | Super Admin, Sales | Hub laporan terpadu: Margin, Umur Piutang, Kinerja Sales, Komisi, dan CRM |
 | `/reports/margin`      | Super Admin        | Laporan margin & analisis profitabilitas usaha (filter tanggal, groupBy order/product/sales/business, kerugian pembatalan) |
 | `/reports/crm`         | Super Admin, Sales | Laporan aktivitas & pipeline CRM dengan ringkasan konversi dan tombol ekspor |
@@ -344,23 +358,24 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
 | `/sales/:id`           | Super Admin        | Evaluasi bulanan sales: target omzet/profit, catatan pemilik rahasia, komisi & needsReturn |
 | `/audit`               | Super Admin        | Audit trail log mutasi append-only, filter aksi & entitas, komparasi state before vs after |
 | `/profile`             | Super Admin, Sales | Pengaturan profil, ganti password, & integrasi bot Telegram      |
-| `/settings/business`   | Super Admin        | Legalitas usaha, rekening bank, toggle operasional, tema invoice |
+| `/settings/business`   | Super Admin        | Legalitas usaha, rekening bank, toggle operasional & anti-fraud (Proforma/Pembayaran Sales/Parsial), template disclaimer, tema invoice |
 | `/settings/users`      | Super Admin        | Manajemen pengguna staf sales, reset password, skema komisi      |
 | `/products`            | Super Admin, Sales | Katalog produk (kolom HPP/margin khusus SA; kartu mobile 360 px) |
 | `/products/:id/prices` | Super Admin        | Kronologi riwayat perubahan harga produk & alasan bisnis         |
 | `/vendors`             | Super Admin        | Manajemen vendor & rekanan logistik (kartu mobile 360 px)        |
 | `/updates`             | Super Admin, Sales | Catatan pembaruan sistem dengan render markdown aman anti-XSS    |
 | `/customers`           | Super Admin, Sales | Daftar pelanggan responsif (kartu mobile 360 px), filter stage/sales |
-| `/customers/:id`       | Super Admin, Sales | Detail pelanggan (5 tab: Ringkasan, Timeline CRM, Tugas Follow-up, Order, Harga/Promo), ubah cepat pipeline |
+| `/customers/:id`       | Super Admin, Sales | Detail pelanggan (Ringkasan + Pembayaran Kolektif, Timeline CRM, Tugas Follow-up, Order, Harga/Promo + Riwayat Harga Transaksi), ubah cepat pipeline |
 | `/orders`              | Super Admin, Sales | Daftar pesanan responsif (tabel desktop & kartu mobile 360 px), filter status/pelanggan/tanggal, paginasi |
 | `/orders/new`          | Super Admin, Sales | Formulir pesanan baru (`OrderForm`) dengan pratinjau kalkulasi live 300 ms, deteksi belowMin, simulasi profit SA |
-| `/orders/:id`          | Super Admin, Sales | Detail pesanan lengkap, rincian produk, ringkasan keuangan, simulasi profit SA, tombol ajukan/tarik/setujui/tolak pesanan |
+| `/orders/:id`          | Super Admin, Sales | Detail pesanan lengkap, Proforma PDF & Kirim WA, modal Catat Pembayaran & Kwitansi `VERIFIED`, Pembatalan resmi SA, pengiriman multi-kloter & Surat Jalan, simulasi profit SA |
 | `/orders/:id/edit`     | Super Admin, Sales | Sunting draf pesanan (`DRAFT` / `REVISION_REQUIRED`) dengan penguncian optimistik versi `rev` |
+| `/orders/:id/revise`   | Super Admin, Sales | Pengajuan revisi item/qty/harga/ongkir pada pesanan `IN_PROCESS` beserta ringkasan delta & persetujuan SA |
 | `/approvals`           | Super Admin        | Antrean persetujuan pesanan & invoice PENDING_APPROVAL (FIFO, filter belowMin, pencarian, simulasi profit) |
 | `/approvals/:invoiceId`| Super Admin        | Detail inspeksi persetujuan invoice 2-kolom (pratinjau visual bertema, simulasi profit, stok fisik, override note, tolak/revisi) |
 | `/invoices`            | Super Admin, Sales | Daftar faktur penjualan responsif desktop & mobile 360 px, filter status/tipe/search, cetak PDF resmi |
-| `/invoices/:id`        | Super Admin, Sales | Detail faktur komprehensif, linimasa persetujuan & pembayaran, tombol cetak aktif/nonaktif, alur revisi sales & void SA |
-| `/payments`            | Super Admin        | Antrean verifikasi bukti transfer & pembayaran pelanggan (pratinjau bukti, modal verifikasi/tolak) |
+| `/invoices/:id`        | Super Admin, Sales | Detail faktur komprehensif, linimasa persetujuan & pembayaran, tautan QR verifikasi publik, tombol cetak PDF/Kwitansi/Kirim WA pre-filled, alur revisi sales & void SA |
+| `/payments`            | Super Admin        | Antrean verifikasi bukti transfer & pembayaran pelanggan tunggal maupun kolektif batch (pratinjau bukti, modal verifikasi/tolak/void) |
 | `/stock`               | Super Admin        | Manajemen stok produk, kartu metrik (fisik/reservasi/tersedia/minus), modal koreksi, opname, riwayat mutasi |
 | `/purchase-orders`     | Super Admin        | Daftar Purchase Order dengan filter status, vendor, dan paginasi (responsif 360 px) |
 | `/purchase-orders/new` | Super Admin        | Formulir pembuatan PO baru dengan kalkulasi biaya dinamis dan baris produk |

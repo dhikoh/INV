@@ -173,7 +173,8 @@ export async function shipOrderStock(
   tx: Tx,
   order: { id: string; businessId: string; orderNo?: string | null; stockReserved: boolean },
   items: { productId: string; qty: number }[],
-  actorId: string
+  actorId: string,
+  options?: { keepOrderReserved?: boolean }
 ): Promise<void> {
   const ids = items.map((i) => i.productId);
   await lockProducts(tx, ids);
@@ -198,7 +199,7 @@ export async function shipOrderStock(
     });
   }
 
-  if (order.stockReserved) {
+  if (order.stockReserved && !options?.keepOrderReserved) {
     await tx.order.updateMany({
       where: { id: order.id, businessId: order.businessId },
       data: { stockReserved: false },

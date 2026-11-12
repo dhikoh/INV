@@ -106,9 +106,11 @@ export interface ProfitSimulation {
 }
 
 export interface OrderFormProps {
-  mode: 'create' | 'edit';
+  mode: 'create' | 'edit' | 'amend';
   orderId?: string;
   initialRev?: number;
+  initialOldGrandTotal?: number;
+  initialPaidTotal?: number;
   initialCustomerId?: string;
   initialItems?: Array<{
     productId: string;
@@ -131,6 +133,8 @@ export function OrderForm({
   mode,
   orderId,
   initialRev = 0,
+  initialOldGrandTotal,
+  initialPaidTotal = 0,
   initialCustomerId = '',
   initialItems = [],
   initialShippingCharge = 0,
@@ -170,6 +174,7 @@ export function OrderForm({
     initialRepeatIntervalDays ?? ''
   );
   const [belowMinReason, setBelowMinReason] = useState(initialBelowMinReason);
+  const [revisionReason, setRevisionReason] = useState('');
 
   // Items List
   const [items, setItems] = useState<FormItemLine[]>(() => {
@@ -482,6 +487,15 @@ export function OrderForm({
       return 'Pesanan memuat harga di bawah batas minimal. Alasan bisnis wajib diisi minimal 5 karakter.';
     }
 
+    if (mode === 'amend') {
+      if (revisionReason.trim().length < 5) {
+        return 'Alasan pengajuan revisi pesanan wajib diisi minimal 5 karakter.';
+      }
+      if (previewTotals && initialPaidTotal > 0 && previewTotals.grandTotal < initialPaidTotal) {
+        return `Total pesanan baru (${formatRupiah(previewTotals.grandTotal)}) tidak boleh lebih kecil dari pembayaran yang sudah terverifikasi (${formatRupiah(initialPaidTotal)}).`;
+      }
+    }
+
     return null;
   };
 
@@ -499,48 +513,65 @@ export function OrderForm({
     try {
       setSubmitting(true);
 
-      const payload = {
-        customerId,
-        items: items.map((item) => {
-          let discount: Record<string, unknown> | undefined = undefined;
+      const mappedItems = items.map((item) => {
+        let discount: Record<string, unknown> | undefined = undefined;
 
-          if (item.discountType === 'PERCENT') {
-            discount = {
-              source: 'MANUAL',
-              type: 'PERCENT',
-              value: item.discountValue,
-            };
-          } else if (item.discountType === 'AMOUNT') {
-            discount = {
-              source: 'MANUAL',
-              type: 'AMOUNT',
-              value: item.discountValue,
-            };
-          } else if (item.discountType === 'PROMO' && item.promoId) {
-            discount = {
-              source: item.promoSource || 'PROMO',
-              promoId: item.promoId,
-            };
-          }
-
-          return {
-            productId: item.productId,
-            qty: item.qty,
-            unitPrice: item.unitPrice,
-            discount,
+        if (item.discountType === 'PERCENT') {
+          discount = {
+            source: 'MANUAL',
+            type: 'PERCENT',
+            value: item.discountValue,
           };
-        }),
-        shippingCharge,
-        dpBps,
-        deliveryAddress: deliveryAddress.trim() || undefined,
-        notes: notes.trim() || undefined,
-        repeatIntervalDays: repeatIntervalDays ? Number(repeatIntervalDays) : undefined,
-        belowMinReason: belowMinReason.trim() || undefined,
-        ...(mode === 'edit' ? { rev: initialRev } : {}),
-      };
+        } else if (item.discountType === 'AMOUNT') {
+          discount = {
+            source: 'MANUAL',
+            type: 'AMOUNT',
+            value: item.discountValue,
+          };
+        } else if (item.discountType === 'PROMO' && item.promoId) {
+          discount = {
+            source: item.promoSource || 'PROMO',
+            promoId: item.promoId,
+          };
+        }
 
-      const url = mode === 'create' ? '/api/v1/orders' : `/api/v1/orders/${orderId}`;
-      const method = mode === 'create' ? 'POST' : 'PATCH';
+        return {
+          productId: item.productId,
+          qty: item.qty,
+          unitPrice: item.unitPrice,
+          discount,
+        };
+      });
+
+      const payload =
+        mode === 'amend'
+          ? {
+              rev: initialRev,
+              reason: revisionReason.trim(),
+              items: mappedItems,
+              shippingCharge,
+              deliveryAddress: deliveryAddress.trim() || undefined,
+              ...(hasBelowMin ? { belowMinReason: belowMinReason.trim() } : {}),
+            }
+          : {
+              customerId,
+              items: mappedItems,
+              shippingCharge,
+              dpBps,
+              deliveryAddress: deliveryAddress.trim() || undefined,
+              notes: notes.trim() || undefined,
+              repeatIntervalDays: repeatIntervalDays ? Number(repeatIntervalDays) : undefined,
+              belowMinReason: belowMinReason.trim() || undefined,
+              ...(mode === 'edit' ? { rev: initialRev } : {}),
+            };
+
+      const url =
+        mode === 'amend'
+          ? `/api/v1/orders/${orderId}/revisions`
+          : mode === 'create'
+          ? '/api/v1/orders'
+          : `/api/v1/orders/${orderId}`;
+      const method = mode === 'edit' ? 'PATCH' : 'POST';
 
       const res = await fetch(url, {
         method,
@@ -553,7 +584,10 @@ export function OrderForm({
       if (!res.ok) {
         setShowConfirmModal(false);
         if (res.status === 409) {
-          setFormError('Data pesanan telah diperbarui pengguna lain (stale lock). Muat ulang halaman.');
+          setFormError(
+            json.error?.message ||
+              'Data pesanan telah diperbarui pengguna lain atau stok tidak mencukupi.'
+          );
         } else {
           setFormError(json.error?.message || 'Gagal menyimpan pesanan.');
         }
@@ -561,7 +595,7 @@ export function OrderForm({
       }
 
       setShowConfirmModal(false);
-      const savedId = json.data.id;
+      const savedId = mode === 'amend' ? orderId : json.data.id;
       router.push(`/orders/${savedId}`);
     } catch {
       setShowConfirmModal(false);
@@ -609,10 +643,16 @@ export function OrderForm({
           </Link>
           <div>
             <h1 className="text-xl sm:text-2xl font-bold text-slate-900">
-              {mode === 'create' ? 'Buat Pesanan Baru' : 'Ubah Draf Pesanan'}
+              {mode === 'create'
+                ? 'Buat Pesanan Baru'
+                : mode === 'amend'
+                ? 'Ajukan Revisi Pesanan (Order Amendment)'
+                : 'Ubah Draf Pesanan'}
             </h1>
             <p className="text-xs sm:text-sm text-slate-500">
-              Isi rincian produk, diskon, dan alamat kirim untuk membuat pesanan.
+              {mode === 'amend'
+                ? 'Sesuaikan item, kuantitas, harga, atau ongkos kirim. Perubahan akan diajukan untuk persetujuan pemilik.'
+                : 'Isi rincian produk, diskon, dan alamat kirim untuk membuat pesanan.'}
             </p>
           </div>
         </div>
@@ -673,7 +713,8 @@ export function OrderForm({
                 <select
                   value={customerId}
                   onChange={(e) => setCustomerId(e.target.value)}
-                  className="w-full px-3 py-2 text-[16px] sm:text-sm rounded-lg border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 min-h-[44px]"
+                  disabled={mode === 'amend'}
+                  className="w-full px-3 py-2 text-[16px] sm:text-sm rounded-lg border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 min-h-[44px] disabled:bg-slate-100 disabled:text-slate-600"
                 >
                   <option value="">-- Pilih Pelanggan Terdaftar --</option>
                   {filteredCustomers.map((c) => (
@@ -1156,6 +1197,62 @@ export function OrderForm({
               </div>
             )}
 
+            {/* Ringkasan Selisih & Input Alasan Revisi (khusus mode amend) */}
+            {mode === 'amend' && (
+              <div className="space-y-3 pt-2 border-t border-slate-100">
+                {initialOldGrandTotal !== undefined && previewTotals && (
+                  <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 text-xs space-y-1">
+                    <div className="flex justify-between text-slate-500">
+                      <span>Total Sebelum Revisi:</span>
+                      <span className="font-mono font-semibold text-slate-800">
+                        {formatRupiah(initialOldGrandTotal)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-slate-500">
+                      <span>Total Baru:</span>
+                      <span className="font-mono font-semibold text-indigo-700">
+                        {formatRupiah(previewTotals.grandTotal)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between font-bold pt-1 border-t border-slate-200">
+                      <span>Selisih Nilai:</span>
+                      <span
+                        className={`font-mono ${
+                          previewTotals.grandTotal - initialOldGrandTotal >= 0
+                            ? 'text-indigo-700'
+                            : 'text-amber-700'
+                        }`}
+                      >
+                        {previewTotals.grandTotal - initialOldGrandTotal >= 0 ? '+' : ''}
+                        {formatRupiah(previewTotals.grandTotal - initialOldGrandTotal)}
+                      </span>
+                    </div>
+                    {initialPaidTotal > 0 && (
+                      <div className="flex justify-between text-emerald-700 pt-1">
+                        <span>DP / Dana Terbayar:</span>
+                        <span className="font-mono font-semibold">
+                          {formatRupiah(initialPaidTotal)}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Alasan Revisi Pesanan *
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={revisionReason}
+                    onChange={(e) => setRevisionReason(e.target.value)}
+                    placeholder="Jelaskan perubahan item, qty, atau ongkos kirim yang diminta pelanggan..."
+                    className="w-full px-3 py-2 text-xs sm:text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+              </div>
+            )}
+
             {/* Tombol Simpan Aksi */}
             <div className="pt-3 border-t border-slate-100 space-y-2">
               <button
@@ -1175,12 +1272,18 @@ export function OrderForm({
                 {submitting ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Menyimpan...</span>
+                    <span>{mode === 'amend' ? 'Mengajukan...' : 'Menyimpan...'}</span>
                   </>
                 ) : (
                   <>
                     <CheckCircle2 className="w-4 h-4" />
-                    <span>{mode === 'create' ? 'Simpan Draf Pesanan' : 'Simpan Perubahan'}</span>
+                    <span>
+                      {mode === 'create'
+                        ? 'Simpan Draf Pesanan'
+                        : mode === 'amend'
+                        ? 'Ajukan Revisi Pesanan'
+                        : 'Simpan Perubahan'}
+                    </span>
                   </>
                 )}
               </button>
