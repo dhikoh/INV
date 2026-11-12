@@ -2,28 +2,45 @@ import fs from 'fs';
 import path from 'path';
 import sharp from 'sharp';
 import { prisma } from '@/lib/db';
-import { Role, InvoiceTheme, Prisma } from '@prisma/client';
+import { Role, InvoiceTheme, Prisma, CatalogLayoutStyle, PromoValidityType } from '@prisma/client';
 import { Ctx, requireBusiness } from '@/lib/auth/context';
 import { DomainError, fromDb, toDb } from '@/lib/domain/money';
 import { baseFloor, effectiveFloor, initialPrice } from '@/lib/domain/pricing';
 import { getLogoDataUri } from '@/lib/pdf/logo';
 import { renderReactToHtml, renderHtmlToPdf } from '@/lib/pdf/engine';
 import { CatalogDocument, CatalogPdfItem, CatalogPdfData } from '@/lib/pdf/CatalogDocument';
+import { ensureCatalogVerifyToken, buildQrVerificationProps } from '@/lib/pdf/qr';
 import { env } from '@/lib/env';
 import { customerScope } from './scopes';
 import {
   CatalogFromProductsInput,
 } from '../validation/priceList';
+import { CatalogQueryInput } from '../validation/catalog';
+export type { CatalogQueryInput };
 export type TxClient = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
 
 export interface CatalogItemInput {
   productId: string;
   price: number;
+  badgeText?: string | null;
+  itemNote?: string | null;
   sortOrder?: number;
 }
 
 export interface CreateCatalogInput {
   title: string;
+  subtitle?: string | null;
+  promoHighlight?: string | null;
+  layoutStyle?: CatalogLayoutStyle;
+  isPromo?: boolean;
+  promoValidityType?: PromoValidityType;
+  promoStartAt?: Date | null;
+  promoEndAt?: Date | null;
+  validityText?: string | null;
+  showStrikethroughPrice?: boolean;
+  showSku?: boolean;
+  ctaText?: string | null;
+  termsNote?: string | null;
   customerId?: string | null;
   note?: string | null;
   items?: CatalogItemInput[];
@@ -31,15 +48,20 @@ export interface CreateCatalogInput {
 
 export interface UpdateCatalogInput {
   title?: string;
+  subtitle?: string | null;
+  promoHighlight?: string | null;
+  layoutStyle?: CatalogLayoutStyle;
+  isPromo?: boolean;
+  promoValidityType?: PromoValidityType;
+  promoStartAt?: Date | null;
+  promoEndAt?: Date | null;
+  validityText?: string | null;
+  showStrikethroughPrice?: boolean;
+  showSku?: boolean;
+  ctaText?: string | null;
+  termsNote?: string | null;
   customerId?: string | null;
   note?: string | null;
-}
-
-export interface CatalogQueryInput {
-  search?: string;
-  customerId?: string;
-  page?: number;
-  limit?: number;
 }
 
 export interface PriceViolation {
@@ -165,6 +187,12 @@ export async function listCatalogs(ctx: Ctx, query: CatalogQueryInput) {
     return {
       id: c.id,
       title: c.title,
+      subtitle: c.subtitle,
+      layoutStyle: c.layoutStyle,
+      isPromo: c.isPromo,
+      promoValidityType: c.promoValidityType,
+      promoEndAt: c.promoEndAt ? c.promoEndAt.toISOString() : null,
+      verifyToken: c.verifyToken,
       note: c.note,
       customerId: c.customerId,
       customer,
@@ -322,6 +350,8 @@ export async function getCatalogById(ctx: Ctx, id: string) {
       isStale,
       isDeleted,
       imagePath: primaryImg,
+      badgeText: item.badgeText ?? null,
+      itemNote: item.itemNote ?? null,
     };
   });
 
@@ -350,7 +380,20 @@ export async function getCatalogById(ctx: Ctx, id: string) {
   return {
     id: catalog.id,
     title: catalog.title,
+    subtitle: catalog.subtitle,
+    promoHighlight: catalog.promoHighlight,
+    layoutStyle: catalog.layoutStyle,
+    isPromo: catalog.isPromo,
+    promoValidityType: catalog.promoValidityType,
+    promoStartAt: catalog.promoStartAt ? catalog.promoStartAt.toISOString() : null,
+    promoEndAt: catalog.promoEndAt ? catalog.promoEndAt.toISOString() : null,
+    validityText: catalog.validityText,
+    showStrikethroughPrice: catalog.showStrikethroughPrice,
+    showSku: catalog.showSku,
+    ctaText: catalog.ctaText,
+    termsNote: catalog.termsNote,
     note: catalog.note,
+    verifyToken: catalog.verifyToken,
     customerId: catalog.customerId,
     customer,
     ownerId: catalog.ownerId,
@@ -495,13 +538,27 @@ export async function createCatalog(ctx: Ctx, input: CreateCatalogInput) {
       await validateCatalogItems(tx, businessId, input.customerId, input.items);
     }
 
+    const verifyToken = await ensureCatalogVerifyToken({ id: '', businessId }, null);
     const catalog = await tx.catalog.create({
       data: {
         businessId,
         ownerId: ctx.user.id,
         customerId: input.customerId || null,
         title: input.title,
+        subtitle: input.subtitle || null,
+        promoHighlight: input.promoHighlight || null,
+        layoutStyle: input.layoutStyle || 'TABLE',
+        isPromo: Boolean(input.isPromo),
+        promoValidityType: input.promoValidityType || 'NONE',
+        promoStartAt: input.promoStartAt || null,
+        promoEndAt: input.promoEndAt || null,
+        validityText: input.validityText || null,
+        showStrikethroughPrice: Boolean(input.showStrikethroughPrice),
+        showSku: input.showSku ?? true,
+        ctaText: input.ctaText || null,
+        termsNote: input.termsNote || null,
         note: input.note || null,
+        verifyToken,
       },
     });
 
@@ -511,6 +568,8 @@ export async function createCatalog(ctx: Ctx, input: CreateCatalogInput) {
           catalogId: catalog.id,
           productId: i.productId,
           price: BigInt(i.price),
+          badgeText: i.badgeText || null,
+          itemNote: i.itemNote || null,
           sortOrder: i.sortOrder ?? idx,
         })),
       });
@@ -560,6 +619,18 @@ export async function updateCatalog(ctx: Ctx, id: string, input: UpdateCatalogIn
     where: { id, businessId },
     data: {
       title: input.title !== undefined ? input.title : existing.title,
+      subtitle: input.subtitle !== undefined ? input.subtitle : existing.subtitle,
+      promoHighlight: input.promoHighlight !== undefined ? input.promoHighlight : existing.promoHighlight,
+      layoutStyle: input.layoutStyle !== undefined ? input.layoutStyle : existing.layoutStyle,
+      isPromo: input.isPromo !== undefined ? input.isPromo : existing.isPromo,
+      promoValidityType: input.promoValidityType !== undefined ? input.promoValidityType : existing.promoValidityType,
+      promoStartAt: input.promoStartAt !== undefined ? input.promoStartAt : existing.promoStartAt,
+      promoEndAt: input.promoEndAt !== undefined ? input.promoEndAt : existing.promoEndAt,
+      validityText: input.validityText !== undefined ? input.validityText : existing.validityText,
+      showStrikethroughPrice: input.showStrikethroughPrice !== undefined ? input.showStrikethroughPrice : existing.showStrikethroughPrice,
+      showSku: input.showSku !== undefined ? input.showSku : existing.showSku,
+      ctaText: input.ctaText !== undefined ? input.ctaText : existing.ctaText,
+      termsNote: input.termsNote !== undefined ? input.termsNote : existing.termsNote,
       customerId: input.customerId !== undefined ? input.customerId : existing.customerId,
       note: input.note !== undefined ? input.note : existing.note,
     },
@@ -606,6 +677,8 @@ export async function replaceCatalogItems(
           catalogId: id,
           productId: i.productId,
           price: BigInt(i.price),
+          badgeText: i.badgeText || null,
+          itemNote: i.itemNote || null,
           sortOrder: i.sortOrder ?? idx,
         })),
       });
@@ -957,6 +1030,10 @@ export async function generateCatalogPdf(
       address: true,
       phone: true,
       email: true,
+      website: true,
+      tagline: true,
+      instagram: true,
+      showWebsiteOnPdf: true,
       logoPath: true,
       ppnEnabled: true,
       invoiceTheme: true,
@@ -967,12 +1044,26 @@ export async function generateCatalogPdf(
     throw new DomainError('BUSINESS_NOT_FOUND', 'Data usaha tidak ditemukan', 404);
   }
 
+  // Muat Sales PIC (owner)
+  const owner = await prisma.user.findUnique({
+    where: { id: detail.ownerId },
+    select: { id: true, name: true, phone: true },
+  });
+
+  // Pastikan verifyToken ada dan bangun QR
+  const verifyToken = await ensureCatalogVerifyToken(
+    { id: detail.id, businessId: ctx.businessId!, verifyToken: detail.verifyToken },
+    prisma.catalog
+  );
+  const qrProps = await buildQrVerificationProps(verifyToken, null);
+
   const logoDataUri = getLogoDataUri(business.logoPath);
 
   // Ubah foto produk menjadi data URI 300 px secara paralel
   const pdfItems: CatalogPdfItem[] = await Promise.all(
     renderItems.map(async (item, idx) => {
       const imageDataUri = await getProductImageDataUri(item.imagePath);
+      const showStrike = detail.showStrikethroughPrice && item.price < item.basePrice;
       return {
         no: idx + 1,
         productId: item.productId,
@@ -980,6 +1071,9 @@ export async function generateCatalogPdf(
         sku: item.sku,
         unit: item.unit,
         price: item.price,
+        strikePrice: showStrike ? item.basePrice : undefined,
+        badgeText: item.badgeText || undefined,
+        itemNote: item.itemNote || undefined,
         imageDataUri,
       };
     })
@@ -987,14 +1081,32 @@ export async function generateCatalogPdf(
 
   const pdfData: CatalogPdfData = {
     title: detail.title,
+    subtitle: detail.subtitle,
+    promoHighlight: detail.promoHighlight,
+    layoutStyle: detail.layoutStyle || 'TABLE',
+    isPromo: detail.isPromo,
+    promoValidityType: detail.promoValidityType,
+    promoStartAt: detail.promoStartAt,
+    promoEndAt: detail.promoEndAt,
+    validityText: detail.validityText,
+    showSku: detail.showSku ?? true,
+    ctaText: detail.ctaText,
+    termsNote: detail.termsNote,
     date: detail.updatedAt,
     note: detail.note,
+    verifyToken,
+    verifyUrl: qrProps.verifyUrl,
+    qrDataUri: qrProps.qrDataUri,
+    sales: owner ? { name: owner.name, phone: owner.phone } : undefined,
     business: {
       name: business.name,
       legalName: business.legalName,
       address: business.address,
       phone: business.phone,
       email: business.email,
+      website: business.showWebsiteOnPdf ? business.website : null,
+      tagline: business.tagline,
+      instagram: business.showWebsiteOnPdf ? business.instagram : null,
       ppnEnabled: business.ppnEnabled,
       invoiceTheme: business.invoiceTheme || InvoiceTheme.PROFESIONAL,
     },

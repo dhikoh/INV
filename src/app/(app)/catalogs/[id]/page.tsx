@@ -16,6 +16,15 @@ import {
   Loader2,
   DownloadCloud,
   Check,
+  Copy,
+  ExternalLink,
+  ShieldCheck,
+  Sparkles,
+  LayoutGrid,
+  Table as TableIcon,
+  Flame,
+  BookOpen,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/States';
 import { MoneyInput } from '@/components/ui/MoneyInput';
@@ -24,6 +33,9 @@ import { PatenPrice } from '@/components/ui/PatenPrice';
 import { FloorSource } from '@/lib/domain/pricing';
 import { useIsOnline } from '@/components/pwa/OfflineBanner';
 import { formatDateId } from '@/lib/format/date';
+
+type LayoutStyle = 'TABLE' | 'PROMO_GRID' | 'HERO_SALE' | 'EDITORIAL';
+type PromoValidityType = 'NONE' | 'PERIOD';
 
 interface CustomerSummary {
   id: string;
@@ -43,6 +55,8 @@ interface CatalogDetailItem {
   isStale: boolean;
   isDeleted: boolean;
   imagePath: string | null;
+  badgeText?: string | null;
+  itemNote?: string | null;
   floorSource?: FloorSource;
   catalogPrice?: number;
   patenPrice?: number;
@@ -51,7 +65,20 @@ interface CatalogDetailItem {
 interface CatalogDetail {
   id: string;
   title: string;
+  subtitle?: string | null;
+  promoHighlight?: string | null;
+  layoutStyle: LayoutStyle;
+  isPromo: boolean;
+  promoValidityType: PromoValidityType;
+  promoStartAt?: string | null;
+  promoEndAt?: string | null;
+  validityText?: string | null;
+  showStrikethroughPrice: boolean;
+  showSku: boolean;
+  ctaText?: string | null;
+  termsNote?: string | null;
   note: string | null;
+  verifyToken: string;
   customerId: string | null;
   customer: CustomerSummary | null;
   ownerId: string;
@@ -81,7 +108,28 @@ export default function CatalogDetailPage() {
   // Edit items mode
   const [isEditingItems, setIsEditingItems] = useState(false);
   const [editablePrices, setEditablePrices] = useState<Map<string, number>>(new Map());
+  const [editableBadges, setEditableBadges] = useState<Map<string, string>>(new Map());
+  const [editableNotes, setEditableNotes] = useState<Map<string, string>>(new Map());
   const [savingItems, setSavingItems] = useState(false);
+
+  // Edit metadata modal
+  const [showEditMetaModal, setShowEditMetaModal] = useState(false);
+  const [metaTitle, setMetaTitle] = useState('');
+  const [metaSubtitle, setMetaSubtitle] = useState('');
+  const [metaHighlight, setMetaHighlight] = useState('');
+  const [metaLayoutStyle, setMetaLayoutStyle] = useState<LayoutStyle>('TABLE');
+  const [metaIsPromo, setMetaIsPromo] = useState(false);
+  const [metaValidityType, setMetaValidityType] = useState<PromoValidityType>('NONE');
+  const [metaStartAt, setMetaStartAt] = useState('');
+  const [metaEndAt, setMetaEndAt] = useState('');
+  const [metaValidityText, setMetaValidityText] = useState('');
+  const [metaStrikethrough, setMetaStrikethrough] = useState(true);
+  const [metaShowSku, setMetaShowSku] = useState(true);
+  const [metaCtaText, setMetaCtaText] = useState('');
+  const [metaTermsNote, setMetaTermsNote] = useState('');
+  const [metaNote, setMetaNote] = useState('');
+  const [savingMeta, setSavingMeta] = useState(false);
+  const [copiedVerify, setCopiedVerify] = useState(false);
 
   // Action states
   const isOnline = useIsOnline();
@@ -129,11 +177,17 @@ export default function CatalogDetailPage() {
       if (json.ok && json.data) {
         setCatalog(json.data);
         setIsOfflineView(false);
-        const map = new Map<string, number>();
+        const priceMap = new Map<string, number>();
+        const badgeMap = new Map<string, string>();
+        const noteMap = new Map<string, string>();
         json.data.items.forEach((it: CatalogDetailItem) => {
-          map.set(it.productId, it.price);
+          priceMap.set(it.productId, it.price);
+          badgeMap.set(it.productId, it.badgeText || '');
+          noteMap.set(it.productId, it.itemNote || '');
         });
-        setEditablePrices(map);
+        setEditablePrices(priceMap);
+        setEditableBadges(badgeMap);
+        setEditableNotes(noteMap);
       }
     } catch {
       // Coba fallback offline dari cache lokal
@@ -153,6 +207,88 @@ export default function CatalogDetailPage() {
       setLoading(false);
     }
   }, [catalogId]);
+
+  const openEditMetaModal = () => {
+    if (!catalog) return;
+    setMetaTitle(catalog.title || '');
+    setMetaSubtitle(catalog.subtitle || '');
+    setMetaHighlight(catalog.promoHighlight || '');
+    setMetaLayoutStyle(catalog.layoutStyle || 'TABLE');
+    setMetaIsPromo(Boolean(catalog.isPromo));
+    setMetaValidityType(catalog.promoValidityType || 'NONE');
+    setMetaStartAt(catalog.promoStartAt ? catalog.promoStartAt.split('T')[0] : '');
+    setMetaEndAt(catalog.promoEndAt ? catalog.promoEndAt.split('T')[0] : '');
+    setMetaValidityText(catalog.validityText || '');
+    setMetaStrikethrough(catalog.showStrikethroughPrice ?? true);
+    setMetaShowSku(catalog.showSku ?? true);
+    setMetaCtaText(catalog.ctaText || '');
+    setMetaTermsNote(catalog.termsNote || '');
+    setMetaNote(catalog.note || '');
+    setShowEditMetaModal(true);
+  };
+
+  const handleSaveMeta = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!catalog || savingMeta) return;
+
+    setSavingMeta(true);
+    try {
+      const payload = {
+        title: metaTitle.trim(),
+        subtitle: metaSubtitle.trim() || null,
+        promoHighlight: metaHighlight.trim() || null,
+        layoutStyle: metaLayoutStyle,
+        isPromo: metaIsPromo,
+        promoValidityType: metaIsPromo ? metaValidityType : 'NONE',
+        promoStartAt:
+          metaIsPromo && metaValidityType === 'PERIOD' && metaStartAt
+            ? new Date(metaStartAt + 'T00:00:00Z').toISOString()
+            : null,
+        promoEndAt:
+          metaIsPromo && metaValidityType === 'PERIOD' && metaEndAt
+            ? new Date(metaEndAt + 'T23:59:59Z').toISOString()
+            : null,
+        validityText: metaIsPromo && metaValidityText.trim() ? metaValidityText.trim() : null,
+        showStrikethroughPrice: metaStrikethrough,
+        showSku: metaShowSku,
+        ctaText: metaCtaText.trim() || null,
+        termsNote: metaTermsNote.trim() || null,
+        note: metaNote.trim() || null,
+      };
+
+      const res = await fetch(`/api/v1/catalogs/${catalog.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Origin: window.location.origin,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const json = await res.json();
+      if (!res.ok) {
+        showToast(json?.error?.message || 'Gagal menyimpan pengaturan katalog.');
+        return;
+      }
+
+      setShowEditMetaModal(false);
+      fetchCatalog();
+      showToast('Pengaturan katalog dan tata letak berhasil diperbarui.');
+    } catch {
+      showToast('Terjadi kesalahan jaringan.');
+    } finally {
+      setSavingMeta(false);
+    }
+  };
+
+  const handleCopyVerifyLink = () => {
+    if (!catalog?.verifyToken) return;
+    const url = `${window.location.origin}/verify/${catalog.verifyToken}`;
+    navigator.clipboard.writeText(url);
+    setCopiedVerify(true);
+    showToast('Tautan verifikasi publik disalin ke clipboard.');
+    setTimeout(() => setCopiedVerify(false), 3000);
+  };
 
   useEffect(() => {
     fetchCatalog();
@@ -288,6 +424,8 @@ export default function CatalogDetailPage() {
         items: catalog.items.map((it, idx) => ({
           productId: it.productId,
           price: editablePrices.get(it.productId) ?? it.price,
+          badgeText: editableBadges.get(it.productId)?.trim() || null,
+          itemNote: editableNotes.get(it.productId)?.trim() || null,
           sortOrder: idx,
         })),
       };
@@ -423,13 +561,19 @@ export default function CatalogDetailPage() {
             <ArrowLeft className="w-5 h-5" />
           </Link>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-xl md:text-2xl font-bold text-slate-900 tracking-tight">
                 {catalog.title}
               </h1>
               <span className="px-2.5 py-0.5 rounded text-xs font-semibold bg-emerald-100 text-emerald-800">
                 {catalog.itemCount} Produk
               </span>
+              {catalog.isPromo && (
+                <span className="px-2.5 py-0.5 rounded text-xs font-bold bg-amber-100 text-amber-900 flex items-center gap-1">
+                  <Sparkles className="w-3 h-3 text-amber-600" />
+                  PROMO
+                </span>
+              )}
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
               Dibuat oleh {catalog.ownerName} • {formatDateId(catalog.createdAt, 'compact')}
@@ -439,6 +583,44 @@ export default function CatalogDetailPage() {
 
         {/* Tombol Utama */}
         <div className="flex flex-wrap items-center gap-2">
+          {/* Link Verifikasi Publik */}
+          <div className="flex items-center gap-1 bg-white border border-slate-300 rounded-lg p-0.5">
+            <a
+              href={`/verify/${catalog.verifyToken}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-emerald-700 hover:text-emerald-800 text-xs font-semibold rounded transition-colors"
+              title="Buka Halaman Verifikasi QR Publik"
+            >
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Verifikasi QR</span>
+              <ExternalLink className="w-3 h-3 text-slate-400" />
+            </a>
+            <button
+              type="button"
+              onClick={handleCopyVerifyLink}
+              className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded transition-colors"
+              title="Salin Tautan Verifikasi"
+            >
+              {copiedVerify ? (
+                <Check className="w-3.5 h-3.5 text-emerald-600" />
+              ) : (
+                <Copy className="w-3.5 h-3.5" />
+              )}
+            </button>
+          </div>
+
+          <button
+            type="button"
+            onClick={openEditMetaModal}
+            disabled={!isOnline}
+            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded-lg transition-colors"
+            title="Ubah template tata letak, judul, dan pengaturan promo"
+          >
+            <SlidersHorizontal className="w-3.5 h-3.5" />
+            <span>Pengaturan & Desain</span>
+          </button>
+
           <button
             type="button"
             onClick={handleSaveForOffline}
@@ -576,9 +758,29 @@ export default function CatalogDetailPage() {
         </div>
       )}
 
-      {/* Detail Informasi */}
-      <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm space-y-3">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+      {/* Detail Informasi & Konfigurasi Desain */}
+      <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm space-y-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
+          <div>
+            <span className="text-xs text-slate-500 font-medium uppercase tracking-wider block">
+              Template Tata Letak PDF
+            </span>
+            <div className="mt-1 flex items-center gap-2">
+              <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-100 text-slate-800 border border-slate-200 inline-flex items-center gap-1.5">
+                {catalog.layoutStyle === 'TABLE' && <TableIcon className="w-3.5 h-3.5 text-slate-600" />}
+                {catalog.layoutStyle === 'PROMO_GRID' && <LayoutGrid className="w-3.5 h-3.5 text-blue-600" />}
+                {catalog.layoutStyle === 'HERO_SALE' && <Flame className="w-3.5 h-3.5 text-amber-600" />}
+                {catalog.layoutStyle === 'EDITORIAL' && <BookOpen className="w-3.5 h-3.5 text-purple-600" />}
+                <span>
+                  {catalog.layoutStyle === 'TABLE' && 'Tabel Formal B2B'}
+                  {catalog.layoutStyle === 'PROMO_GRID' && 'Grid Promo Retail'}
+                  {catalog.layoutStyle === 'HERO_SALE' && 'Hero Promo Banner'}
+                  {catalog.layoutStyle === 'EDITORIAL' && 'Lookbook Editorial'}
+                </span>
+              </span>
+            </div>
+          </div>
+
           <div>
             <span className="text-xs text-slate-500 font-medium uppercase tracking-wider block">
               Sasaran Pelanggan
@@ -599,13 +801,51 @@ export default function CatalogDetailPage() {
 
           <div>
             <span className="text-xs text-slate-500 font-medium uppercase tracking-wider block">
-              Catatan Katalog
+              Status Promo
             </span>
-            <p className="text-slate-800 mt-1 italic text-xs md:text-sm">
-              {catalog.note || 'Tidak ada catatan khusus.'}
-            </p>
+            {catalog.isPromo ? (
+              <div className="text-xs text-amber-900 font-semibold mt-1 space-y-0.5">
+                <p>
+                  {catalog.promoValidityType === 'PERIOD'
+                    ? `Periode: ${catalog.validityText || 'Rentang Tanggal'}`
+                    : 'Selama Persediaan Ada (Tanpa Batas Tanggal)'}
+                </p>
+                {catalog.promoHighlight && (
+                  <p className="text-[11px] text-amber-700 font-bold">
+                    Highlight: {catalog.promoHighlight}
+                  </p>
+                )}
+              </div>
+            ) : (
+              <p className="text-slate-600 text-xs mt-1">Pricelist Standar (Bukan Promo)</p>
+            )}
           </div>
         </div>
+
+        {(catalog.subtitle || catalog.note || catalog.termsNote || catalog.ctaText) && (
+          <div className="pt-3 border-t border-slate-100 grid grid-cols-1 md:grid-cols-2 gap-3 text-xs text-slate-600">
+            {catalog.subtitle && (
+              <div>
+                <span className="font-semibold text-slate-700">Subjudul:</span> {catalog.subtitle}
+              </div>
+            )}
+            {catalog.ctaText && (
+              <div>
+                <span className="font-semibold text-slate-700">Call to Action:</span> {catalog.ctaText}
+              </div>
+            )}
+            {catalog.termsNote && (
+              <div className="col-span-full">
+                <span className="font-semibold text-slate-700">Syarat & Ketentuan:</span> {catalog.termsNote}
+              </div>
+            )}
+            {catalog.note && (
+              <div className="col-span-full italic text-slate-500">
+                <span className="font-semibold text-slate-700 not-italic">Catatan:</span> {catalog.note}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Tabel Baris Produk */}
@@ -614,7 +854,7 @@ export default function CatalogDetailPage() {
           <div>
             <h3 className="font-bold text-slate-900 text-base">Daftar Produk & Harga</h3>
             <p className="text-xs text-slate-500 mt-0.5">
-              Harga di bawah adalah harga jual yang tampil di katalog penawaran.
+              Harga di bawah adalah harga penawaran yang tampil pada katalog PDF resmi.
             </p>
           </div>
 
@@ -651,7 +891,7 @@ export default function CatalogDetailPage() {
                 className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Edit2 className="w-3.5 h-3.5" />
-                <span>Ubah Harga</span>
+                <span>Ubah Harga & Badge</span>
               </button>
             )}
           </div>
@@ -660,78 +900,142 @@ export default function CatalogDetailPage() {
         <div className="divide-y divide-slate-200">
           {catalog.items.map((item, idx) => {
             const currentPrice = editablePrices.get(item.productId) ?? item.price;
+            const currentBadge = editableBadges.get(item.productId) ?? item.badgeText ?? '';
+            const currentItemNote = editableNotes.get(item.productId) ?? item.itemNote ?? '';
             const isItemStale = item.isStale || currentPrice < item.floorPrice;
+            const hasStrikePrice =
+              catalog.showStrikethroughPrice && Number(item.basePrice) > currentPrice;
 
             return (
               <div
                 key={item.id}
-                className={`p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                className={`p-4 flex flex-col gap-3 ${
                   isItemStale ? 'bg-amber-50/50' : 'hover:bg-slate-50/50'
                 }`}
               >
-                <div className="flex items-center gap-3">
-                  <span className="text-xs font-semibold text-slate-400 w-5">
-                    {idx + 1}.
-                  </span>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 flex-1">
+                    <span className="text-xs font-semibold text-slate-400 w-5">
+                      {idx + 1}.
+                    </span>
 
-                  {/* Thumbnail Foto Produk (max 300px di PDF, thumbnail kecil di UI) */}
-                  <div className="w-12 h-12 bg-slate-100 rounded-lg border border-slate-200 overflow-hidden flex items-center justify-center shrink-0">
-                    {item.imagePath ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={`/api/v1/files/${item.imagePath}`}
-                        alt={item.name}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <span className="text-xs font-bold text-slate-400">
-                        {item.name.substring(0, 2).toUpperCase()}
-                      </span>
-                    )}
-                  </div>
-
-                  <div>
-                    <h4 className="text-sm font-semibold text-slate-900 leading-snug">
-                      {item.name}
-                    </h4>
-                    <div className="text-xs text-slate-500 flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5 items-center">
-                      <span>SKU: {item.sku}</span>
-                      <span>Satuan: {item.unit}</span>
-                      <PatenPrice value={item.floorPrice} source={item.floorSource} />
-                      {isItemStale && (
-                        <span className="text-amber-700 font-semibold flex items-center gap-1">
-                          <AlertTriangle className="w-3 h-3" />
-                          Di bawah harga paten!
+                    {/* Thumbnail Foto Produk */}
+                    <div className="w-12 h-12 bg-slate-100 rounded-lg border border-slate-200 overflow-hidden flex items-center justify-center shrink-0">
+                      {item.imagePath ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={`/api/v1/files/${item.imagePath}`}
+                          alt={item.name}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <span className="text-xs font-bold text-slate-400">
+                          {item.name.substring(0, 2).toUpperCase()}
                         </span>
                       )}
                     </div>
+
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h4 className="text-sm font-semibold text-slate-900 leading-snug">
+                          {item.name}
+                        </h4>
+                        {!isEditingItems && item.badgeText && (
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-900">
+                            {item.badgeText}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs text-slate-500 flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5 items-center">
+                        {catalog.showSku && <span>SKU: {item.sku}</span>}
+                        <span>Satuan: {item.unit}</span>
+                        <PatenPrice value={item.floorPrice} source={item.floorSource} />
+                        {isItemStale && (
+                          <span className="text-amber-700 font-semibold flex items-center gap-1">
+                            <AlertTriangle className="w-3 h-3" />
+                            Di bawah harga paten!
+                          </span>
+                        )}
+                      </div>
+                      {!isEditingItems && item.itemNote && (
+                        <p className="text-xs text-slate-500 italic mt-0.5">
+                          Ket: {item.itemNote}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-3 ml-8 sm:ml-0">
+                    {isEditingItems ? (
+                      <div className="w-40">
+                        <label className="block text-[10px] text-slate-400 mb-0.5">Harga Jual</label>
+                        <MoneyInput
+                          value={currentPrice}
+                          onChange={(val) => {
+                            const nextMap = new Map(editablePrices);
+                            nextMap.set(item.productId, val);
+                            setEditablePrices(nextMap);
+                          }}
+                          className={`text-sm ${
+                            currentPrice < item.floorPrice ? 'border-red-400 focus:ring-red-500' : ''
+                          }`}
+                        />
+                      </div>
+                    ) : (
+                      <div className="text-right">
+                        {hasStrikePrice && (
+                          <span className="text-xs text-slate-400 line-through block">
+                            {formatRupiah(item.basePrice)}
+                          </span>
+                        )}
+                        <span className="text-sm font-bold text-slate-900">
+                          {formatRupiah(item.price)}
+                        </span>
+                        <span className="text-xs text-slate-400 block">/ {item.unit}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
 
-                <div className="flex items-center justify-end gap-3 ml-8 sm:ml-0">
-                  {isEditingItems ? (
-                    <div className="w-40">
-                      <MoneyInput
-                        value={currentPrice}
-                        onChange={(val) => {
-                          const nextMap = new Map(editablePrices);
-                          nextMap.set(item.productId, val);
-                          setEditablePrices(nextMap);
+                {/* Edit Badge & Catatan Item saat mode ubah */}
+                {isEditingItems && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-slate-100 ml-8">
+                    <div>
+                      <label className="block text-[10px] font-medium text-slate-500 mb-0.5">
+                        Badge Produk (Misal: SPECIAL PRICE / HEMAT 10rb)
+                      </label>
+                      <input
+                        type="text"
+                        value={currentBadge}
+                        onChange={(e) => {
+                          const nextMap = new Map(editableBadges);
+                          nextMap.set(item.productId, e.target.value);
+                          setEditableBadges(nextMap);
                         }}
-                        className={`text-sm ${
-                          currentPrice < item.floorPrice ? 'border-red-400 focus:ring-red-500' : ''
-                        }`}
+                        maxLength={40}
+                        placeholder="Tampil di badge kartu produk"
+                        className="w-full px-2.5 py-1 text-xs border border-slate-200 rounded bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
                       />
                     </div>
-                  ) : (
-                    <div className="text-right">
-                      <span className="text-sm font-bold text-slate-900">
-                        {formatRupiah(item.price)}
-                      </span>
-                      <span className="text-xs text-slate-400 block">/ {item.unit}</span>
+                    <div>
+                      <label className="block text-[10px] font-medium text-slate-500 mb-0.5">
+                        Catatan / Varian Kemasan (Misal: 500g / Isi 10)
+                      </label>
+                      <input
+                        type="text"
+                        value={currentItemNote}
+                        onChange={(e) => {
+                          const nextMap = new Map(editableNotes);
+                          nextMap.set(item.productId, e.target.value);
+                          setEditableNotes(nextMap);
+                        }}
+                        maxLength={120}
+                        placeholder="Keterangan tambahan produk"
+                        className="w-full px-2.5 py-1 text-xs border border-slate-200 rounded bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                      />
                     </div>
-                  )}
-                </div>
+                  </div>
+                )}
               </div>
             );
           })}
@@ -756,6 +1060,306 @@ export default function CatalogDetailPage() {
           <span>Hapus Katalog Ini</span>
         </button>
       </div>
+
+      {/* Modal Pengaturan & Tata Letak Katalog */}
+      {showEditMetaModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in overflow-y-auto">
+          <div className="bg-white w-full max-w-2xl rounded-2xl shadow-xl border border-slate-200 overflow-hidden my-8 max-h-[90vh] flex flex-col">
+            <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2">
+                <SlidersHorizontal className="w-5 h-5 text-emerald-600" />
+                <h3 className="font-bold text-slate-900 text-base">
+                  Pengaturan Desain & Promo Katalog
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowEditMetaModal(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveMeta} className="p-5 space-y-4 text-sm text-slate-700 overflow-y-auto flex-1">
+              {/* Template Tata Letak */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-800 mb-1.5 uppercase tracking-wider">
+                  Template Tata Letak PDF
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {[
+                    {
+                      id: 'TABLE' as LayoutStyle,
+                      title: 'Tabel Formal B2B',
+                      desc: 'Pricelist formal, padat, cocok untuk agen & mitra.',
+                      icon: TableIcon,
+                    },
+                    {
+                      id: 'PROMO_GRID' as LayoutStyle,
+                      title: 'Grid Promo Retail',
+                      desc: 'Kartu 3 kolom berbingkai dengan badge diskon ala retail.',
+                      icon: LayoutGrid,
+                    },
+                    {
+                      id: 'HERO_SALE' as LayoutStyle,
+                      title: 'Hero Promo Banner',
+                      desc: 'Header hero mencolok dengan persentase & banner penawaran.',
+                      icon: Flame,
+                    },
+                    {
+                      id: 'EDITORIAL' as LayoutStyle,
+                      title: 'Lookbook Editorial',
+                      desc: 'Minimalis elegan dengan tipografi bersih & ruang lapang.',
+                      icon: BookOpen,
+                    },
+                  ].map((t) => {
+                    const isSelected = metaLayoutStyle === t.id;
+                    const Icon = t.icon;
+                    return (
+                      <button
+                        key={t.id}
+                        type="button"
+                        onClick={() => setMetaLayoutStyle(t.id)}
+                        className={`p-3 rounded-xl border text-left transition-all flex items-start gap-3 ${
+                          isSelected
+                            ? 'border-emerald-600 bg-emerald-50/50 ring-2 ring-emerald-500 shadow-sm'
+                            : 'border-slate-200 hover:border-slate-300 bg-white'
+                        }`}
+                      >
+                        <div className="p-2 rounded-lg bg-slate-100 text-slate-700 shrink-0 mt-0.5">
+                          <Icon className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-slate-900">{t.title}</p>
+                          <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">{t.desc}</p>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Judul & Subjudul */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-100">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Judul Katalog <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={metaTitle}
+                    onChange={(e) => setMetaTitle(e.target.value)}
+                    maxLength={60}
+                    required
+                    className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Subjudul Katalog
+                  </label>
+                  <input
+                    type="text"
+                    value={metaSubtitle}
+                    onChange={(e) => setMetaSubtitle(e.target.value)}
+                    maxLength={120}
+                    placeholder="Contoh: Spesial Akhir Pekan"
+                    className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+              </div>
+
+              {/* Promo Toggle & Pengaturan */}
+              <div className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/50 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                      Aktifkan Fitur Promo
+                    </h4>
+                    <p className="text-[11px] text-slate-500">
+                      Tampilkan banner promosi, highlight diskon, dan coretan harga asal di PDF.
+                    </p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={metaIsPromo}
+                      onChange={(e) => setMetaIsPromo(e.target.checked)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-10 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
+                  </label>
+                </div>
+
+                {metaIsPromo && (
+                  <div className="pt-2 border-t border-slate-200 space-y-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">
+                        Highlight Promo (Tampil Mencolok)
+                      </label>
+                      <input
+                        type="text"
+                        value={metaHighlight}
+                        onChange={(e) => setMetaHighlight(e.target.value)}
+                        maxLength={80}
+                        placeholder="Contoh: DISKON HINGGA 40%, HARGA GEBYAR"
+                        className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-sm bg-white"
+                      />
+                    </div>
+
+                    <div className="p-3 bg-white rounded-lg border border-slate-200 space-y-2">
+                      <label className="block text-xs font-semibold text-slate-800">
+                        Masa Berlaku Promo
+                      </label>
+                      <div className="flex flex-wrap gap-4 text-xs">
+                        <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="metaPromoValidityType"
+                            value="NONE"
+                            checked={metaValidityType === 'NONE'}
+                            onChange={() => setMetaValidityType('NONE')}
+                            className="text-emerald-600 focus:ring-emerald-500"
+                          />
+                          <span>Selama Persediaan Ada (Tanpa Batas Tanggal)</span>
+                        </label>
+                        <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="metaPromoValidityType"
+                            value="PERIOD"
+                            checked={metaValidityType === 'PERIOD'}
+                            onChange={() => setMetaValidityType('PERIOD')}
+                            className="text-emerald-600 focus:ring-emerald-500"
+                          />
+                          <span>Berdasarkan Rentang Tanggal</span>
+                        </label>
+                      </div>
+
+                      {metaValidityType === 'PERIOD' && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                          <div>
+                            <label className="block text-[10px] text-slate-500 mb-0.5">Mulai</label>
+                            <input
+                              type="date"
+                              value={metaStartAt}
+                              onChange={(e) => setMetaStartAt(e.target.value)}
+                              className="w-full px-2.5 py-1 text-xs border border-slate-300 rounded bg-white"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] text-slate-500 mb-0.5">Berakhir</label>
+                            <input
+                              type="date"
+                              value={metaEndAt}
+                              onChange={(e) => setMetaEndAt(e.target.value)}
+                              className="w-full px-2.5 py-1 text-xs border border-slate-300 rounded bg-white"
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      <div>
+                        <label className="block text-[10px] text-slate-500 mb-0.5">
+                          Teks Periode (Tampil di PDF)
+                        </label>
+                        <input
+                          type="text"
+                          value={metaValidityText}
+                          onChange={(e) => setMetaValidityText(e.target.value)}
+                          maxLength={120}
+                          placeholder="Contoh: Periode: 1–15 Ramadhan 1447H"
+                          className="w-full px-2.5 py-1 text-xs border border-slate-300 rounded bg-white"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-4 text-xs">
+                      <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={metaStrikethrough}
+                          onChange={(e) => setMetaStrikethrough(e.target.checked)}
+                          className="text-emerald-600 rounded focus:ring-emerald-500"
+                        />
+                        <span>Coretan Harga Asal</span>
+                      </label>
+                      <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={metaShowSku}
+                          onChange={(e) => setMetaShowSku(e.target.checked)}
+                          className="text-emerald-600 rounded focus:ring-emerald-500"
+                        />
+                        <span>Tampilkan Kode SKU</span>
+                      </label>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[11px] text-slate-600 mb-0.5">Call to Action (CTA)</label>
+                        <input
+                          type="text"
+                          value={metaCtaText}
+                          onChange={(e) => setMetaCtaText(e.target.value)}
+                          maxLength={100}
+                          placeholder="Contoh: Hubungi Sales Kami Segera"
+                          className="w-full px-2.5 py-1 text-xs border border-slate-300 rounded bg-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] text-slate-600 mb-0.5">Syarat & Ketentuan</label>
+                        <input
+                          type="text"
+                          value={metaTermsNote}
+                          onChange={(e) => setMetaTermsNote(e.target.value)}
+                          maxLength={500}
+                          placeholder="Contoh: *Selama persediaan masih ada"
+                          className="w-full px-2.5 py-1 text-xs border border-slate-300 rounded bg-white"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Catatan Umum */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Catatan Tambahan Katalog (Opsional)
+                </label>
+                <textarea
+                  value={metaNote}
+                  onChange={(e) => setMetaNote(e.target.value)}
+                  rows={2}
+                  maxLength={500}
+                  className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-sm bg-white"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-slate-200 flex justify-end gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setShowEditMetaModal(false)}
+                  className="px-4 py-2 text-xs font-medium text-slate-700 hover:bg-slate-100 rounded-lg"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingMeta}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg disabled:opacity-50"
+                >
+                  {savingMeta && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  <span>Simpan Perubahan</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Modal Sinkronisasi Katalog (Addendum v2) */}
       {showSyncModal && (

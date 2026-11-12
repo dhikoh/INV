@@ -177,3 +177,25 @@ export async function ensureInvoiceVerifyToken(
   return generated;
 }
 
+/**
+ * Mengambil verifyToken dari katalog atau menghasilkan token baru untuk katalog.
+ */
+export async function ensureCatalogVerifyToken(
+  catalog: { id: string; businessId: string; verifyToken?: string | null },
+  catalogRepo?: VerifyTokenPersistTarget | null
+): Promise<string> {
+  const existing = catalog.verifyToken ?? null;
+  if (existing) {
+    return existing;
+  }
+
+  const generated = generateVerifyToken();
+  if (typeof catalogRepo?.updateMany === 'function') {
+    await catalogRepo.updateMany({
+      where: { id: catalog.id, businessId: catalog.businessId, verifyToken: null },
+      data: { verifyToken: generated },
+    });
+  }
+  return generated;
+}
+

@@ -72,7 +72,7 @@ const manifestSchema = z.object({
 
 export type Manifest = z.infer<typeof manifestSchema>;
 
-const ALLOWED_UPLOAD_KINDS = new Set(['product', 'logo', 'proof', 'vendor-proof']);
+const ALLOWED_UPLOAD_KINDS = new Set(['product', 'logo', 'proof', 'vendor-proof', 'user-ktp']);
 const UPLOAD_PATH_REGEX = /^uploads\/([A-Za-z0-9_-]+)\/([a-z-]+)\/([A-Za-z0-9_-]+\.(webp|pdf|png|jpg|jpeg))$/;
 
 function getAppVersion(): string {

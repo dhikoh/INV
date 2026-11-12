@@ -204,6 +204,8 @@ export async function exportData(opts: ExportDataOptions): Promise<ExportDataRes
               recordedUploadPaths.add(row.proofPath);
             } else if (spec.model === 'VendorPayment' && typeof row.proofPath === 'string' && row.proofPath) {
               recordedUploadPaths.add(row.proofPath);
+            } else if (spec.model === 'User' && typeof row.ktpPath === 'string' && row.ktpPath) {
+              recordedUploadPaths.add(row.ktpPath);
             }
           }
 

@@ -12,6 +12,12 @@ import {
   CheckCircle2,
   Package,
   Search,
+  Sparkles,
+  LayoutGrid,
+  Table as TableIcon,
+  Flame,
+  BookOpen,
+  Tag,
 } from 'lucide-react';
 import { MoneyInput } from '@/components/ui/MoneyInput';
 import { formatRupiah } from '@/lib/domain/money';
@@ -40,15 +46,32 @@ interface CatalogFormLine {
   basePrice: number;
   floorPrice: number;
   price: number;
+  badgeText: string;
+  itemNote: string;
 }
+
+type LayoutStyle = 'TABLE' | 'PROMO_GRID' | 'HERO_SALE' | 'EDITORIAL';
+type PromoValidityType = 'NONE' | 'PERIOD';
 
 export default function NewCatalogPage() {
   const router = useRouter();
 
   // State Input
   const [title, setTitle] = useState('');
+  const [subtitle, setSubtitle] = useState('');
   const [customerId, setCustomerId] = useState('');
   const [note, setNote] = useState('');
+  const [layoutStyle, setLayoutStyle] = useState<LayoutStyle>('TABLE');
+  const [isPromo, setIsPromo] = useState(false);
+  const [promoValidityType, setPromoValidityType] = useState<PromoValidityType>('NONE');
+  const [promoStartAt, setPromoStartAt] = useState('');
+  const [promoEndAt, setPromoEndAt] = useState('');
+  const [validityText, setValidityText] = useState('');
+  const [promoHighlight, setPromoHighlight] = useState('');
+  const [showStrikethroughPrice, setShowStrikethroughPrice] = useState(true);
+  const [showSku, setShowSku] = useState(true);
+  const [ctaText, setCtaText] = useState('');
+  const [termsNote, setTermsNote] = useState('');
   const [lines, setLines] = useState<CatalogFormLine[]>([]);
 
   // Master Data
@@ -179,6 +202,8 @@ export default function NewCatalogPage() {
         basePrice: Number(prod.basePrice),
         floorPrice: floor,
         price: initialPrice,
+        badgeText: '',
+        itemNote: '',
       },
     ]);
   };
@@ -190,6 +215,18 @@ export default function NewCatalogPage() {
   const handlePriceChange = (productId: string, newPrice: number) => {
     setLines((prev) =>
       prev.map((l) => (l.productId === productId ? { ...l, price: newPrice } : l))
+    );
+  };
+
+  const handleBadgeChange = (productId: string, badgeText: string) => {
+    setLines((prev) =>
+      prev.map((l) => (l.productId === productId ? { ...l, badgeText } : l))
+    );
+  };
+
+  const handleItemNoteChange = (productId: string, itemNote: string) => {
+    setLines((prev) =>
+      prev.map((l) => (l.productId === productId ? { ...l, itemNote } : l))
     );
   };
 
@@ -218,11 +255,31 @@ export default function NewCatalogPage() {
     try {
       const payload = {
         title: title.trim(),
+        subtitle: subtitle.trim() || null,
+        promoHighlight: promoHighlight.trim() || null,
+        layoutStyle,
+        isPromo,
+        promoValidityType: isPromo ? promoValidityType : 'NONE',
+        promoStartAt:
+          isPromo && promoValidityType === 'PERIOD' && promoStartAt
+            ? new Date(promoStartAt + 'T00:00:00Z').toISOString()
+            : null,
+        promoEndAt:
+          isPromo && promoValidityType === 'PERIOD' && promoEndAt
+            ? new Date(promoEndAt + 'T23:59:59Z').toISOString()
+            : null,
+        validityText: isPromo && validityText.trim() ? validityText.trim() : null,
+        showStrikethroughPrice,
+        showSku,
+        ctaText: ctaText.trim() || null,
+        termsNote: termsNote.trim() || null,
         customerId: customerId || null,
         note: note.trim() || null,
         items: lines.map((l, idx) => ({
           productId: l.productId,
           price: l.price,
+          badgeText: l.badgeText.trim() || null,
+          itemNote: l.itemNote.trim() || null,
           sortOrder: idx,
         })),
       };
@@ -298,72 +355,334 @@ export default function NewCatalogPage() {
       )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Seksi Informasi Katalog */}
+        {/* Seksi 1: Pilihan Template Desain PDF */}
         <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm space-y-4">
-          <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-wider">
-            1. Informasi Katalog
-          </h2>
-
-          <div className="space-y-3">
+          <div className="flex items-center justify-between">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Judul Katalog <span className="text-red-500">*</span>
-              </label>
-              {presets.length > 0 && (
-                <div className="flex flex-wrap gap-2 mb-2">
-                  <span className="text-xs text-slate-500 self-center">Pilihan cepat:</span>
-                  {presets.map((preset) => (
-                    <button
-                      key={preset}
-                      type="button"
-                      onClick={() => setTitle(preset)}
-                      className={`text-xs px-2.5 py-1 rounded-md font-medium transition-colors ${
-                        title === preset
-                          ? 'bg-emerald-600 text-white'
-                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                      }`}
-                    >
-                      {preset}
-                    </button>
-                  ))}
-                </div>
-              )}
-              <input
-                type="text"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                maxLength={60}
-                required
-                placeholder="Contoh: Grosir, Distributor Tunggal, Promo Ramadhan"
-                className="w-full px-3.5 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-              />
-              <p className="text-[11px] text-slate-400 mt-1">1–60 karakter.</p>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Pelanggan Khusus (Opsional)
-              </label>
-              <select
-                value={customerId}
-                onChange={(e) => setCustomerId(e.target.value)}
-                className="w-full px-3.5 py-2 border border-slate-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-              >
-                <option value="">-- Umum / Terbuka Untuk Semua Pelanggan --</option>
-                {customers.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name} ({c.code})
-                  </option>
-                ))}
-              </select>
-              <p className="text-[11px] text-slate-400 mt-1">
-                Bila dikaitkan ke customer, harga minimal khusus customer tersebut akan otomatis diterapkan.
+              <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                <LayoutGrid className="w-4 h-4 text-emerald-600" />
+                1. Pilihan Template Desain PDF
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Pilih gaya tata letak PDF katalog yang paling sesuai dengan kebutuhan penawaran Anda.
               </p>
             </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {[
+              {
+                id: 'TABLE' as LayoutStyle,
+                title: 'Tabel Formal B2B',
+                desc: 'Pricelist formal, padat, cocok untuk tender, agen, & mitra grosir.',
+                icon: TableIcon,
+                color: 'text-slate-700 bg-slate-100',
+              },
+              {
+                id: 'PROMO_GRID' as LayoutStyle,
+                title: 'Grid Promo Retail',
+                desc: 'Kartu 3 kolom berbingkai dengan badge diskon ala supermarket/retail.',
+                icon: LayoutGrid,
+                color: 'text-blue-700 bg-blue-50',
+              },
+              {
+                id: 'HERO_SALE' as LayoutStyle,
+                title: 'Hero Promo Banner',
+                desc: 'Header hero mencolok, pill diskon besar, & strip penawaran heboh.',
+                icon: Flame,
+                color: 'text-amber-700 bg-amber-50',
+              },
+              {
+                id: 'EDITORIAL' as LayoutStyle,
+                title: 'Lookbook Editorial',
+                desc: 'Minimalis elegan dengan tipografi bersih & ruang lapang ala spa/butik.',
+                icon: BookOpen,
+                color: 'text-purple-700 bg-purple-50',
+              },
+            ].map((t) => {
+              const isSelected = layoutStyle === t.id;
+              const Icon = t.icon;
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setLayoutStyle(t.id)}
+                  className={`p-3.5 rounded-xl border text-left transition-all flex flex-col justify-between ${
+                    isSelected
+                      ? 'border-emerald-600 bg-emerald-50/50 ring-2 ring-emerald-500 shadow-sm'
+                      : 'border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50'
+                  }`}
+                >
+                  <div className="flex items-start justify-between w-full mb-2">
+                    <div className={`p-2 rounded-lg ${t.color}`}>
+                      <Icon className="w-4 h-4" />
+                    </div>
+                    {isSelected && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 bg-emerald-600 text-white rounded-full">
+                        Aktif
+                      </span>
+                    )}
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-bold text-slate-900">{t.title}</h3>
+                    <p className="text-[11px] text-slate-500 mt-1 leading-snug">{t.desc}</p>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Seksi 2: Informasi Dasar & Konfigurasi Promo */}
+        <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm space-y-4">
+          <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+            <Tag className="w-4 h-4 text-emerald-600" />
+            2. Informasi Katalog & Promo
+          </h2>
+
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Judul Katalog <span className="text-red-500">*</span>
+                </label>
+                {presets.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    <span className="text-[11px] text-slate-400 self-center">Preset:</span>
+                    {presets.map((preset) => (
+                      <button
+                        key={preset}
+                        type="button"
+                        onClick={() => setTitle(preset)}
+                        className={`text-[11px] px-2 py-0.5 rounded font-medium transition-colors ${
+                          title === preset
+                            ? 'bg-emerald-600 text-white'
+                            : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                        }`}
+                      >
+                        {preset}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <input
+                  type="text"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  maxLength={60}
+                  required
+                  placeholder="Contoh: Grosir, Distributor Tunggal, Promo Ramadhan"
+                  className="w-full px-3.5 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                />
+                <p className="text-[11px] text-slate-400 mt-1">1–60 karakter.</p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Pelanggan Khusus (Opsional)
+                </label>
+                <select
+                  value={customerId}
+                  onChange={(e) => setCustomerId(e.target.value)}
+                  className="w-full px-3.5 py-2 border border-slate-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                >
+                  <option value="">-- Umum / Terbuka Untuk Semua Pelanggan --</option>
+                  {customers.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name} ({c.code})
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Bila dikaitkan ke customer, harga minimal khusus customer tersebut akan otomatis diterapkan.
+                </p>
+              </div>
+            </div>
+
+            {/* Toggle Jadikan Katalog Promo */}
+            <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 bg-amber-100 text-amber-800 rounded-lg">
+                    <Sparkles className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-bold text-slate-900">Jadikan Katalog Promo</h3>
+                    <p className="text-[11px] text-slate-500">
+                      Aktifkan banner promosi, highlight diskon, periode masa berlaku, dan coretan harga asal.
+                    </p>
+                  </div>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={isPromo}
+                    onChange={(e) => setIsPromo(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                </label>
+              </div>
+
+              {isPromo && (
+                <div className="pt-3 border-t border-slate-200 space-y-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">
+                        Highlight / Banner Promo (Opsional)
+                      </label>
+                      <input
+                        type="text"
+                        value={promoHighlight}
+                        onChange={(e) => setPromoHighlight(e.target.value)}
+                        maxLength={80}
+                        placeholder="Contoh: DISKON HINGGA 40%, GEBYAR HEMAT, HARGA SPESIAL"
+                        className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">
+                        Subjudul Katalog (Opsional)
+                      </label>
+                      <input
+                        type="text"
+                        value={subtitle}
+                        onChange={(e) => setSubtitle(e.target.value)}
+                        maxLength={120}
+                        placeholder="Contoh: Spesial Akhir Pekan, Koleksi Ramadhan"
+                        className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Pengaturan Masa Berlaku Promo */}
+                  <div className="p-3 bg-white rounded-lg border border-slate-200 space-y-2">
+                    <label className="block text-xs font-semibold text-slate-800">
+                      Masa Berlaku Promo
+                    </label>
+                    <div className="flex flex-wrap gap-4 text-xs">
+                      <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="promoValidityType"
+                          value="NONE"
+                          checked={promoValidityType === 'NONE'}
+                          onChange={() => setPromoValidityType('NONE')}
+                          className="text-emerald-600 focus:ring-emerald-500"
+                        />
+                        <span>Selama Persediaan Masih Ada (Tanpa Batas Tanggal)</span>
+                      </label>
+                      <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="promoValidityType"
+                          value="PERIOD"
+                          checked={promoValidityType === 'PERIOD'}
+                          onChange={() => setPromoValidityType('PERIOD')}
+                          className="text-emerald-600 focus:ring-emerald-500"
+                        />
+                        <span>Berdasarkan Rentang Tanggal / Periode Tertentu</span>
+                      </label>
+                    </div>
+
+                    {promoValidityType === 'PERIOD' && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                        <div>
+                          <label className="block text-[11px] font-medium text-slate-600 mb-1">
+                            Tanggal Mulai Promo
+                          </label>
+                          <input
+                            type="date"
+                            value={promoStartAt}
+                            onChange={(e) => setPromoStartAt(e.target.value)}
+                            className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-xs bg-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-medium text-slate-600 mb-1">
+                            Tanggal Berakhir Promo
+                          </label>
+                          <input
+                            type="date"
+                            value={promoEndAt}
+                            onChange={(e) => setPromoEndAt(e.target.value)}
+                            className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-xs bg-white"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="pt-1">
+                      <label className="block text-[11px] font-medium text-slate-600 mb-1">
+                        Teks Keterangan Periode (Tampil di PDF)
+                      </label>
+                      <input
+                        type="text"
+                        value={validityText}
+                        onChange={(e) => setValidityText(e.target.value)}
+                        maxLength={120}
+                        placeholder="Contoh: Periode: 1–15 Ramadhan 1447H / Selama Stok Tersedia"
+                        className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-xs bg-white"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">
+                        Ajakan / Call to Action (CTA)
+                      </label>
+                      <input
+                        type="text"
+                        value={ctaText}
+                        onChange={(e) => setCtaText(e.target.value)}
+                        maxLength={100}
+                        placeholder="Contoh: Hubungi Sales Kami Segera / Pesan Sekarang"
+                        className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-sm bg-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">
+                        Syarat & Ketentuan Singkat
+                      </label>
+                      <input
+                        type="text"
+                        value={termsNote}
+                        onChange={(e) => setTermsNote(e.target.value)}
+                        maxLength={500}
+                        placeholder="Contoh: *Harga sudah termasuk PPN. Maksimal pembelian 10 karton."
+                        className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-sm bg-white"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-4 text-xs pt-1">
+                    <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={showStrikethroughPrice}
+                        onChange={(e) => setShowStrikethroughPrice(e.target.checked)}
+                        className="text-emerald-600 rounded focus:ring-emerald-500"
+                      />
+                      <span>Tampilkan Coretan Harga Asal (dari Harga Dasar Produk)</span>
+                    </label>
+                    <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={showSku}
+                        onChange={(e) => setShowSku(e.target.checked)}
+                        className="text-emerald-600 rounded focus:ring-emerald-500"
+                      />
+                      <span>Tampilkan Kode SKU Produk</span>
+                    </label>
+                  </div>
+                </div>
+              )}
+            </div>
 
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Catatan Katalog (Opsional)
+                Catatan Tambahan Katalog (Opsional)
               </label>
               <textarea
                 value={note}
@@ -382,7 +701,7 @@ export default function NewCatalogPage() {
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
             <div>
               <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-wider">
-                2. Daftar Produk Katalog ({lines.length} Produk)
+                3. Daftar Produk Katalog ({lines.length} Produk)
               </h2>
               <p className="text-xs text-slate-500 mt-0.5">
                 Maksimal 300 produk per katalog. Harga tidak boleh di bawah harga minimal.
@@ -459,57 +778,90 @@ export default function NewCatalogPage() {
                 return (
                   <div
                     key={line.productId}
-                    className={`p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                    className={`p-3.5 space-y-3 ${
                       isBelowFloor ? 'bg-red-50' : 'bg-white'
                     }`}
                   >
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-semibold text-slate-400 w-5">
-                          {index + 1}.
-                        </span>
-                        <h4 className="text-sm font-semibold text-slate-900 leading-snug">
-                          {line.name}
-                        </h4>
-                      </div>
-                      <div className="text-xs text-slate-500 flex flex-wrap gap-x-3 gap-y-1 mt-1 ml-7">
-                        <span>SKU: {line.sku}</span>
-                        <span>Satuan: {line.unit}</span>
-                        <span className="font-medium text-slate-700">
-                          Floor Min: {formatRupiah(line.floorPrice)}
-                        </span>
-                      </div>
-                      {isBelowFloor && (
-                        <p className="text-xs font-semibold text-red-600 flex items-center gap-1 mt-1.5 ml-7">
-                          <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                          <span>
-                            Harga di bawah batas minimal ({formatRupiah(line.floorPrice)})!
+                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-semibold text-slate-400 w-5">
+                            {index + 1}.
                           </span>
-                        </p>
-                      )}
+                          <h4 className="text-sm font-semibold text-slate-900 leading-snug">
+                            {line.name}
+                          </h4>
+                        </div>
+                        <div className="text-xs text-slate-500 flex flex-wrap gap-x-3 gap-y-1 mt-1 ml-7">
+                          <span>SKU: {line.sku}</span>
+                          <span>Satuan: {line.unit}</span>
+                          <span>Harga Dasar: {formatRupiah(line.basePrice)}</span>
+                          <span className="font-medium text-slate-700">
+                            Floor Min: {formatRupiah(line.floorPrice)}
+                          </span>
+                        </div>
+                        {isBelowFloor && (
+                          <p className="text-xs font-semibold text-red-600 flex items-center gap-1 mt-1.5 ml-7">
+                            <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                            <span>
+                              Harga di bawah batas minimal ({formatRupiah(line.floorPrice)})!
+                            </span>
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-3 ml-7 sm:ml-0">
+                        <div className="w-40">
+                          <label className="block text-[11px] font-medium text-slate-500 mb-0.5">
+                            Harga Penawaran (Rp)
+                          </label>
+                          <MoneyInput
+                            value={line.price}
+                            onChange={(val) => handlePriceChange(line.productId, val)}
+                            className={`w-full text-sm font-medium ${
+                              isBelowFloor ? 'border-red-400 focus:ring-red-500' : ''
+                            }`}
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveProduct(line.productId)}
+                          className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors mt-4 sm:mt-0"
+                          title="Hapus baris"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
 
-                    <div className="flex items-center gap-3 ml-7 sm:ml-0">
-                      <div className="w-40">
-                        <label className="block text-[11px] font-medium text-slate-500 mb-0.5">
-                          Harga Katalog (Rp)
+                    {/* Badge & Catatan Item Tambahan */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-slate-100 ml-7">
+                      <div>
+                        <label className="block text-[10px] font-medium text-slate-500 mb-0.5">
+                          Badge Khusus (Misal: BEST SELLER / HEMAT 20%)
                         </label>
-                        <MoneyInput
-                          value={line.price}
-                          onChange={(val) => handlePriceChange(line.productId, val)}
-                          className={`w-full text-sm font-medium ${
-                            isBelowFloor ? 'border-red-400 focus:ring-red-500' : ''
-                          }`}
+                        <input
+                          type="text"
+                          value={line.badgeText}
+                          onChange={(e) => handleBadgeChange(line.productId, e.target.value)}
+                          maxLength={40}
+                          placeholder="Opsional, tampil di badge kartu produk"
+                          className="w-full px-2.5 py-1 text-xs border border-slate-200 rounded bg-slate-50/50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
                         />
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveProduct(line.productId)}
-                        className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors mt-4 sm:mt-0"
-                        title="Hapus baris"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      <div>
+                        <label className="block text-[10px] font-medium text-slate-500 mb-0.5">
+                          Catatan / Varian Kemasan (Misal: 500g / Isi 10 pcs)
+                        </label>
+                        <input
+                          type="text"
+                          value={line.itemNote}
+                          onChange={(e) => handleItemNoteChange(line.productId, e.target.value)}
+                          maxLength={120}
+                          placeholder="Opsional, keterangan tambahan kemasan"
+                          className="w-full px-2.5 py-1 text-xs border border-slate-200 rounded bg-slate-50/50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                        />
+                      </div>
                     </div>
                   </div>
                 );

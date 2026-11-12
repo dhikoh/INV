@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { ZodError, ZodType } from 'zod';
+import { ZodError, ZodType, ZodTypeDef } from 'zod';
 import { Prisma, Role } from '@prisma/client';
 import { DomainError, isDomainError, fromDb } from '../domain/money';
 import { requireContext, Ctx } from '../auth/context';
@@ -119,8 +119,8 @@ export type ApiHandler = {
 export function withApi<B = undefined, Q = undefined>(
   opts: {
     roles: Role[];
-    body?: ZodType<B>;
-    query?: ZodType<Q>;
+    body?: ZodType<B, ZodTypeDef, unknown>;
+    query?: ZodType<Q, ZodTypeDef, unknown>;
     allowPasswordChange?: boolean;
     isUpload?: boolean;
   },

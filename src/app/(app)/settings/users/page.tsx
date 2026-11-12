@@ -15,6 +15,11 @@ import {
   UserCheck,
   UserX,
   Send,
+  Phone,
+  FileText,
+  ShieldCheck,
+  AlertTriangle,
+  ExternalLink,
 } from 'lucide-react';
 import { Skeleton, EmptyState, ErrorState } from '@/components/ui/States';
 
@@ -29,6 +34,13 @@ interface UserItem {
   username: string;
   name: string;
   role: 'SUPERADMIN' | 'SALES';
+  phone?: string | null;
+  nik?: string | null;
+  address?: string | null;
+  emergencyContact?: string | null;
+  ktpPath?: string | null;
+  identityVerifiedAt?: string | null;
+  identityNotes?: string | null;
   businessId: string | null;
   business: {
     id: string;
@@ -67,12 +79,18 @@ export default function UsersManagementPage() {
   const [newUserData, setNewUserData] = useState({
     username: '',
     name: '',
+    phone: '',
+    nik: '',
+    address: '',
+    emergencyContact: '',
+    identityNotes: '',
     password: '',
     businessId: '',
     commissionMode: '',
     commissionRateBps: 1000,
     commissionFixedAmount: 0,
   });
+  const [newKtpFile, setNewKtpFile] = useState<File | null>(null);
   const [savingNewUser, setSavingNewUser] = useState(false);
   const [addUserError, setAddUserError] = useState<string | null>(null);
 
@@ -80,13 +98,30 @@ export default function UsersManagementPage() {
   const [editingUser, setEditingUser] = useState<UserItem | null>(null);
   const [editFormData, setEditFormData] = useState({
     name: '',
+    phone: '',
+    nik: '',
+    address: '',
+    emergencyContact: '',
+    identityNotes: '',
+    ktpPath: null as string | null,
     businessId: '',
     commissionMode: '',
     commissionRateBps: 1000,
     commissionFixedAmount: 0,
   });
+  const [editKtpFile, setEditKtpFile] = useState<File | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
   const [editUserError, setEditUserError] = useState<string | null>(null);
+
+  // Modal Handover Pelanggan saat Deaktivasi
+  const [handoverData, setHandoverData] = useState<{
+    user: UserItem;
+    customerCount: number;
+    customers: { id: string; code: string; name: string }[];
+  } | null>(null);
+  const [handoverTargetSalesId, setHandoverTargetSalesId] = useState<string>('');
+  const [handoverMoveOpenOrders, setHandoverMoveOpenOrders] = useState<boolean>(true);
+  const [submittingHandover, setSubmittingHandover] = useState<boolean>(false);
 
   // Modal Reset Password
   const [resettingUser, setResettingUser] = useState<UserItem | null>(null);
@@ -176,12 +211,22 @@ export default function UsersManagementPage() {
         return;
       }
 
+      if (newUserData.nik && newUserData.nik.trim().length !== 16) {
+        setAddUserError('NIK harus tepat 16 digit angka');
+        return;
+      }
+
       const res = await fetch('/api/v1/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           username,
           name,
+          phone: newUserData.phone.trim() || null,
+          nik: newUserData.nik.trim() || null,
+          address: newUserData.address.trim() || null,
+          emergencyContact: newUserData.emergencyContact.trim() || null,
+          identityNotes: newUserData.identityNotes.trim() || null,
           password,
           businessId,
           role: 'SALES',
@@ -207,16 +252,38 @@ export default function UsersManagementPage() {
         throw new Error(msg);
       }
 
+      const createdUser = json.data;
+
+      // Jika ada file KTP yang dipilih, unggah
+      if (newKtpFile && createdUser?.id) {
+        try {
+          const fd = new FormData();
+          fd.append('file', newKtpFile);
+          await fetch(`/api/v1/users/${createdUser.id}/ktp`, {
+            method: 'POST',
+            body: fd,
+          });
+        } catch {
+          // Gagal upload KTP non-blocking
+        }
+      }
+
       setShowAddModal(false);
       setNewUserData({
         username: '',
         name: '',
+        phone: '',
+        nik: '',
+        address: '',
+        emergencyContact: '',
+        identityNotes: '',
         password: '',
         businessId: businesses[0]?.id || '',
         commissionMode: '',
         commissionRateBps: 1000,
         commissionFixedAmount: 0,
       });
+      setNewKtpFile(null);
       setActionSuccess('Akun sales berhasil dibuat!');
       setTimeout(() => setActionSuccess(null), 4000);
       await loadData();
@@ -236,11 +303,21 @@ export default function UsersManagementPage() {
       setSavingEdit(true);
       setEditUserError(null);
 
+      if (editFormData.nik && editFormData.nik.trim().length !== 16) {
+        setEditUserError('NIK harus tepat 16 digit angka');
+        return;
+      }
+
       const res = await fetch(`/api/v1/users/${editingUser.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: editFormData.name.trim(),
+          phone: editFormData.phone.trim() || null,
+          nik: editFormData.nik.trim() || null,
+          address: editFormData.address.trim() || null,
+          emergencyContact: editFormData.emergencyContact.trim() || null,
+          identityNotes: editFormData.identityNotes.trim() || null,
           businessId: editFormData.businessId || null,
           commissionMode: editFormData.commissionMode || null,
           commissionRateBps: editFormData.commissionMode
@@ -264,20 +341,47 @@ export default function UsersManagementPage() {
         throw new Error(msg);
       }
 
+      // Jika ada file KTP baru diunggah
+      if (editKtpFile) {
+        const fd = new FormData();
+        fd.append('file', editKtpFile);
+        const ktpRes = await fetch(`/api/v1/users/${editingUser.id}/ktp`, {
+          method: 'POST',
+          body: fd,
+        });
+        if (!ktpRes.ok) {
+          const ktpJson = await ktpRes.json();
+          throw new Error(ktpJson.error?.message || 'Gagal mengunggah berkas KTP');
+        }
+      }
+
       setEditingUser(null);
+      setEditKtpFile(null);
       setActionSuccess('Data pengguna berhasil diperbarui!');
       setTimeout(() => setActionSuccess(null), 4000);
       await loadData();
     } catch (err: unknown) {
-      setEditUserError(
-        err instanceof Error ? err.message : 'Terjadi kesalahan'
-      );
+      setEditUserError(err instanceof Error ? err.message : 'Terjadi kesalahan');
     } finally {
       setSavingEdit(false);
     }
   };
 
-  // Reset Password User
+  // Hapus KTP
+  const handleDeleteKtp = async () => {
+    if (!editingUser || !confirm('Apakah Anda yakin ingin menghapus berkas KTP ini?')) return;
+    try {
+      const res = await fetch(`/api/v1/users/${editingUser.id}/ktp`, { method: 'DELETE' });
+      const json = await res.json();
+      if (!res.ok || !json.ok) throw new Error(json.error?.message || 'Gagal menghapus KTP');
+      setEditFormData((prev) => ({ ...prev, ktpPath: null }));
+      await loadData();
+    } catch (err: unknown) {
+      setEditUserError(err instanceof Error ? err.message : 'Gagal menghapus KTP');
+    }
+  };
+
+  // Reset Password
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!resettingUser) return;
@@ -325,38 +429,100 @@ export default function UsersManagementPage() {
     }
   };
 
-  // Toggle Aktivasi User
+  // Toggle Aktivasi User & Deteksi Handover
   const handleToggleActive = async (user: UserItem) => {
-    const action = user.isActive ? 'deactivate' : 'activate';
-    const actionLabel = user.isActive ? 'menonaktifkan' : 'mengaktifkan';
-
-    if (
-      !confirm(
-        `Apakah Anda yakin ingin ${actionLabel} akun ${user.username}? ${
-          user.isActive
-            ? 'Seluruh sesi aktif akan dicabut dan pengguna tidak bisa login.'
-            : ''
-        }`
-      )
-    ) {
+    if (!user.isActive) {
+      // Mengaktifkan kembali
+      if (!confirm(`Apakah Anda yakin ingin mengaktifkan akun ${user.username}?`)) {
+        return;
+      }
+      try {
+        setActionError(null);
+        const res = await fetch(`/api/v1/users/${user.id}/activate`, { method: 'POST' });
+        const json = await res.json();
+        if (!res.ok || !json.ok) {
+          throw new Error(json.error?.message || 'Gagal mengaktifkan akun');
+        }
+        setActionSuccess(`Akun ${user.username} berhasil diaktifkan!`);
+        setTimeout(() => setActionSuccess(null), 4000);
+        await loadData();
+      } catch (err: unknown) {
+        setActionError(err instanceof Error ? err.message : 'Terjadi kesalahan');
+      }
       return;
     }
 
+    // Menonaktifkan akun
     try {
       setActionError(null);
-      const res = await fetch(`/api/v1/users/${user.id}/${action}`, {
+      const res = await fetch(`/api/v1/users/${user.id}/deactivate`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
       });
       const json = await res.json();
-      if (!res.ok || !json.ok) {
-        throw new Error(json.error?.message || `Gagal ${actionLabel} akun`);
+
+      if (res.status === 409 || json.error?.code === 'HANDOVER_REQUIRED') {
+        const assignedCustomerCount = json.error?.details?.assignedCustomerCount || 1;
+        const customers = json.error?.details?.customers || [];
+        const otherActiveSales = users.filter(
+          (u) => u.id !== user.id && u.role === 'SALES' && u.isActive && u.businessId === user.businessId
+        );
+        setHandoverTargetSalesId(otherActiveSales[0]?.id || '');
+        setHandoverMoveOpenOrders(true);
+        setHandoverData({
+          user,
+          customerCount: assignedCustomerCount,
+          customers,
+        });
+        return;
       }
 
-      setActionSuccess(`Akun ${user.username} berhasil di${actionLabel}!`);
+      if (!res.ok || !json.ok) {
+        throw new Error(json.error?.message || 'Gagal menonaktifkan akun');
+      }
+
+      setActionSuccess(`Akun ${user.username} berhasil dinonaktifkan!`);
       setTimeout(() => setActionSuccess(null), 4000);
       await loadData();
     } catch (err: unknown) {
       setActionError(err instanceof Error ? err.message : 'Terjadi kesalahan');
+    }
+  };
+
+  // Eksekusi Handover Pelanggan saat Deaktivasi
+  const handleExecuteHandover = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!handoverData) return;
+
+    try {
+      setSubmittingHandover(true);
+      setActionError(null);
+
+      const res = await fetch(`/api/v1/users/${handoverData.user.id}/deactivate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          reassignToSalesId: handoverTargetSalesId || undefined,
+          moveOpenOrders: handoverMoveOpenOrders,
+        }),
+      });
+
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        throw new Error(json.error?.message || 'Gagal serah terima pelanggan');
+      }
+
+      setHandoverData(null);
+      setActionSuccess(
+        `Akun ${handoverData.user.username} dinonaktifkan dan ${handoverData.customerCount} pelanggan berhasil dialihkan!`
+      );
+      setTimeout(() => setActionSuccess(null), 4000);
+      await loadData();
+    } catch (err: unknown) {
+      setActionError(err instanceof Error ? err.message : 'Terjadi kesalahan');
+    } finally {
+      setSubmittingHandover(false);
     }
   };
 
@@ -388,18 +554,26 @@ export default function UsersManagementPage() {
     }
   };
 
-  // Filter daftar pengguna
+  // Filter List Pengguna
   const filteredUsers = users.filter((u) => {
     if (selectedBusinessId && u.businessId !== selectedBusinessId) {
       return false;
     }
-    if (selectedStatus === 'active' && !u.isActive) return false;
-    if (selectedStatus === 'inactive' && u.isActive) return false;
-    if (searchQuery) {
+    if (selectedStatus === 'active' && !u.isActive) {
+      return false;
+    }
+    if (selectedStatus === 'inactive' && u.isActive) {
+      return false;
+    }
+    if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       const matchName = u.name.toLowerCase().includes(q);
       const matchUsername = u.username.toLowerCase().includes(q);
-      if (!matchName && !matchUsername) return false;
+      const matchPhone = u.phone ? u.phone.toLowerCase().includes(q) : false;
+      const matchNik = u.nik ? u.nik.includes(q) : false;
+      if (!matchName && !matchUsername && !matchPhone && !matchNik) {
+        return false;
+      }
     }
     return true;
   });
@@ -407,13 +581,13 @@ export default function UsersManagementPage() {
   if (loading) {
     return (
       <div className="space-y-6">
-        <Skeleton className="h-16 w-full" />
-        <Skeleton className="h-20 w-full" />
-        <div className="space-y-3">
-          <Skeleton className="h-16 w-full" />
-          <Skeleton className="h-16 w-full" />
-          <Skeleton className="h-16 w-full" />
+        <Skeleton className="h-10 w-64 rounded-lg" />
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <Skeleton className="h-12 rounded-xl" />
+          <Skeleton className="h-12 rounded-xl" />
+          <Skeleton className="h-12 rounded-xl" />
         </div>
+        <Skeleton className="h-96 rounded-2xl" />
       </div>
     );
   }
@@ -423,29 +597,23 @@ export default function UsersManagementPage() {
       <ErrorState
         title="Gagal Memuat Pengguna"
         message={fetchError}
-        onRetry={() => {
-          void loadData();
-        }}
+        onRetry={() => void loadData()}
       />
     );
   }
 
   return (
-    <div className="space-y-6 pb-12">
-      {/* Header Utama */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
-            <Users className="w-6 h-6" />
-          </div>
-          <div>
-            <h1 className="text-xl font-bold text-slate-900">
-              Manajemen Pengguna & Sales
-            </h1>
-            <p className="text-xs text-slate-500">
-              Kelola akun staf sales, reset password, status akun, dan tautan Telegram
-            </p>
-          </div>
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
+            <Users className="w-6 h-6 text-blue-600" />
+            <span>Manajemen Pengguna & Sales</span>
+          </h1>
+          <p className="text-xs text-slate-500 mt-1">
+            Kelola staf sales, nomor kontak resmi, verifikasi berkas identitas KTP, dan pengalihan pelanggan.
+          </p>
         </div>
 
         <button
@@ -454,12 +622,18 @@ export default function UsersManagementPage() {
             setNewUserData({
               username: '',
               name: '',
+              phone: '',
+              nik: '',
+              address: '',
+              emergencyContact: '',
+              identityNotes: '',
               password: '',
               businessId: businesses[0]?.id || selectedBusinessId || '',
               commissionMode: '',
               commissionRateBps: 1000,
               commissionFixedAmount: 0,
             });
+            setNewKtpFile(null);
             setAddUserError(null);
             setShowAddModal(true);
           }}
@@ -490,7 +664,7 @@ export default function UsersManagementPage() {
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3.5" />
           <input
             type="text"
-            placeholder="Cari nama atau username..."
+            placeholder="Cari nama, username, HP, NIK..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full h-10 pl-9 pr-3 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -545,7 +719,7 @@ export default function UsersManagementPage() {
                 <tr>
                   <th className="py-3.5 px-4">Pengguna</th>
                   <th className="py-3.5 px-4">Role & Usaha</th>
-                  <th className="py-3.5 px-4">Status & Sesi</th>
+                  <th className="py-3.5 px-4">Status & Identitas</th>
                   <th className="py-3.5 px-4">Telegram</th>
                   <th className="py-3.5 px-4 text-right">Aksi</th>
                 </tr>
@@ -558,6 +732,12 @@ export default function UsersManagementPage() {
                       <div className="text-xs font-mono text-slate-500">
                         @{u.username}
                       </div>
+                      {u.phone && (
+                        <div className="text-xs text-slate-600 font-mono mt-0.5 flex items-center gap-1">
+                          <Phone className="w-3 h-3 text-slate-400" />
+                          <span>{u.phone}</span>
+                        </div>
+                      )}
                     </td>
 
                     <td className="py-3.5 px-4">
@@ -597,10 +777,29 @@ export default function UsersManagementPage() {
                           {u.isActive ? 'Aktif' : 'Nonaktif'}
                         </span>
                       </div>
+
+                      {u.role === 'SALES' && (
+                        <div className="mt-1">
+                          {u.ktpPath && u.nik ? (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                              <ShieldCheck className="w-3 h-3 text-emerald-600" />
+                              <span>KTP Terverifikasi</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                              <AlertTriangle className="w-3 h-3 text-amber-600" />
+                              <span>KTP Belum Lengkap</span>
+                            </span>
+                          )}
+                        </div>
+                      )}
+
                       {u.mustChangePassword && (
-                        <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
-                          Wajib Ganti Password
-                        </span>
+                        <div className="mt-1">
+                          <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                            Wajib Ganti Password
+                          </span>
+                        </div>
                       )}
                     </td>
 
@@ -625,12 +824,19 @@ export default function UsersManagementPage() {
                             setEditingUser(u);
                             setEditFormData({
                               name: u.name,
+                              phone: u.phone || '',
+                              nik: u.nik || '',
+                              address: u.address || '',
+                              emergencyContact: u.emergencyContact || '',
+                              identityNotes: u.identityNotes || '',
+                              ktpPath: u.ktpPath || null,
                               businessId: u.businessId || businesses[0]?.id || '',
                               commissionMode: u.commissionMode || '',
                               commissionRateBps: u.commissionRateBps || 1000,
-                              commissionFixedAmount:
-                                u.commissionFixedAmount || 0,
+                              commissionFixedAmount: u.commissionFixedAmount || 0,
                             });
+                            setEditKtpFile(null);
+                            setEditUserError(null);
                           }}
                           title="Edit Pengguna"
                           className="min-h-[36px] min-w-[36px] p-2 text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
@@ -697,7 +903,7 @@ export default function UsersManagementPage() {
       {/* Modal Tambah Sales */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-2 border-b border-slate-100">
               <h3 className="font-bold text-slate-900 text-base">
                 Tambah Akun Sales Baru
@@ -712,7 +918,7 @@ export default function UsersManagementPage() {
             </div>
 
             {addUserError && (
-              <p className="text-xs font-semibold text-rose-600">
+              <p className="text-xs font-semibold text-rose-600 bg-rose-50 p-2.5 rounded-lg border border-rose-200">
                 {addUserError}
               </p>
             )}
@@ -744,24 +950,47 @@ export default function UsersManagementPage() {
                 </select>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
-                  Nama Lengkap <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  minLength={2}
-                  placeholder="Contoh: Budi Santoso"
-                  value={newUserData.name}
-                  onChange={(e) =>
-                    setNewUserData((prev) => ({
-                      ...prev,
-                      name: e.target.value,
-                    }))
-                  }
-                  className="w-full h-11 px-3.5 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
+                    Nama Lengkap <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    minLength={2}
+                    placeholder="Contoh: Budi Santoso"
+                    value={newUserData.name}
+                    onChange={(e) =>
+                      setNewUserData((prev) => ({
+                        ...prev,
+                        name: e.target.value,
+                      }))
+                    }
+                    className="w-full h-11 px-3.5 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
+                    No. WhatsApp / HP Resmi Sales
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Contoh: 081234567890"
+                    value={newUserData.phone}
+                    onChange={(e) =>
+                      setNewUserData((prev) => ({
+                        ...prev,
+                        phone: e.target.value,
+                      }))
+                    }
+                    className="w-full h-11 px-3.5 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    Ditampilkan otomatis di Katalog & Link Verifikasi.
+                  </p>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -783,9 +1012,6 @@ export default function UsersManagementPage() {
                     }
                     className="w-full h-11 px-3.5 bg-slate-50 border border-slate-300 rounded-lg text-sm font-mono text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
-                  <p className="text-[11px] text-slate-500 mt-1">
-                    Huruf kecil, angka, titik, strip, garis bawah (_)
-                  </p>
                 </div>
 
                 <div>
@@ -807,15 +1033,88 @@ export default function UsersManagementPage() {
                     }
                     className="w-full h-11 px-3.5 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
-                  <p className="text-[11px] text-slate-500 mt-1">
-                    Min 10 karakter & beda dari username
-                  </p>
                 </div>
               </div>
 
-              <p className="text-xs text-slate-500 bg-amber-50 p-2.5 rounded-lg border border-amber-200">
-                *Sales akan diwajibkan mengganti password ini pada saat pertama kali login ke sistem.
-              </p>
+              {/* Data Identitas & KTP (Opsional / Dapat Disusulkan) */}
+              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
+                <div className="flex items-center gap-2 text-slate-800 font-bold text-xs uppercase tracking-wider">
+                  <ShieldCheck className="w-4 h-4 text-blue-600" />
+                  <span>Akuntabilitas & Identitas Sales (Superadmin Only)</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                      NIK KTP (16 Digit)
+                    </label>
+                    <input
+                      type="text"
+                      maxLength={16}
+                      placeholder="Contoh: 3201xxxxxxxxxxxx"
+                      value={newUserData.nik}
+                      onChange={(e) =>
+                        setNewUserData((prev) => ({
+                          ...prev,
+                          nik: e.target.value.replace(/\D/g, ''),
+                        }))
+                      }
+                      className="w-full h-10 px-3 bg-white border border-slate-300 rounded-lg text-sm font-mono text-slate-900"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                      Kontak Darurat (Keluarga)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Ibu / 08129876xxxx"
+                      value={newUserData.emergencyContact}
+                      onChange={(e) =>
+                        setNewUserData((prev) => ({
+                          ...prev,
+                          emergencyContact: e.target.value,
+                        }))
+                      }
+                      className="w-full h-10 px-3 bg-white border border-slate-300 rounded-lg text-sm text-slate-900"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                    Alamat Domisili KTP
+                  </label>
+                  <textarea
+                    rows={2}
+                    placeholder="Alamat lengkap sesuai KTP / domisili..."
+                    value={newUserData.address}
+                    onChange={(e) =>
+                      setNewUserData((prev) => ({
+                        ...prev,
+                        address: e.target.value,
+                      }))
+                    }
+                    className="w-full p-2.5 bg-white border border-slate-300 rounded-lg text-xs text-slate-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                    Unggah Berkas KTP (Opsional / Bisa Menyusul)
+                  </label>
+                  <input
+                    type="file"
+                    accept="image/*,.pdf"
+                    onChange={(e) => setNewKtpFile(e.target.files?.[0] || null)}
+                    className="w-full text-xs text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                  />
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    Format: JPEG, PNG, WebP, PDF (Max 10 MB). Berkas disimpan terlindungi khusus Superadmin.
+                  </p>
+                </div>
+              </div>
 
               {/* Opsional Skema Komisi Khusus */}
               <div className="pt-2 border-t border-slate-100 space-y-3">
@@ -914,7 +1213,7 @@ export default function UsersManagementPage() {
       {/* Modal Edit User */}
       {editingUser && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+          <div className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-2 border-b border-slate-100">
               <h3 className="font-bold text-slate-900 text-base">
                 Edit Pengguna: @{editingUser.username}
@@ -929,28 +1228,175 @@ export default function UsersManagementPage() {
             </div>
 
             {editUserError && (
-              <p className="text-xs font-semibold text-rose-600">
+              <p className="text-xs font-semibold text-rose-600 bg-rose-50 p-2.5 rounded-lg border border-rose-200">
                 {editUserError}
               </p>
             )}
 
             <form onSubmit={handleSaveEdit} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
-                  Nama Lengkap
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={editFormData.name}
-                  onChange={(e) =>
-                    setEditFormData((prev) => ({
-                      ...prev,
-                      name: e.target.value,
-                    }))
-                  }
-                  className="w-full h-11 px-3.5 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-900"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
+                    Nama Lengkap <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editFormData.name}
+                    onChange={(e) =>
+                      setEditFormData((prev) => ({
+                        ...prev,
+                        name: e.target.value,
+                      }))
+                    }
+                    className="w-full h-11 px-3.5 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
+                    No. WhatsApp / HP Resmi
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Contoh: 081234567890"
+                    value={editFormData.phone}
+                    onChange={(e) =>
+                      setEditFormData((prev) => ({
+                        ...prev,
+                        phone: e.target.value,
+                      }))
+                    }
+                    className="w-full h-11 px-3.5 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-900"
+                  />
+                </div>
+              </div>
+
+              {/* Data Identitas KTP */}
+              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
+                <div className="flex items-center gap-2 text-slate-800 font-bold text-xs uppercase tracking-wider">
+                  <ShieldCheck className="w-4 h-4 text-blue-600" />
+                  <span>Identitas & Berkas KTP (Khusus Superadmin)</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                      NIK KTP (16 Digit)
+                    </label>
+                    <input
+                      type="text"
+                      maxLength={16}
+                      placeholder="16 Digit NIK"
+                      value={editFormData.nik}
+                      onChange={(e) =>
+                        setEditFormData((prev) => ({
+                          ...prev,
+                          nik: e.target.value.replace(/\D/g, ''),
+                        }))
+                      }
+                      className="w-full h-10 px-3 bg-white border border-slate-300 rounded-lg text-sm font-mono text-slate-900"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                      Kontak Darurat
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Nama & Nomor kontak darurat"
+                      value={editFormData.emergencyContact}
+                      onChange={(e) =>
+                        setEditFormData((prev) => ({
+                          ...prev,
+                          emergencyContact: e.target.value,
+                        }))
+                      }
+                      className="w-full h-10 px-3 bg-white border border-slate-300 rounded-lg text-sm text-slate-900"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                    Alamat Domisili KTP
+                  </label>
+                  <textarea
+                    rows={2}
+                    placeholder="Alamat lengkap..."
+                    value={editFormData.address}
+                    onChange={(e) =>
+                      setEditFormData((prev) => ({
+                        ...prev,
+                        address: e.target.value,
+                      }))
+                    }
+                    className="w-full p-2.5 bg-white border border-slate-300 rounded-lg text-xs text-slate-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                    Berkas KTP
+                  </label>
+                  {editFormData.ktpPath ? (
+                    <div className="flex items-center justify-between p-3 bg-white border border-emerald-200 rounded-lg">
+                      <div className="flex items-center gap-2 text-xs text-emerald-800 font-medium">
+                        <FileText className="w-4 h-4 text-emerald-600" />
+                        <span>Berkas KTP Terunggah</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <a
+                          href={`/api/v1/files/${editFormData.businessId || editingUser.businessId || 'system'}/${editFormData.ktpPath}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="h-8 px-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-md text-xs font-semibold flex items-center gap-1"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                          <span>Lihat Berkas</span>
+                        </a>
+                        <button
+                          type="button"
+                          onClick={handleDeleteKtp}
+                          className="h-8 px-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-md text-xs font-semibold"
+                        >
+                          Hapus
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <input
+                        type="file"
+                        accept="image/*,.pdf"
+                        onChange={(e) => setEditKtpFile(e.target.files?.[0] || null)}
+                        className="w-full text-xs text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                      />
+                      <p className="text-[11px] text-slate-400 mt-1">
+                        Unggah foto KTP (JPEG, PNG, WebP, PDF).
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                    Catatan Verifikasi Internal
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Catatan verifikasi atau riwayat sales..."
+                    value={editFormData.identityNotes}
+                    onChange={(e) =>
+                      setEditFormData((prev) => ({
+                        ...prev,
+                        identityNotes: e.target.value,
+                      }))
+                    }
+                    className="w-full h-9 px-3 bg-white border border-slate-300 rounded-lg text-xs text-slate-900"
+                  />
+                </div>
               </div>
 
               {editingUser.role !== 'SUPERADMIN' && (
@@ -992,6 +1438,110 @@ export default function UsersManagementPage() {
                   className="h-10 px-5 rounded-lg text-sm font-bold bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50"
                 >
                   {savingEdit ? 'Menyimpan...' : 'Simpan Perubahan'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Handover Pelanggan saat Deaktivasi */}
+      {handoverData && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <div className="flex items-center gap-2 text-amber-600">
+                <AlertTriangle className="w-5 h-5 shrink-0" />
+                <h3 className="font-bold text-slate-900 text-base">
+                  Pengalihan Pelanggan (Customer Handover)
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setHandoverData(null)}
+                className="text-slate-400 hover:text-slate-600 p-1"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 space-y-1">
+              <p className="font-semibold">
+                Perhatian: Sales <strong>{handoverData.user.name}</strong> memiliki <strong>{handoverData.customerCount}</strong> pelanggan aktif.
+              </p>
+              <p>
+                Sebelum akun dinonaktifkan, seluruh pelanggan ini harus dialihkan ke staf sales aktif lain agar komunikasi dan pesanan tetap berjalan.
+              </p>
+            </div>
+
+            {handoverData.customers.length > 0 && (
+              <div className="max-h-36 overflow-y-auto border border-slate-200 rounded-lg p-2 divide-y divide-slate-100 bg-slate-50 text-xs">
+                {handoverData.customers.map((c) => (
+                  <div key={c.id} className="py-1 flex justify-between">
+                    <span className="font-semibold text-slate-800">{c.name}</span>
+                    <span className="font-mono text-slate-500">[{c.code}]</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <form onSubmit={handleExecuteHandover} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
+                  Pilih Sales Pengganti <span className="text-rose-500">*</span>
+                </label>
+                <select
+                  required
+                  value={handoverTargetSalesId}
+                  onChange={(e) => setHandoverTargetSalesId(e.target.value)}
+                  className="w-full h-11 px-3 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-900 font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="" disabled>
+                    -- Pilih Staf Sales Aktif --
+                  </option>
+                  {users
+                    .filter(
+                      (u) =>
+                        u.id !== handoverData.user.id &&
+                        u.role === 'SALES' &&
+                        u.isActive &&
+                        u.businessId === handoverData.user.businessId
+                    )
+                    .map((target) => (
+                      <option key={target.id} value={target.id}>
+                        {target.name} (@{target.username})
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="moveOpenOrdersCheckbox"
+                  checked={handoverMoveOpenOrders}
+                  onChange={(e) => setHandoverMoveOpenOrders(e.target.checked)}
+                  className="w-4 h-4 text-blue-600 rounded border-slate-300"
+                />
+                <label htmlFor="moveOpenOrdersCheckbox" className="text-xs font-medium text-slate-700">
+                  Alihkan juga seluruh pesanan berjalan yang belum selesai/lunas
+                </label>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setHandoverData(null)}
+                  className="h-10 px-4 rounded-lg text-sm font-semibold border border-slate-200 text-slate-700 hover:bg-slate-50"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingHandover || !handoverTargetSalesId}
+                  className="h-10 px-5 rounded-lg text-sm font-bold bg-amber-600 hover:bg-amber-700 text-white disabled:opacity-50"
+                >
+                  {submittingHandover ? 'Memproses Serah Terima...' : 'Alihkan & Nonaktifkan'}
                 </button>
               </div>
             </form>

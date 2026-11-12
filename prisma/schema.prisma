@@ -19,6 +19,18 @@ enum InvoiceTheme {
   KLASIK
 }
 
+enum CatalogLayoutStyle {
+  TABLE
+  PROMO_GRID
+  HERO_SALE
+  EDITORIAL
+}
+
+enum PromoValidityType {
+  NONE
+  PERIOD
+}
+
 enum CommissionMode {
   PERCENT_OF_PROFIT
   PERCENT_OF_REVENUE
@@ -183,6 +195,10 @@ model Business {
   phone                 String?
   email                 String?
   npwp                  String?
+  website               String?
+  tagline               String?
+  instagram             String?
+  showWebsiteOnPdf      Boolean           @default(true)
   logoPath              String?
   invoiceTheme                InvoiceTheme      @default(PROFESIONAL)
   invoiceFooterNote           String?           @db.Text
@@ -243,6 +259,13 @@ model User {
   passwordHash          String
   name                  String
   role                  Role
+  phone                 String?
+  nik                   String?
+  address               String?            @db.Text
+  emergencyContact      String?
+  ktpPath               String?
+  identityVerifiedAt    DateTime?
+  identityNotes         String?            @db.Text
   businessId            String? // null untuk SUPERADMIN
   business              Business?          @relation(fields: [businessId], references: [id])
   isActive              Boolean            @default(true)
@@ -1001,17 +1024,30 @@ model Notification {
 }
 
 model Catalog {
-  id         String        @id @default(cuid())
-  businessId String
-  business   Business      @relation(fields: [businessId], references: [id])
-  ownerId    String // user pembuat
-  customerId String? // bila diisi, floor memakai harga minimal customer itu
-  title      String // contoh: Grosir, Distributor Tunggal, Ecer
-  note       String?       @db.Text
-  createdAt  DateTime      @default(now())
-  updatedAt  DateTime      @updatedAt
-  deletedAt  DateTime?
-  items      CatalogItem[]
+  id                    String             @id @default(cuid())
+  businessId            String
+  business              Business           @relation(fields: [businessId], references: [id])
+  ownerId               String // user pembuat
+  customerId            String? // bila diisi, floor memakai harga minimal customer itu
+  title                 String // contoh: Grosir, Distributor Tunggal, Ecer
+  subtitle              String?
+  promoHighlight        String? // contoh: "GET 40% OFF" atau "PROMO SPESIAL"
+  layoutStyle           CatalogLayoutStyle @default(TABLE)
+  isPromo               Boolean            @default(false)
+  promoValidityType     PromoValidityType  @default(NONE)
+  promoStartAt          DateTime?
+  promoEndAt            DateTime?
+  validityText          String? // contoh: "Selama Persediaan Ada" atau "1 - 15 April 2026"
+  showStrikethroughPrice Boolean           @default(false)
+  showSku               Boolean            @default(true)
+  ctaText               String? // contoh: "Hubungi Sales Kami Segera!"
+  termsNote             String?            @db.Text
+  note                  String?            @db.Text
+  verifyToken           String?            @unique
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+  deletedAt             DateTime?
+  items                 CatalogItem[]
 
   @@index([businessId, ownerId])
 }
@@ -1022,6 +1058,8 @@ model CatalogItem {
   catalog   Catalog @relation(fields: [catalogId], references: [id])
   productId String
   price     BigInt
+  badgeText String? // contoh: "SPECIAL PRICE", "HOT DEAL", "HEMAT 15%"
+  itemNote  String? // contoh: "Isi 25's 325g", "Kemasan 500g"
   sortOrder Int     @default(0)
 
   @@unique([catalogId, productId])

@@ -8,7 +8,7 @@ import { DomainError } from '../domain/money';
 import { requireContext } from '../auth/context';
 import { prisma } from '../db';
 
-export type FileKind = 'product' | 'logo' | 'proof' | 'vendor-proof';
+export type FileKind = 'product' | 'logo' | 'proof' | 'vendor-proof' | 'user-ktp';
 
 export type DetectedMime =
   | 'image/jpeg'
@@ -176,6 +176,15 @@ export async function serveFile(
     throw new DomainError('NOT_FOUND', 'Berkas tidak ditemukan', 404);
   }
 
+  // Berkas identitas KTP (user-ktp): HANYA SUPERADMIN yang diizinkan mengakses
+  if (kind === 'user-ktp' && ctx.role !== 'SUPERADMIN') {
+    throw new DomainError(
+      'FORBIDDEN',
+      'Hanya Superadmin yang berhak mengakses berkas identitas KTP',
+      403
+    );
+  }
+
   const relativePath = `${businessId}/${kind}/${filename}`;
 
   // Jenis proof: Sales hanya boleh jika bukti bayar milik order sales tersebut
@@ -224,7 +233,7 @@ export async function serveFile(
   else if (ext === '.png') contentType = 'image/png';
 
   const cacheControl =
-    kind === 'proof' || kind === 'vendor-proof'
+    kind === 'proof' || kind === 'vendor-proof' || kind === 'user-ktp'
       ? 'no-store'
       : 'private, max-age=3600';
 

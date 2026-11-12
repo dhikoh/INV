@@ -41,6 +41,10 @@ interface BusinessDetail {
   phone: string | null;
   email: string | null;
   npwp: string | null;
+  website: string | null;
+  tagline: string | null;
+  instagram: string | null;
+  showWebsiteOnPdf: boolean;
   logoPath: string | null;
   invoiceTheme: 'PROFESIONAL' | 'FAMILY' | 'MINIMALIS' | 'MODERN' | 'KLASIK';
   invoiceFooterNote: string | null;
@@ -125,6 +129,10 @@ export default function BusinessSettingsPage() {
     phone: '',
     email: '',
     npwp: '',
+    website: '',
+    tagline: '',
+    instagram: '',
+    showWebsiteOnPdf: true,
   });
   const [savingBiz, setSavingBiz] = useState(false);
   const [newBizError, setNewBizError] = useState<string | null>(null);
@@ -298,6 +306,10 @@ export default function BusinessSettingsPage() {
           phone: formData.phone || null,
           email: formData.email || null,
           npwp: formData.npwp || null,
+          website: formData.website || null,
+          tagline: formData.tagline || null,
+          instagram: formData.instagram || null,
+          showWebsiteOnPdf: Boolean(formData.showWebsiteOnPdf),
           invoiceTheme: formData.invoiceTheme,
           invoiceFooterNote: formData.invoiceFooterNote || null,
           showBankOnProforma: Boolean(formData.showBankOnProforma),
@@ -483,6 +495,10 @@ export default function BusinessSettingsPage() {
         phone: newBiz.phone?.trim() || null,
         email: newBiz.email?.trim() || null,
         npwp: newBiz.npwp?.trim() || null,
+        website: newBiz.website?.trim() || null,
+        tagline: newBiz.tagline?.trim() || null,
+        instagram: newBiz.instagram?.trim() || null,
+        showWebsiteOnPdf: newBiz.showWebsiteOnPdf,
       };
 
       const res = await fetch('/api/v1/businesses', {
@@ -512,6 +528,10 @@ export default function BusinessSettingsPage() {
         phone: '',
         email: '',
         npwp: '',
+        website: '',
+        tagline: '',
+        instagram: '',
+        showWebsiteOnPdf: true,
       });
 
       // Reload halaman agar AppShell, header, dan seluruh sesi langsung sinkron
@@ -870,6 +890,58 @@ export default function BusinessSettingsPage() {
                   placeholder="Alamat kantor / gudang utama"
                   className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
+                  Website Resmi (Opsional)
+                </label>
+                <input
+                  type="text"
+                  value={formData.website || ''}
+                  onChange={(e) => handleInputChange('website', e.target.value)}
+                  placeholder="https://bentocat.id atau www.bentocat.id"
+                  className="w-full h-11 px-3.5 bg-slate-50 border border-slate-300 rounded-lg text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
+                  Tagline / Slogan Usaha (Opsional)
+                </label>
+                <input
+                  type="text"
+                  value={formData.tagline || ''}
+                  onChange={(e) => handleInputChange('tagline', e.target.value)}
+                  placeholder="Contoh: Premium Bentonite Cat Litter Manufacturer"
+                  className="w-full h-11 px-3.5 bg-slate-50 border border-slate-300 rounded-lg text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
+                  Instagram Resmi (Opsional)
+                </label>
+                <input
+                  type="text"
+                  value={formData.instagram || ''}
+                  onChange={(e) => handleInputChange('instagram', e.target.value)}
+                  placeholder="Contoh: @bentocat.id"
+                  className="w-full h-11 px-3.5 bg-slate-50 border border-slate-300 rounded-lg text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 pt-1 md:col-span-2">
+                <input
+                  type="checkbox"
+                  id="showWebsiteOnPdfCheckbox"
+                  checked={formData.showWebsiteOnPdf ?? true}
+                  onChange={(e) => handleInputChange('showWebsiteOnPdf', e.target.checked)}
+                  className="w-4 h-4 text-blue-600 rounded border-slate-300"
+                />
+                <label htmlFor="showWebsiteOnPdfCheckbox" className="text-xs font-medium text-slate-700">
+                  Tampilkan tautan website dan media sosial pada dokumen cetak PDF (Faktur, Proforma, Kwitansi, Surat Jalan, Katalog)
+                </label>
               </div>
             </div>
           </section>
