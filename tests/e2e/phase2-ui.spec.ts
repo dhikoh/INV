@@ -392,5 +392,22 @@ test.describe('Fase 2 E2E UI Tests — Public /verify/[token] & Cetak Kwitansi V
       () => document.documentElement.scrollWidth > document.documentElement.clientWidth
     );
     expect(invOverflowDesktop).toBe(false);
+
+    // Pastikan cetak HTML Faktur, Proforma, dan Kwitansi menyertakan SVG QR + tautan /verify/[token]
+    const invoicePrintRes = await page.request.get(
+      `/api/v1/invoices/${IDS.dpInvoiceApproved}/pdf?format=html`
+    );
+    expect(invoicePrintRes.status()).toBe(200);
+    const invoicePrintHtml = await invoicePrintRes.text();
+    expect(invoicePrintHtml).toContain('data:image/svg+xml;base64,');
+    expect(invoicePrintHtml).toContain(`/verify/${IDS.tokInvApproved}`);
+
+    const receiptPrintRes = await page.request.get(
+      `/api/v1/payments/${IDS.paymentVerified}/receipt/pdf?format=html`
+    );
+    expect(receiptPrintRes.status()).toBe(200);
+    const receiptPrintHtml = await receiptPrintRes.text();
+    expect(receiptPrintHtml).toContain('data:image/svg+xml;base64,');
+    expect(receiptPrintHtml).toContain(`/verify/${IDS.tokPayVerified}`);
   });
 });

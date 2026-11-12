@@ -9,8 +9,7 @@ import { buildInvoiceSnapshot, InvoiceSnapshot } from '@/lib/pdf/snapshot';
 import { InvoiceDocument } from '@/lib/pdf/InvoiceDocument';
 import { renderReactToPdf, renderReactToHtml } from '@/lib/pdf/engine';
 import { getLogoDataUri } from '@/lib/pdf/logo';
-import { buildPublicVerifyUrl, generateQrDataUri } from '@/lib/pdf/qr';
-import { generateVerifyToken } from '@/lib/domain/verify';
+import { buildQrVerificationProps, ensureInvoiceVerifyToken } from '@/lib/pdf/qr';
 
 export async function GET(
   req: NextRequest,
@@ -165,21 +164,12 @@ export async function GET(
 
     const logoDataUri = getLogoDataUri(snapshot.business.logoPath);
 
-    let verifyToken = snapshot.verifyToken ?? invoice.verifyToken ?? null;
-    if (!verifyToken) {
-      verifyToken = generateVerifyToken();
-      if (typeof prisma.invoice?.updateMany === 'function') {
-        await prisma.invoice.updateMany({
-          where: { id: invoice.id, businessId: invoice.businessId, verifyToken: null },
-          data: { verifyToken },
-        });
-      }
-    }
-
-    const verifyUrl = verifyToken
-      ? buildPublicVerifyUrl(verifyToken, req.nextUrl.origin)
-      : null;
-    const qrDataUri = verifyUrl ? await generateQrDataUri(verifyUrl) : null;
+    const verifyToken = await ensureInvoiceVerifyToken(
+      invoice,
+      snapshot.verifyToken,
+      prisma.invoice
+    );
+    const { verifyUrl, qrDataUri } = await buildQrVerificationProps(verifyToken, req);
 
     const element = React.createElement(InvoiceDocument, {
       snapshot,

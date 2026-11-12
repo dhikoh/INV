@@ -604,4 +604,53 @@ describe('Fase 2 Integration Tests — Public Verify QR & Official VERIFIED Rece
     expect(verified.receiptNo).toMatch(/^C001\/KWT\/\d{2}\/\d{2}\/\d{4}\/\d{4}$/);
     expect(verified.verifyToken).toMatch(/^ver_/);
   });
+
+  it('Cetak Kwitansi PDF di balik reverse proxy memakai domain APP_URL dan token QR-nya langsung valid di /api/v1/public/verify', async () => {
+    const prevAppUrl = process.env.APP_URL;
+    process.env.APP_URL = 'https://modula.click';
+    try {
+      const { renderElementToPdfResponse } = await import('@/lib/pdf/response');
+      const renderMock = vi.mocked(renderElementToPdfResponse);
+      renderMock.mockClear();
+
+      vi.spyOn(contextModule, 'requireContext').mockResolvedValue(
+        makeCtx(Role.SALES, 'sales_1')
+      );
+
+      // Request disimulasikan tiba di internal container localhost:3000 (skenario Coolify)
+      const okRes = await receiptPdfHandler(
+        new NextRequest('http://localhost:3000/api/v1/payments/pay_verified_legacy/receipt/pdf'),
+        { params: Promise.resolve({ id: 'pay_verified_legacy' }) }
+      );
+      expect(okRes.status).toBe(200);
+      expect(renderMock).toHaveBeenCalledTimes(1);
+
+      const renderedEl = renderMock.mock.calls[0]?.[0] as {
+        props?: { verifyUrl?: string | null; qrDataUri?: string | null };
+      };
+      const verifyUrl = renderedEl?.props?.verifyUrl ?? '';
+      expect(verifyUrl.startsWith('https://modula.click/verify/ver_')).toBe(true);
+      expect(verifyUrl).not.toContain('localhost');
+      expect(renderedEl?.props?.qrDataUri?.startsWith('data:image/svg+xml;base64,')).toBe(true);
+
+      // Ekstrak token langsung dari URL pada QR dan uji resolusi publiknya
+      const tokenFromQr = new URL(verifyUrl).pathname.split('/').pop()!;
+      const publicRes = await publicVerifyHandler(
+        new NextRequest(`https://modula.click/api/v1/public/verify/${tokenFromQr}`, {
+          headers: { 'x-forwarded-for': '10.88.88.1' },
+        }),
+        { params: Promise.resolve({ token: tokenFromQr }) }
+      );
+      expect(publicRes.status).toBe(200);
+      const publicJson = await publicRes.json();
+      expect(publicJson.data.authenticityStatus).toBe('VERIFIED_RECEIPT');
+      expect(publicJson.data.token).toBe(tokenFromQr);
+    } finally {
+      if (prevAppUrl === undefined) {
+        delete process.env.APP_URL;
+      } else {
+        process.env.APP_URL = prevAppUrl;
+      }
+    }
+  });
 });

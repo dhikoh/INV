@@ -8,7 +8,7 @@ import { DomainError } from '@/lib/domain/money';
 import { ReceiptDocument } from '@/lib/pdf/ReceiptDocument';
 import { getLogoDataUri } from '@/lib/pdf/logo';
 import { renderElementToPdfResponse } from '@/lib/pdf/response';
-import { buildPublicVerifyUrl, generateQrDataUri } from '@/lib/pdf/qr';
+import { buildQrVerificationProps } from '@/lib/pdf/qr';
 import { allocateReceiptIdentifiers } from '@/lib/services/payment';
 import { lockOrder } from '@/lib/services/orderGuard';
 
@@ -138,10 +138,7 @@ export async function GET(
     const finalReceiptNo =
       receiptNo || `KWT-${payment.id.slice(-6).toUpperCase()}`;
     const orderDisplayNo = order.orderNo || `ORD-${order.id.slice(-6).toUpperCase()}`;
-    const verifyUrl = verifyToken
-      ? buildPublicVerifyUrl(verifyToken, req.nextUrl.origin)
-      : null;
-    const qrDataUri = verifyUrl ? await generateQrDataUri(verifyUrl) : null;
+    const { verifyUrl, qrDataUri } = await buildQrVerificationProps(verifyToken, req);
     const logoDataUri = getLogoDataUri(payment.business.logoPath);
 
     const element = React.createElement(ReceiptDocument, {

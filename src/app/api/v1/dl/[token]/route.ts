@@ -12,6 +12,7 @@ import { InvoiceDocument } from '@/lib/pdf/InvoiceDocument';
 import { DeliveryNoteDocument, DeliveryNoteData } from '@/lib/pdf/DeliveryNoteDocument';
 import { renderReactToPdf } from '@/lib/pdf/engine';
 import { getLogoDataUri } from '@/lib/pdf/logo';
+import { buildQrVerificationProps, ensureInvoiceVerifyToken } from '@/lib/pdf/qr';
 import { generateCatalogPdf } from '@/lib/services/catalog';
 import { prepareCreditNotePdf } from '@/lib/pdf/creditNotePdf';
 
@@ -26,7 +27,7 @@ import { prepareCreditNotePdf } from '@/lib/pdf/creditNotePdf';
  * Rujukan: Seksi 11.5 & Seksi 16.3 Dokumen Spesifikasi.
  */
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   route: { params: Promise<{ token: string }> }
 ): Promise<NextResponse> {
   try {
@@ -162,10 +163,18 @@ export async function GET(
       }
 
       const logoDataUri = getLogoDataUri(snapshot.business.logoPath);
+      const verifyToken = await ensureInvoiceVerifyToken(
+        invoice,
+        snapshot.verifyToken,
+        prisma.invoice
+      );
+      const { verifyUrl, qrDataUri } = await buildQrVerificationProps(verifyToken, req);
       const element = React.createElement(InvoiceDocument, {
         snapshot,
         watermark,
         logoDataUri,
+        qrDataUri,
+        verifyUrl,
       });
 
       const pdfBuffer = await renderReactToPdf(element);

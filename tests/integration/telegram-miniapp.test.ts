@@ -80,6 +80,7 @@ interface MockInvoice {
   lastPrintedAt: Date | null;
   snapshot: unknown;
   theme: InvoiceTheme;
+  verifyToken?: string | null;
   business: MockBusinessRef;
   deletedAt: Date | null;
 }
@@ -263,11 +264,14 @@ vi.mock('@/lib/db', () => ({
           where,
           data,
         }: {
-          where: { id: string; businessId?: string };
-          data: { printedCount?: { increment?: number }; lastPrintedAt?: Date };
+          where: { id: string; businessId?: string; verifyToken?: string | null };
+          data: { printedCount?: { increment?: number }; lastPrintedAt?: Date; verifyToken?: string };
         }) => {
           const matched = mockInvoices.filter(
-            (i) => i.id === where.id && (!where.businessId || i.businessId === where.businessId)
+            (i) =>
+              i.id === where.id &&
+              (!where.businessId || i.businessId === where.businessId) &&
+              (where.verifyToken === undefined || (i.verifyToken ?? null) === where.verifyToken)
           );
           for (const inv of matched) {
             if (data.printedCount?.increment) {
@@ -275,6 +279,9 @@ vi.mock('@/lib/db', () => ({
             }
             if (data.lastPrintedAt) {
               inv.lastPrintedAt = data.lastPrintedAt;
+            }
+            if (data.verifyToken) {
+              inv.verifyToken = data.verifyToken;
             }
           }
           return { count: matched.length };
@@ -1120,6 +1127,57 @@ describe('T4.3: Telegram Mini App, Autologin initData, dan Tautan Unduh Bertanda
       expect(res.headers.get('content-disposition')).toContain('Katalog-cat_bentocat_1.pdf');
       const buf = Buffer.from(await res.arrayBuffer());
       expect(buf.subarray(0, 5).toString()).toBe('%PDF-');
+    });
+
+    it('INVOICE_PDF via /api/v1/dl/[token] menyematkan QR Verifikasi Resmi mengarah ke APP_URL (bukan localhost) dan membuat verifyToken legacy', async () => {
+      const prevAppUrl = process.env.APP_URL;
+      process.env.APP_URL = 'https://modula.click';
+      try {
+        const { renderReactToPdf } = await import('@/lib/pdf/engine');
+        const renderMock = vi.mocked(renderReactToPdf);
+        renderMock.mockClear();
+
+        const inv = mockInvoices.find((i) => i.id === 'inv_approved_1')!;
+        inv.verifyToken = null;
+
+        const { token } = createDownloadToken(
+          {
+            type: 'INVOICE_PDF',
+            id: 'inv_approved_1',
+            userId: superAdminUser.id,
+          },
+          env.APP_SECRET,
+          300
+        );
+
+        const req = new NextRequest(`http://localhost:3000/api/v1/dl/${token}`, {
+          method: 'GET',
+        });
+
+        const res = await serveDownloadHandler(req, {
+          params: Promise.resolve({ token }),
+        });
+
+        expect(res.status).toBe(200);
+        expect(inv.verifyToken).toMatch(/^ver_[A-Za-z0-9_-]{20,}$/);
+
+        expect(renderMock).toHaveBeenCalledTimes(1);
+        const renderedEl = renderMock.mock.calls[0]?.[0] as {
+          props?: { verifyUrl?: string | null; qrDataUri?: string | null };
+        };
+        expect(renderedEl?.props?.verifyUrl).toBe(
+          `https://modula.click/verify/${inv.verifyToken}`
+        );
+        expect(renderedEl?.props?.qrDataUri?.startsWith('data:image/svg+xml;base64,')).toBe(
+          true
+        );
+      } finally {
+        if (prevAppUrl === undefined) {
+          delete process.env.APP_URL;
+        } else {
+          process.env.APP_URL = prevAppUrl;
+        }
+      }
     });
   });
 });

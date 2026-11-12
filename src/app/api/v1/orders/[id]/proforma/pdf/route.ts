@@ -9,7 +9,7 @@ import { buildProformaSnapshot } from '@/lib/pdf/snapshot';
 import { InvoiceDocument } from '@/lib/pdf/InvoiceDocument';
 import { getLogoDataUri } from '@/lib/pdf/logo';
 import { renderElementToPdfResponse } from '@/lib/pdf/response';
-import { buildPublicVerifyUrl, generateQrDataUri } from '@/lib/pdf/qr';
+import { buildQrVerificationProps } from '@/lib/pdf/qr';
 
 const ALLOWED_PROFORMA_STATUSES: OrderStatus[] = [
   OrderStatus.DRAFT,
@@ -111,10 +111,7 @@ export async function GET(
     });
 
     const logoDataUri = getLogoDataUri(snapshot.business.logoPath);
-    const verifyUrl = snapshot.verifyToken
-      ? buildPublicVerifyUrl(snapshot.verifyToken, req.nextUrl.origin)
-      : null;
-    const qrDataUri = verifyUrl ? await generateQrDataUri(verifyUrl) : null;
+    const { verifyUrl, qrDataUri } = await buildQrVerificationProps(snapshot.verifyToken, req);
 
     const element = React.createElement(InvoiceDocument, {
       snapshot,
