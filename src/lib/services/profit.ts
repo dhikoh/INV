@@ -163,7 +163,7 @@ export async function createOrderCost(
   });
 
   // Hitung ulang komisi karena biaya lain memengaruhi profit
-  await recalculateOrderCommission(tx, order.id);
+  await recalculateOrderCommission(tx, order.id, businessId);
 
   await tx.auditLog.create({
     data: {
@@ -215,7 +215,7 @@ export async function deleteOrderCost(
   });
 
   // Hitung ulang komisi
-  await recalculateOrderCommission(tx, orderId);
+  await recalculateOrderCommission(tx, orderId, businessId);
 
   await tx.auditLog.create({
     data: {

@@ -194,6 +194,7 @@ export async function serveFile(
     const order = await prisma.order.findFirst({
       where: {
         id: payment.orderId,
+        businessId,
         salesId: ctx.user.id,
       },
     });

@@ -68,7 +68,7 @@ export const POST = withApi(
     const createdRecord = await prisma.$transaction(async (tx) => {
       if (isPrimary && hasPrimary) {
         await tx.productImage.updateMany({
-          where: { productId: product.id },
+          where: { productId: product.id, businessId: product.businessId },
           data: { isPrimary: false },
         });
       }

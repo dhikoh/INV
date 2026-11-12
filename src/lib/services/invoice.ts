@@ -142,6 +142,7 @@ export async function approveInvoice(
 
   // Bangun snapshot statis
   const snapshot = await buildInvoiceSnapshot(tx, invoice.id, {
+    businessId,
     number: invNumber,
     issueDate,
     dueDate,

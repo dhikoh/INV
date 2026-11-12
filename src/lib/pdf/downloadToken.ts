@@ -11,6 +11,7 @@ export interface DownloadTokenPayload {
   t: DownloadType;
   id: string;
   uid: string;
+  bid?: string;
   exp: number;
 }
 
@@ -24,6 +25,7 @@ export function createDownloadToken(
     type: DownloadType;
     id: string;
     userId: string;
+    businessId?: string;
   },
   secret: string,
   expiresInSec = 300
@@ -33,6 +35,7 @@ export function createDownloadToken(
     t: data.type,
     id: data.id,
     uid: data.userId,
+    ...(data.businessId ? { bid: data.businessId } : {}),
     exp: Math.floor(expiresAt.getTime() / 1000),
   };
 
@@ -54,7 +57,7 @@ export function createDownloadToken(
 export function verifyDownloadToken(
   token: string,
   secret: string
-): { type: DownloadType; id: string; userId: string } {
+): { type: DownloadType; id: string; userId: string; businessId?: string } {
   const fail = () =>
     new DomainError(
       'INVALID_DOWNLOAD_TOKEN',
@@ -113,5 +116,6 @@ export function verifyDownloadToken(
     type: payload.t,
     id: payload.id,
     userId: payload.uid,
+    businessId: payload.bid,
   };
 }

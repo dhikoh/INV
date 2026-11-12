@@ -25,7 +25,7 @@ export function PatenPrice({
         <span className="text-slate-500 font-medium">Harga paten:</span>
       )}
       <span className="font-semibold text-slate-800">
-        Rp {formatRupiah(value)}
+        {formatRupiah(value)}
       </span>
       {source === 'CUSTOMER' && (
         <span className="text-[11px] px-1.5 py-0.5 font-medium rounded bg-amber-50 text-amber-700 border border-amber-200">

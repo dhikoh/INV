@@ -65,6 +65,7 @@ export const PurchaseOrderReceiveItemSchema = z
 export const PurchaseOrderReceiveSchema = z
   .object({
     items: z.array(PurchaseOrderReceiveItemSchema).min(1, 'Minimal satu item diterima'),
+    notes: z.string().trim().max(1000).optional().nullable(),
   })
   .strict();
 

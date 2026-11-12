@@ -132,6 +132,20 @@ vi.mock('@/lib/db', () => ({
         }
         return inv;
       }),
+      updateMany: vi.fn(async ({ where, data }: { where: { id: string; businessId?: string }; data: any }) => {
+        const matched = mockInvoices.filter(
+          (i) => i.id === where.id && (!where.businessId || i.businessId === where.businessId)
+        );
+        for (const inv of matched) {
+          if (data.printedCount?.increment) {
+            inv.printedCount = (inv.printedCount || 0) + data.printedCount.increment;
+          }
+          if (data.lastPrintedAt) {
+            inv.lastPrintedAt = data.lastPrintedAt;
+          }
+        }
+        return { count: matched.length };
+      }),
     },
     order: {
       findFirst: vi.fn(async ({ where }: { where: Record<string, any> }) => {
@@ -183,6 +197,13 @@ const prismaMock = (await vi.importMock('@/lib/db') as any).prisma;
 // Mock PDF render engine
 vi.mock('@/lib/pdf/engine', () => ({
   renderReactToPdf: vi.fn(async () => Buffer.from('%PDF-1.4 mock pdf binary')),
+}));
+
+vi.mock('@/lib/services/catalog', () => ({
+  generateCatalogPdf: vi.fn(async (_ctx: Ctx, id: string) => ({
+    buffer: Buffer.from('%PDF-1.4 mock catalog pdf binary'),
+    filename: `Katalog-${id}.pdf`,
+  })),
 }));
 
 // Mock buildInvoiceSnapshot
@@ -807,9 +828,10 @@ describe('T4.3: Telegram Mini App, Autologin initData, dan Tautan Unduh Bertanda
       const res = await generateDownloadHandler(req);
       const json = await res.json();
 
-      expect(res.status).toBe(403);
+      // Isolasi multi-usaha pada query DB mencegah entitas bisnis lain terlihat (404 Not Found)
+      expect(res.status).toBe(404);
       expect(json.ok).toBe(false);
-      expect(json.error.code).toBe('FORBIDDEN');
+      expect(json.error.code).toBe('INVOICE_NOT_FOUND');
     });
   });
 
@@ -940,6 +962,33 @@ describe('T4.3: Telegram Mini App, Autologin initData, dan Tautan Unduh Bertanda
       expect(res.status).toBe(401);
       expect(json.ok).toBe(false);
       expect(json.error.code).toBe('UNAUTHENTICATED');
+    });
+
+    it('berhasil mengunduh CATALOG_PDF bertanda tangan token melalui /api/v1/dl/[token]', async () => {
+      const { token } = createDownloadToken(
+        {
+          type: 'CATALOG_PDF',
+          id: 'cat_bentocat_1',
+          userId: superAdminUser.id,
+          businessId: BIZ_ID,
+        },
+        env.APP_SECRET,
+        300
+      );
+
+      const req = new NextRequest(`http://localhost:3000/api/v1/dl/${token}`, {
+        method: 'GET',
+      });
+
+      const res = await serveDownloadHandler(req, {
+        params: Promise.resolve({ token }),
+      });
+
+      expect(res.status).toBe(200);
+      expect(res.headers.get('content-type')).toBe('application/pdf');
+      expect(res.headers.get('content-disposition')).toContain('Katalog-cat_bentocat_1.pdf');
+      const buf = Buffer.from(await res.arrayBuffer());
+      expect(buf.subarray(0, 5).toString()).toBe('%PDF-');
     });
   });
 });

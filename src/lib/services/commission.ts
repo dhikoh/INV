@@ -112,14 +112,15 @@ export async function calculateOrderProfitData(
  */
 export async function evaluateOrderCommission(
   tx: TxClient,
-  orderId: string
+  orderId: string,
+  businessId: string
 ): Promise<CommissionEntryDto | null> {
   if (!tx.commissionEntry) {
     return null;
   }
 
   const order = await tx.order.findFirst({
-    where: { id: orderId, deletedAt: null },
+    where: { id: orderId, businessId, deletedAt: null },
     include: {
       business: true,
     },
@@ -190,7 +191,7 @@ export async function evaluateOrderCommission(
 
     // Ambil target sales
     const target = await tx.salesTarget.findFirst({
-      where: { salesId: order.salesId, month },
+      where: { businessId: order.businessId, salesId: order.salesId, month },
     });
     const targetRevenue = Number(target?.targetRevenue ?? 0);
 
@@ -313,19 +314,20 @@ export async function evaluateOrderCommission(
  */
 export async function recalculateOrderCommission(
   tx: TxClient,
-  orderId: string
+  orderId: string,
+  businessId: string
 ): Promise<CommissionEntryDto | null> {
   if (!tx.commissionEntry) {
     return null;
   }
 
   const existing = await tx.commissionEntry.findFirst({
-    where: { orderId },
+    where: { orderId, businessId },
   });
 
   // Jika belum ada entri atau sudah PAID atau REVERSED, evaluasi kondisi pemicu
   if (!existing || existing.status === CommissionStatus.EARNED) {
-    return evaluateOrderCommission(tx, orderId);
+    return evaluateOrderCommission(tx, orderId, businessId);
   }
 
   return null;
@@ -337,6 +339,7 @@ export async function recalculateOrderCommission(
 export async function reverseOrderCommission(
   tx: TxClient,
   orderId: string,
+  businessId: string,
   note?: string
 ): Promise<void> {
   if (!tx.commissionEntry) {
@@ -346,6 +349,7 @@ export async function reverseOrderCommission(
   await tx.commissionEntry.updateMany({
     where: {
       orderId,
+      businessId,
       status: { not: CommissionStatus.REVERSED },
     },
     data: {
@@ -460,14 +464,18 @@ export async function listCommissionEntries(
   const salesIds = entries.map((e) => e.salesId);
 
   const [orders, salesUsers] = await Promise.all([
-    tx.order.findMany({
-      where: { id: { in: orderIds } },
-      select: { id: true, orderNo: true },
-    }),
-    tx.user.findMany({
-      where: { id: { in: salesIds } },
-      select: { id: true, name: true },
-    }),
+    orderIds.length > 0
+      ? tx.order.findMany({
+          where: { id: { in: orderIds }, businessId },
+          select: { id: true, orderNo: true },
+        })
+      : Promise.resolve([]),
+    salesIds.length > 0
+      ? tx.user.findMany({
+          where: { id: { in: salesIds } },
+          select: { id: true, name: true },
+        })
+      : Promise.resolve([]),
   ]);
 
   const orderMap = new Map(orders.map((o) => [o.id, o.orderNo]));

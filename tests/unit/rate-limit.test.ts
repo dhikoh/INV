@@ -3,11 +3,13 @@ import {
   checkLoginRateLimit,
   recordLoginAttempt,
   checkUserRateLimit,
+  checkUserReadRateLimit,
   resetUserRateLimits,
   MAX_FAILURES_PER_USERNAME,
   MAX_FAILURES_PER_IP,
   GENERAL_RATE_LIMIT_PER_MINUTE,
   UPLOAD_RATE_LIMIT_PER_MINUTE,
+  READ_RATE_LIMIT_PER_MINUTE,
 } from '@/lib/auth/rateLimit';
 import { prisma } from '@/lib/db';
 import { DomainError } from '@/lib/domain/money';
@@ -151,5 +153,24 @@ describe('Token Bucket General & Upload Rate Limiting (Seksi 16.1)', () => {
 
     // User B tetap memiliki kuota penuh
     expect(() => checkUserRateLimit(userB, false)).not.toThrow();
+  });
+
+  it('memisahkan bucket read (600/menit) agar tidak menguras kuota mutasi (120/menit)', () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-06-01T00:00:00Z'));
+      const userId = 'user_read_vs_write';
+      expect(READ_RATE_LIMIT_PER_MINUTE).toBe(600);
+
+      for (let i = 0; i < READ_RATE_LIMIT_PER_MINUTE; i++) {
+        expect(() => checkUserReadRateLimit(userId)).not.toThrow();
+      }
+
+      expect(() => checkUserReadRateLimit(userId)).toThrow(DomainError);
+      // Kuota mutasi umum tetap penuh meski kuota baca sudah habis
+      expect(() => checkUserRateLimit(userId, false)).not.toThrow();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

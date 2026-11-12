@@ -219,7 +219,7 @@ export const POST = withApi(
           action: 'ORDER_CREATE',
           entityType: 'Order',
           entityId: created.id,
-          summary: `Draf order dibuat untuk customer ${snapshot.customer.code} senilai Rp ${formatRupiah(snapshot.totals.grandTotal)}`,
+          summary: `Draf order dibuat untuk customer ${snapshot.customer.code} senilai ${formatRupiah(snapshot.totals.grandTotal)}`,
           after: {
             customerId: created.customerId,
             grandTotal: snapshot.totals.grandTotal,

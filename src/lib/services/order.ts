@@ -307,7 +307,7 @@ export async function buildOrderSnapshot(
         productName: l.productName,
         floorPrice: l.floorPrice,
         netPricePerUnit: netPerUnit,
-        message: `Harga net per unit (Rp ${formatRupiah(netPerUnit)}) berada di bawah harga minimal (Rp ${formatRupiah(l.floorPrice)})`,
+        message: `Harga net per unit (${formatRupiah(netPerUnit)}) berada di bawah harga minimal (${formatRupiah(l.floorPrice)})`,
       };
     });
 

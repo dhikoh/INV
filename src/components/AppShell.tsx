@@ -335,13 +335,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       )}
 
       {/* Header Utama */}
-      <header className="h-16 bg-white border-b border-slate-200 px-4 flex items-center justify-between sticky top-0 z-30">
-        <div className="flex items-center gap-3">
+      <header className="h-16 bg-white border-b border-slate-200 px-2 sm:px-4 flex items-center justify-between gap-1.5 sm:gap-3 sticky top-0 z-30 w-full max-w-full">
+        <div className="flex items-center gap-1.5 sm:gap-3 min-w-0 shrink-0">
           {/* Tombol Menu Mobile */}
           <button
             type="button"
             onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="md:hidden min-h-[44px] min-w-[44px] flex items-center justify-center text-slate-600 hover:text-slate-900"
+            className="md:hidden min-h-[44px] min-w-[44px] flex items-center justify-center text-slate-600 hover:text-slate-900 shrink-0"
             aria-label="Buka menu navigasi"
           >
             {sidebarOpen ? (
@@ -351,32 +351,32 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             )}
           </button>
 
-          <Link href="/dashboard" className="flex items-center gap-2">
-            <span className="font-extrabold text-xl tracking-tight text-blue-600">
+          <Link href="/dashboard" className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+            <span className="font-extrabold text-base sm:text-xl tracking-tight text-blue-600">
               OmniCat
             </span>
-            <span className="text-xs px-2 py-0.5 font-bold uppercase rounded bg-slate-100 text-slate-700">
+            <span className="hidden xs:inline-block sm:inline-block text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 font-bold uppercase rounded bg-slate-100 text-slate-700">
               {isSuperAdmin ? 'Admin' : 'Sales'}
             </span>
           </Link>
         </div>
 
         {/* Pengalih Usaha (Khusus Super Admin) atau Info Usaha (Sales) & Tautan Cepat */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 sm:gap-2 min-w-0">
           {isSuperAdmin ? (
-            <div className="relative">
+            <div className="relative min-w-0">
               <button
                 type="button"
                 onClick={() => setSwitcherOpen(!switcherOpen)}
-                className="min-h-[44px] flex items-center gap-2 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 text-sm font-medium rounded-lg border border-slate-300 transition-colors"
+                className="min-h-[44px] flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs sm:text-sm font-medium rounded-lg border border-slate-300 transition-colors max-w-full"
               >
-                <Building2 className="w-4 h-4 text-blue-600" />
-                <span className="max-w-[120px] md:max-w-[180px] truncate">
+                <Building2 className="w-4 h-4 text-blue-600 shrink-0" />
+                <span className="max-w-[78px] sm:max-w-[140px] md:max-w-[180px] truncate">
                   {activeBusiness
                     ? `${activeBusiness.code} - ${activeBusiness.name}`
                     : 'Pilih Usaha...'}
                 </span>
-                <ChevronDown className="w-4 h-4 text-slate-500" />
+                <ChevronDown className="w-4 h-4 text-slate-500 shrink-0" />
               </button>
 
               {/* Dropdown Menu Pengalih Usaha */}
@@ -420,9 +420,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               )}
             </div>
           ) : (
-            <div className="flex items-center gap-2 text-sm font-medium text-slate-700 bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200">
-              <Building2 className="w-4 h-4 text-blue-600" />
-              <span className="max-w-[140px] truncate">
+            <div className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm font-medium text-slate-700 bg-slate-100 px-2 sm:px-3 py-1.5 rounded-lg border border-slate-200 min-w-0">
+              <Building2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-600 shrink-0" />
+              <span className="max-w-[78px] sm:max-w-[140px] truncate">
                 {activeBusiness ? activeBusiness.name : 'Usaha'}
               </span>
             </div>
@@ -432,7 +432,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           <Link
             href="/updates"
             title="Catatan Pembaruan"
-            className="relative min-h-[44px] min-w-[44px] flex items-center justify-center text-slate-500 hover:text-blue-600 transition-colors rounded-lg"
+            className="relative min-h-[44px] min-w-[40px] sm:min-w-[44px] flex items-center justify-center text-slate-500 hover:text-blue-600 transition-colors rounded-lg shrink-0"
           >
             <Sparkles className="w-5 h-5" />
             {unreadCount > 0 && (
@@ -448,7 +448,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             type="button"
             onClick={handleLogout}
             title="Keluar"
-            className="min-h-[44px] min-w-[44px] flex items-center justify-center text-slate-500 hover:text-red-600 transition-colors rounded-lg"
+            className="min-h-[44px] min-w-[40px] sm:min-w-[44px] flex items-center justify-center text-slate-500 hover:text-red-600 transition-colors rounded-lg shrink-0"
           >
             <LogOut className="w-5 h-5" />
           </button>
@@ -456,7 +456,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       </header>
 
       {/* Konten Utama & Sidebar */}
-      <div className="flex flex-1">
+      <div className="flex flex-1 min-w-0">
         {/* Sidebar Desktop (Super Admin & Sales) */}
         <aside className="hidden md:flex w-64 bg-white border-r border-slate-200 flex-col py-4 px-3 shrink-0">
           <nav className="space-y-1 flex-1">
@@ -557,7 +557,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         )}
 
         {/* Konten Halaman */}
-        <main className="flex-1 p-4 md:p-6 max-w-7xl w-full mx-auto">
+        <main className="flex-1 min-w-0 p-3 sm:p-4 md:p-6 max-w-7xl w-full mx-auto">
           {isAccessRestricted ? (
             <div className="max-w-md mx-auto mt-12 p-6 bg-white rounded-xl border border-red-200 shadow-sm text-center space-y-4">
               <div className="w-12 h-12 rounded-full bg-red-100 text-red-600 mx-auto flex items-center justify-center">

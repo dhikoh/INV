@@ -28,6 +28,7 @@ describe('Tes Inventaris Rute API v1 & Konsistensi Dokumen Blueprint (Seksi 17.4
     'businesses/[id]/export/route.ts',
     'businesses/[id]/invoice-preview/route.ts',
     'catalogs/[id]/pdf/route.ts',
+    'credit-notes/[id]/pdf/route.ts',
     'data-transfer/export/route.ts',
     'dl/[token]/route.ts',
     'files/[businessId]/[kind]/[filename]/route.ts',

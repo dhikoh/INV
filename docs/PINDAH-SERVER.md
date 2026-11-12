@@ -99,3 +99,10 @@ Jika data operasional unit usaha Anda sangat besar hingga melebihi batas 200 MB:
    ```
 3. Alternatif lain: gunakan jalur cadangan penuh PostgreSQL native `scripts/backup.sh` dan `scripts/restore.sh`.
 
+---
+
+### C. Menjalankan Build Standalone Lokal & Trigger Migrasi
+- **Windows Local Standalone Runtime:** Gunakan `pnpm build:clean` dan `pnpm start:standalone`. Skrip `scripts/prepare-standalone.js` (otomatis dipanggil via `postbuild`) menyinkronkan `.next/static` + `public`, mengubah symlink broken di Windows menjadi junction, dan menautkan biner `@img/sharp-*` agar proses gambar tidak mengalami error `500`.
+- **Ketentuan Trigger Database:** Pastikan instalasi maupun pembaruan skema selalu menggunakan `pnpm prisma migrate deploy` agar trigger `audit_log_no_change` dan `catalogitem_same_business_trg` tetap aktif di PostgreSQL target.
+
+

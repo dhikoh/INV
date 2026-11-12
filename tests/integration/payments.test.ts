@@ -957,4 +957,24 @@ describe('Integrasi Pencatatan dan Verifikasi Pembayaran (T3.3, Seksi 7.12, 8.2,
     );
     expect(completeNotif).toBeDefined();
   });
+
+  it('12. Pembayaran DP tanpa invoiceId (pembayaran umum) tetap mentransisikan AWAITING_DP -> IN_PROCESS ketika paidTotal >= nominal DP', async () => {
+    const { order, dpInvoice } = setupApprovedOrderWithDp();
+    const tx = await getTx();
+
+    const payment = await createPayment(tx, salesACtx, {
+      orderId: order.id,
+      amount: 300_000,
+      method: PaymentMethod.TRANSFER,
+      paidAt: new Date(),
+    });
+    expect(payment.invoiceId).toBeNull();
+
+    await verifyPayment(tx, superAdminCtx, payment.id);
+
+    const updatedOrder = orders.find((o) => o.id === order.id);
+    expect(updatedOrder?.paidTotal).toBe(BigInt(300_000));
+    expect(updatedOrder?.status).toBe(OrderStatus.IN_PROCESS);
+    expect(dpInvoice.paidAmount).toBe(BigInt(0));
+  });
 });

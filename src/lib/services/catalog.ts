@@ -1002,7 +1002,7 @@ export async function generateCatalogPdf(
     items: pdfItems,
   };
 
-  const html = renderReactToHtml(
+  const html = await renderReactToHtml(
     CatalogDocument({
       data: pdfData,
       logoDataUri,

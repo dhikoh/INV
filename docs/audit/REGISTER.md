@@ -26,9 +26,9 @@ Dokumen ini mencatat seluruh temuan audit lintas putaran untuk aplikasi Order, C
 | AUD-PERF-001 | Pola N+1 query database pada antrean pembayaran `GET /api/v1/payments` | S3 Sedang | Terbukti | Baru | Putaran 04 (2026-11-10) | - | [LAPORAN-04-baseline-dan-lingkungan.md#aud-perf-001](LAPORAN-04-baseline-dan-lingkungan.md#aud-perf-001) | Perulangan memanggil `findUnique` untuk order, customer, dan user per item pembayaran (151 query untuk 50 item). Masuk backlog optimasi non-blocker. |
 | AUD-DOC-002 | Desinkronisasi dokumentasi BLUEPRINT.md (versi rentang `^`, count test, link absolut lokal) | S4 Rendah | Terbukti | Lulus verifikasi ulang | Putaran 04 (2026-11-10) | Putaran 12 (2026-11-10) | [LAPORAN-12-perbaikan-dan-reverifikasi.md](LAPORAN-12-perbaikan-dan-reverifikasi.md) | Versi dependensi dikunci eksak (Next 15.5.29, Zod 3.25.76), jumlah tes diselaraskan (77 vitest, 35 e2e), link absolut diganti relatif. |
 | AUD-GAP-002 | Endpoint resmi Daftar Harga Sales (`GET /api/v1/price-list`) belum terhubung ke antarmuka UI | S3 Sedang | Terbukti | Lulus verifikasi ulang | Putaran 05 (2026-11-10) | Putaran 12 (2026-11-10) | [LAPORAN-12-perbaikan-dan-reverifikasi.md#commit-6-a7632dc---konsolidasi-jalur-komisi--antarmuka-daftar-harga-resmi-sales-aud-dup-001--aud-gap-002---s3-sedang](LAPORAN-12-perbaikan-dan-reverifikasi.md#commit-6-a7632dc---konsolidasi-jalur-komisi--antarmuka-daftar-harga-resmi-sales-aud-dup-001--aud-gap-002---s3-sedang) | Halaman antarmuka `/price-list` aktif mengonsumsi DTO 11 kunci, zero-HPP leaks, filter pencarian, dan integrasi navigasi katalog. 9/9 tes lulus. |
-| AUD-GAP-003 | Endpoint skema komisi bertingkat (`GET/PUT /api/v1/commission/tiers`) belum memiliki antarmuka pengaturan | S3 Sedang | Terbukti | Baru | Putaran 05 (2026-11-10) | - | [LAPORAN-05-inventaris-dan-pemetaan.md#aud-gap-003](LAPORAN-05-inventaris-dan-pemetaan.md#aud-gap-003) | Super Admin belum memiliki form UI khusus tier; backend fungsional via default tier. Masuk roadmap non-blocker. |
+| AUD-GAP-003 | Endpoint skema komisi bertingkat (`GET/PUT /api/v1/commission/tiers`) belum memiliki antarmuka pengaturan | S3 Sedang | Terbukti | Lulus verifikasi ulang | Putaran 05 (2026-11-10) | Putaran 13 (2026-11-11) | [LAPORAN-13-audit-navigasi-integrasi.md#register-temuan-audit](LAPORAN-13-audit-navigasi-integrasi.md#register-temuan-audit) | Diselesaikan melalui `NAV-005` pada `settings/business/page.tsx` dan diverifikasi `commission-tiers-ui.test.ts` + E2E browser. |
 | AUD-DUP-002 | Duplikasi logika penguraian multipart & validasi pembayaran di dua route handler | S3 Sedang | Terbukti | Baru | Putaran 05 (2026-11-10) | - | [LAPORAN-05-inventaris-dan-pemetaan.md#aud-dup-002](LAPORAN-05-inventaris-dan-pemetaan.md#aud-dup-002) | `POST /api/v1/payments` dan `POST /api/v1/orders/:id/payments` menduplikasi kode parser multipart dan validasi file. Refactor non-blocker. |
-| AUD-SPEC-007 | Nilai enum `ShipMethod.TRANSPORT_VENDOR` dideklarasikan di Prisma tetapi tidak pernah digunakan | S4 Rendah | Terbukti | Baru | Putaran 05 (2026-11-10) | - | [LAPORAN-05-inventaris-dan-pemetaan.md#aud-spec-007](LAPORAN-05-inventaris-dan-pemetaan.md#aud-spec-007) | Nilai enum tak terpakai di skema Prisma; tidak mengganggu runtime. Masuk pembersihan skema minor post-launch. |
+| AUD-SPEC-007 | Nilai enum `ShipMethod.TRANSPORT_VENDOR` dideklarasikan di Prisma tetapi tidak pernah digunakan | S4 Rendah | Terbukti | Lulus verifikasi ulang | Putaran 05 (2026-11-10) | Final E2E (2026-11-12) | [LAPORAN-05-inventaris-dan-pemetaan.md#aud-spec-007](LAPORAN-05-inventaris-dan-pemetaan.md#aud-spec-007) | Terintegrasi aktif di modal Atur Logistik Pengiriman (`orders/[id]/page.tsx`) dan terverifikasi penuh pada audit UI Playwright. |
 | AUD-INT-001 | Faktur pelunasan mengabaikan creditTotal (Credit Note OFFSET) mengakibatkan overbilling | S2 Tinggi | Terbukti | Lulus verifikasi ulang | Putaran 06 (2026-11-10) | Putaran 12 (2026-11-10) | [LAPORAN-12-perbaikan-dan-reverifikasi.md#commit-3-93463ac---koreksi-formula-faktur-pelunasan-dengan-retur-offset-aud-int-001---s1s2-kritis](LAPORAN-12-perbaikan-dan-reverifikasi.md#commit-3-93463ac---koreksi-formula-faktur-pelunasan-dengan-retur-offset-aud-int-001---s1s2-kritis) | `requestFinalOrder` memperhitungkan `order.creditTotal` (balanceDue = grandTotal - dpAmount - creditTotal). 2/2 tes integrasi lulus. |
 | AUD-DUP-003 | Duplikasi format tanggal lokal (`toLocaleDateString`) di 38 berkas UI tanpa helper terpadu | S4 Rendah | Terbukti | Baru | Putaran 07 (2026-11-10) | - | [LAPORAN-07-audit-duplikasi.md#aud-dup-003](LAPORAN-07-audit-duplikasi.md#aud-dup-003) | Format tanggal lokal diulang di 38 lokasi UI tanpa utilitas terpusat. Masuk backlog refaktor UI kosmetik. |
 | AUD-DUP-004 | Ketiadaan fungsi rekonsiliasi saldo stok fisik produk dari buku besar StockMovement | S4 Rendah | Terbukti | Baru | Putaran 07 (2026-11-10) | - | [LAPORAN-07-audit-duplikasi.md#aud-dup-004](LAPORAN-07-audit-duplikasi.md#aud-dup-004) | Tidak ada fungsi rekalkulasi batch berkala stok fisik dari mutasi. Buku besar atomik tetap berjalan aman. Masuk roadmap pemeliharaan. |
@@ -49,16 +49,17 @@ Dokumen ini mencatat seluruh temuan audit lintas putaran untuk aplikasi Order, C
 
 ---
 
-## Ringkasan Status Temuan Register Kumulatif Pasca-Fase 8
+## Ringkasan Status Temuan Register Kumulatif Pasca-Audit Final (2026-11-12)
 
-- **Total Temuan Terdaftar**: 29 temuan
-  - **Lulus Verifikasi Ulang / Selesai (Resolved)**: **29 temuan** (100% tuntas — seluruh NAV-001 s.d. NAV-012 telah Lulus Verifikasi Ulang)
-  - **Terbuka (Blocker / Cacat Kritis)**: **0 temuan** (0%)
+- **Total Temuan Terdaftar**: **41 temuan**
+  - **Lulus Verifikasi Ulang / Selesai (Resolved)**: **36 temuan** (termasuk seluruh `NAV-001` s.d. `NAV-012`, `AUD-GAP-003`, & `AUD-SPEC-007`)
+  - **Terbuka Blocker (S1/S2)**: **0 temuan** (0%)
+  - **Backlog Non-Blocker (`Baru`)**: **5 temuan**
 - **Rincian Status Blocker Peluncuran**:
-  - **S1 Kritis (Blocker Mutlak)**: **0 temuan terbuka** (3 dari 3 terselesaikan / 100% tuntas)
-  - **S2 Tinggi (Blocker Bisnis/Finansial/Keamanan)**: **0 temuan terbuka** (4 dari 4 terselesaikan / 100% tuntas)
-  - **S3 Sedang (Minor/Non-Blocker)**: 4 temuan terbuka (`AUD-OPS-002`, `AUD-PERF-001`, `AUD-GAP-003`, `AUD-DUP-002`)
-  - **S4 Rendah (Kosmetik/Refactor)**: 3 temuan terbuka (`AUD-SPEC-007`, `AUD-DUP-003`, `AUD-DUP-004`)
+  - **S1 Kritis (Blocker Mutlak)**: **0 temuan terbuka**
+  - **S2 Tinggi (Blocker Bisnis/Finansial/Keamanan)**: **0 temuan terbuka**
+  - **S3 Sedang (Minor/Non-Blocker)**: **3 temuan terbuka** (`AUD-OPS-002`, `AUD-PERF-001`, `AUD-DUP-002`)
+  - **S4 Rendah (Kosmetik/Refactor)**: **2 temuan terbuka** (`AUD-DUP-003`, `AUD-DUP-004`)
 
 ### Dokumen Konsolidasi & Keputusan Akhir
 - **Laporan Remediasi Fase 8 & Reverifikasi**: [LAPORAN-12-perbaikan-dan-reverifikasi.md](LAPORAN-12-perbaikan-dan-reverifikasi.md)

@@ -125,7 +125,7 @@ export async function GET(
 
     // Jika format=html diminta secara eksplisit, kembalikan dokumen cetak HTML
     if (format === 'html' || format === 'print') {
-      const html = renderReactToHtml(element);
+      const html = await renderReactToHtml(element);
       const printableHtml = html.replace(
         '</body>',
         `<script>window.addEventListener('DOMContentLoaded', () => { window.print(); });</script></body>`
@@ -145,7 +145,7 @@ export async function GET(
     } catch {
       // Fallback anggun: jika headless browser Chromium di server belum terkonfigurasi / spawn error / timeout / memory issue,
       // kembalikan tampilan dokumen HTML dengan auto-print agar pengguna tetap dapat mencetak surat jalan tanpa kegagalan (500)
-      const html = renderReactToHtml(element);
+      const html = await renderReactToHtml(element);
       const printableHtml = html.replace(
         '</body>',
         `<script>window.addEventListener('DOMContentLoaded', () => { window.print(); });</script></body>`

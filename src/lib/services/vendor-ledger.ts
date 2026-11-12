@@ -86,6 +86,7 @@ export async function recordVendorPayment(
   if (input.purchaseOrderId) {
     const activePayments = await tx.vendorPayment.findMany({
       where: {
+        businessId,
         purchaseOrderId: input.purchaseOrderId,
         voidedAt: null,
       },

@@ -1,6 +1,5 @@
 import fs from 'fs';
 import React from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
 import puppeteer, { Browser, Page, HTTPRequest } from 'puppeteer-core';
 import { DomainError } from '../domain/money';
 
@@ -80,10 +79,10 @@ export function findChromeExecutable(): string {
   const candidates: string[] = [];
   if (process.platform === 'win32') {
     candidates.push(
-      'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
-      'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
       'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-      'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe'
+      'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+      'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+      'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe'
     );
   } else if (process.platform === 'darwin') {
     candidates.push(
@@ -127,21 +126,24 @@ export async function getBrowser(): Promise<Browser> {
 
   browserLaunchingPromise = (async () => {
     const executablePath = findChromeExecutable();
+    const browserArgs = [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-gpu',
+      '--disable-software-rasterizer',
+      '--no-first-run',
+      '--disable-extensions',
+      '--font-render-hinting=none',
+    ];
+    if (process.platform !== 'win32') {
+      // --no-zygote is needed in constrained Linux containers; on Windows Chrome it destabilizes Page.printToPDF
+      browserArgs.push('--no-zygote');
+    }
     const browser = await puppeteer.launch({
       executablePath,
       headless: true,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-gpu',
-        '--disable-software-rasterizer',
-        '--no-first-run',
-        '--no-zygote',
-        '--single-process',
-        '--disable-extensions',
-        '--font-render-hinting=none',
-      ],
+      args: browserArgs,
     });
 
     browser.on('disconnected', () => {
@@ -168,7 +170,8 @@ export async function closeBrowser(): Promise<void> {
   }
 }
 
-export function renderReactToHtml(element: React.ReactElement): string {
+export async function renderReactToHtml(element: React.ReactElement): Promise<string> {
+  const { renderToStaticMarkup } = await import('react-dom/server');
   return '<!DOCTYPE html>' + renderToStaticMarkup(element);
 }
 
@@ -240,6 +243,6 @@ export async function renderHtmlToPdf(html: string): Promise<Buffer> {
 }
 
 export async function renderReactToPdf(element: React.ReactElement): Promise<Buffer> {
-  const html = renderReactToHtml(element);
+  const html = await renderReactToHtml(element);
   return renderHtmlToPdf(html);
 }

@@ -85,7 +85,7 @@ export async function GET(
     try {
       pdfBuffer = await renderReactToPdf(element);
     } catch {
-      const html = renderReactToHtml(element);
+      const html = await renderReactToHtml(element);
       const printableHtml = html.replace(
         '</body>',
         `<script>window.addEventListener('DOMContentLoaded', () => { window.print(); });</script></body>`

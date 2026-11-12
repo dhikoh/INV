@@ -71,6 +71,7 @@ export interface InvoiceSnapshot {
 }
 
 export interface BuildSnapshotOptions {
+  businessId?: string;
   number?: string | null;
   issueDate?: Date;
   dueDate?: Date;
@@ -88,8 +89,20 @@ export async function buildInvoiceSnapshot(
   invoiceId: string,
   options?: BuildSnapshotOptions
 ): Promise<InvoiceSnapshot> {
+  if (!options?.businessId) {
+    throw new DomainError(
+      'BAD_REQUEST',
+      'businessId wajib disertakan saat membangun snapshot invoice',
+      400
+    );
+  }
+
   const invoice = await tx.invoice.findFirst({
-    where: { id: invoiceId, deletedAt: null },
+    where: {
+      id: invoiceId,
+      businessId: options.businessId,
+      deletedAt: null,
+    },
   });
 
   if (!invoice) {

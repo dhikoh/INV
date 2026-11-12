@@ -438,6 +438,8 @@ export async function receivePurchaseOrder(
     );
   }
 
+  const cleanNotes = input.notes?.trim() || '';
+
   for (const rec of input.items) {
     const item = po.items.find((i) => i.id === rec.itemId);
     if (!item) {
@@ -468,7 +470,9 @@ export async function receivePurchaseOrder(
       qtyDelta: rec.qty,
       refType: 'PURCHASE_ORDER',
       refId: po.id,
-      note: `Penerimaan PO ${po.poNo || po.id}`,
+      note: cleanNotes
+        ? `Penerimaan PO ${po.poNo || po.id} — ${cleanNotes}`
+        : `Penerimaan PO ${po.poNo || po.id}`,
       actorId,
     });
 
@@ -546,7 +550,9 @@ export async function receivePurchaseOrder(
       action: 'PO_RECEIVE',
       entityType: 'PurchaseOrder',
       entityId: po.id,
-      summary: `Penerimaan barang PO ${po.poNo || po.id}: status sekarang ${newStatus}`,
+      summary: cleanNotes
+        ? `Penerimaan barang PO ${po.poNo || po.id} (${cleanNotes}): status sekarang ${newStatus}`
+        : `Penerimaan barang PO ${po.poNo || po.id}: status sekarang ${newStatus}`,
     },
   });
 

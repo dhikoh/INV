@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/db';
 import { suggestInterval, daysUntil, wibDayIndex } from '@/lib/domain/reminder';
 import {
+  Prisma,
   OrderStatus,
   ReminderStatus,
   ReminderSource,
@@ -22,27 +23,36 @@ export function formatWibDate(date: Date): string {
  */
 export async function updateRemindersForCompletedOrder(
   tx: TxClient,
-  orderId: string
+  orderId: string,
+  businessId?: string
 ): Promise<void> {
-  if (!tx?.reminder || typeof tx?.order?.findFirst !== 'function') {
+  if (!tx?.reminder) {
     return;
   }
 
-  const order = await tx.order.findFirst({
-    where: { id: orderId },
-    include: {
-      items: true,
-      business: true,
-    },
-  });
+  const orderWhere: Prisma.OrderWhereInput = businessId
+    ? { id: orderId, businessId }
+    : { id: orderId };
+  const order =
+    typeof tx.order?.findFirst === 'function'
+      ? await tx.order.findFirst({
+          where: orderWhere,
+          include: {
+            items: true,
+            business: true,
+          },
+        })
+      : null;
 
   if (!order || order.status !== OrderStatus.COMPLETED || !order.items) {
     return;
   }
 
+  const bizId = businessId || order.businessId;
+
   const shipment =
     typeof tx?.shipment?.findFirst === 'function'
-      ? await tx.shipment.findFirst({ where: { orderId } })
+      ? await tx.shipment.findFirst({ where: { orderId, businessId: bizId } })
       : null;
   const shipDate = shipment?.shippedAt || order.updatedAt || new Date();
   const fallbackDays =
@@ -60,9 +70,10 @@ export async function updateRemindersForCompletedOrder(
   for (const productId of productIds) {
     // 1. Kumpulkan tanggal pengiriman semua order COMPLETED (bukan CANCELLED) customer untuk produk ini
     const completedOrders =
-      typeof tx.order.findMany === 'function'
+      typeof tx.order?.findMany === 'function'
         ? await tx.order.findMany({
             where: {
+              businessId: bizId,
               customerId: order.customerId,
               status: OrderStatus.COMPLETED,
               deletedAt: null,
@@ -78,7 +89,7 @@ export async function updateRemindersForCompletedOrder(
     const shipments =
       typeof tx?.shipment?.findMany === 'function' && completedOrderIds.length > 0
         ? await tx.shipment.findMany({
-            where: { orderId: { in: completedOrderIds } },
+            where: { orderId: { in: completedOrderIds }, businessId: bizId },
           })
         : [];
     const shipmentMap = new Map(
@@ -95,16 +106,16 @@ export async function updateRemindersForCompletedOrder(
     // Cari pengingat yang sudah ada
     const existing = await tx.reminder.findFirst({
       where: {
+        businessId: bizId,
         customerId: order.customerId,
         productId,
-        businessId: order.businessId,
       },
     });
 
     if (!existing) {
       await tx.reminder.create({
         data: {
-          businessId: order.businessId,
+          businessId: bizId,
           customerId: order.customerId,
           productId,
           salesId: order.salesId,
@@ -117,7 +128,7 @@ export async function updateRemindersForCompletedOrder(
       });
     } else if (existing.source === ReminderSource.AUTO) {
       await tx.reminder.updateMany({
-        where: { id: existing.id, businessId: order.businessId },
+        where: { id: existing.id, businessId: bizId },
         data: {
           salesId: order.salesId,
           intervalDays: interval,
@@ -135,7 +146,7 @@ export async function updateRemindersForCompletedOrder(
         shipDate.getTime() + existing.intervalDays * 86_400_000
       );
       await tx.reminder.updateMany({
-        where: { id: existing.id, businessId: order.businessId },
+        where: { id: existing.id, businessId: bizId },
         data: {
           salesId: order.salesId,
           lastOrderDate: shipDate,
@@ -156,23 +167,31 @@ export async function updateRemindersForCompletedOrder(
  */
 export async function rebuildRemindersForCustomer(
   tx: TxClient,
-  customerId: string
+  customerId: string,
+  businessId?: string
 ): Promise<void> {
-  const customer = await tx.customer.findFirst({
-    where: { id: customerId },
-    include: { business: true },
-  });
+  const customerWhere: Prisma.CustomerWhereInput = businessId
+    ? { id: customerId, businessId }
+    : { id: customerId };
+  const customer =
+    typeof tx.customer?.findFirst === 'function'
+      ? await tx.customer.findFirst({
+          where: customerWhere,
+          include: { business: true },
+        })
+      : null;
 
   if (!customer) return;
 
-  const businessId = customer.businessId;
+  const bizId = businessId || customer.businessId;
 
   const existingReminders = await tx.reminder.findMany({
-    where: { customerId },
+    where: { customerId, businessId: bizId },
   });
 
   const completedOrders = await tx.order.findMany({
     where: {
+      businessId: bizId,
       customerId,
       status: OrderStatus.COMPLETED,
       deletedAt: null,
@@ -187,7 +206,7 @@ export async function rebuildRemindersForCustomer(
   const shipments =
     typeof tx?.shipment?.findMany === 'function' && orderIds.length > 0
       ? await tx.shipment.findMany({
-          where: { orderId: { in: orderIds } },
+          where: { orderId: { in: orderIds }, businessId: bizId },
         })
       : [];
   const shipmentMap = new Map(
@@ -259,26 +278,37 @@ export async function scanRepeatReminders(
   client: TxClient = prisma
 ): Promise<{ scanned: number; notified: number; escalated: number }> {
   const wibDateStr = formatWibDate(now);
-  const reminders = await client.reminder.findMany({
-    where: {
-      status: ReminderStatus.ACTIVE,
-      OR: [{ snoozedUntil: null }, { snoozedUntil: { lte: now } }],
-    },
-    include: {
-      customer: true,
-    },
-  });
+  const businesses =
+    typeof client?.business?.findMany === 'function'
+      ? await client.business.findMany({ select: { id: true } })
+      : [{ id: '' }];
 
+  let scanned = 0;
   let notified = 0;
   let escalated = 0;
 
-  for (const reminder of reminders) {
-    try {
-      // Cek apakah ada order lain customer itu untuk produk yang sama (status bukan CANCELLED)
-      // dibuat setelah lastOrderDate
-      if (reminder.productId) {
-        const newerOrder = await client.order.findFirst({
-          where: {
+  for (const b of businesses) {
+    const whereClause: Prisma.ReminderWhereInput = {
+      status: ReminderStatus.ACTIVE,
+      OR: [{ snoozedUntil: null }, { snoozedUntil: { lte: now } }],
+      ...(b.id ? { businessId: b.id } : {}),
+    };
+
+    const reminders = await client.reminder.findMany({
+      where: whereClause,
+      include: {
+        customer: true,
+      },
+    });
+
+    scanned += reminders.length;
+
+    for (const reminder of reminders) {
+      try {
+        // Cek apakah ada order lain customer itu untuk produk yang sama (status bukan CANCELLED)
+        // dibuat setelah lastOrderDate
+        if (reminder.productId) {
+          const newerWhere: Prisma.OrderWhereInput = {
             customerId: reminder.customerId,
             createdAt: { gt: reminder.lastOrderDate },
             status: { not: OrderStatus.CANCELLED },
@@ -286,113 +316,118 @@ export async function scanRepeatReminders(
             items: {
               some: { productId: reminder.productId },
             },
-          },
-        });
+            ...(reminder.businessId ? { businessId: reminder.businessId } : {}),
+          };
 
-        if (newerOrder) {
-          continue; // Lewati notifikasi karena pelanggan sudah memesan
-        }
-      }
+          const newerOrder = await client.order.findFirst({
+            where: newerWhere,
+          });
 
-      const diff = daysUntil(reminder.nextDueDate, now);
-
-      // Ambil nama produk jika ada
-      let productInfo = 'produk terkait';
-      if (reminder.productId) {
-        const prod =
-          typeof client?.product?.findFirst === 'function'
-            ? await client.product.findFirst({
-                where: { id: reminder.productId, businessId: reminder.businessId },
-                select: { name: true, sku: true },
-              })
-            : null;
-        if (prod) {
-          productInfo = `${prod.name} (${prod.sku})`;
-        }
-      }
-
-      // Notifikasi ke Sales: H-3, H-0, atau terlambat (diff < 0)
-      if (diff === 3 || diff === 0 || diff < 0) {
-        const dedupeKey = `REPEAT_DUE:${reminder.id}:${wibDateStr}`;
-        const title = `Pengingat Repeat Order: ${reminder.customer.name}`;
-        let body = '';
-
-        if (diff === 3) {
-          body = `Perkiraan repeat order pelanggan ${reminder.customer.name} dalam 3 hari (H-3).\nProduk: ${productInfo}.\nSilakan hubungi pelanggan untuk konfirmasi pemesanan kembali.`;
-        } else if (diff === 0) {
-          body = `Hari ini adalah jadwal perkiraan repeat order pelanggan ${reminder.customer.name} (H-0).\nProduk: ${productInfo}.\nSegera hubungi pelanggan sekarang.`;
-        } else {
-          body = `Jadwal repeat order pelanggan ${reminder.customer.name} terlambat ${Math.abs(diff)} hari.\nProduk: ${productInfo}.\nSegera tindak lanjuti agar pelanggan tidak beralih.`;
+          if (newerOrder) {
+            continue; // Lewati notifikasi karena pelanggan sudah memesan
+          }
         }
 
-        await createNotification(client, {
-          businessId: reminder.businessId,
-          userId: reminder.salesId,
-          type: 'REPEAT_DUE',
-          title,
-          body,
-          linkPath: `/customers/${reminder.customerId}`,
-          dedupeKey,
-        });
+        const diff = daysUntil(reminder.nextDueDate, now);
 
-        await client.reminder.updateMany({
-          where: { id: reminder.id, businessId: reminder.businessId },
-          data: { lastNotifiedAt: now },
-        });
+        // Ambil nama produk jika ada
+        let productInfo = 'produk terkait';
+        if (reminder.productId) {
+          const prod =
+            typeof client?.product?.findFirst === 'function'
+              ? await client.product.findFirst({
+                  where: { id: reminder.productId, businessId: reminder.businessId },
+                  select: { name: true, sku: true },
+                })
+              : null;
+          if (prod) {
+            productInfo = `${prod.name} (${prod.sku})`;
+          }
+        }
 
-        notified++;
-      }
+        // Notifikasi ke Sales: H-3, H-0, atau terlambat (diff < 0)
+        if (diff === 3 || diff === 0 || diff < 0) {
+          const dedupeKey = `REPEAT_DUE:${reminder.id}:${wibDateStr}`;
+          const title = `Pengingat Repeat Order: ${reminder.customer.name}`;
+          let body = '';
 
-      // Eskalasi ke Super Admin jika terlambat 3 hari atau lebih (diff <= -3) dan belum pernah dieskalasikan
-      if (diff <= -3 && !reminder.escalatedAt) {
-        const superAdmins = await client.user.findMany({
-          where: {
-            businessId: reminder.businessId,
-            role: Role.SUPERADMIN,
-            isActive: true,
-            deletedAt: null,
-          },
-        });
+          if (diff === 3) {
+            body = `Perkiraan repeat order pelanggan ${reminder.customer.name} dalam 3 hari (H-3).\nProduk: ${productInfo}.\nSilakan hubungi pelanggan untuk konfirmasi pemesanan kembali.`;
+          } else if (diff === 0) {
+            body = `Hari ini adalah jadwal perkiraan repeat order pelanggan ${reminder.customer.name} (H-0).\nProduk: ${productInfo}.\nSegera hubungi pelanggan sekarang.`;
+          } else {
+            body = `Jadwal repeat order pelanggan ${reminder.customer.name} terlambat ${Math.abs(diff)} hari.\nProduk: ${productInfo}.\nSegera tindak lanjuti agar pelanggan tidak beralih.`;
+          }
 
-        const sales =
-          typeof client?.user?.findUnique === 'function'
-            ? await client.user.findUnique({
-                where: { id: reminder.salesId },
-                select: { name: true },
-              })
-            : typeof client?.user?.findFirst === 'function'
-            ? await client.user.findFirst({
-                where: { id: reminder.salesId },
-                select: { name: true },
-              })
-            : null;
-
-        for (const admin of superAdmins) {
-          const dedupeKey = `REPEAT_ESCALATION:${reminder.id}:${admin.id}`;
           await createNotification(client, {
             businessId: reminder.businessId,
-            userId: admin.id,
-            type: 'REPEAT_ESCALATION',
-            title: `⚠️ Eskalasi Repeat Order Terlambat: ${reminder.customer.name}`,
-            body: `Pelanggan ${reminder.customer.name} terlambat repeat order ${Math.abs(diff)} hari.\nProduk: ${productInfo}.\nSales penanggung jawab: ${sales?.name || 'Sales'}.\nBelum ada pesanan baru tercatat.`,
+            userId: reminder.salesId,
+            type: 'REPEAT_DUE',
+            title,
+            body,
             linkPath: `/customers/${reminder.customerId}`,
             dedupeKey,
           });
+
+          await client.reminder.updateMany({
+            where: { id: reminder.id, businessId: reminder.businessId },
+            data: { lastNotifiedAt: now },
+          });
+
+          notified++;
         }
 
-        await client.reminder.updateMany({
-          where: { id: reminder.id, businessId: reminder.businessId },
-          data: { escalatedAt: now },
-        });
+        // Eskalasi ke Super Admin jika terlambat 3 hari atau lebih (diff <= -3) dan belum pernah dieskalasikan
+        if (diff <= -3 && !reminder.escalatedAt) {
+          const superAdmins = await client.user.findMany({
+            where: {
+              businessId: reminder.businessId,
+              role: Role.SUPERADMIN,
+              isActive: true,
+              deletedAt: null,
+            },
+          });
 
-        escalated++;
+          const sales =
+            typeof client?.user?.findUnique === 'function'
+              ? await client.user.findUnique({
+                  where: { id: reminder.salesId },
+                  select: { name: true },
+                })
+              : typeof client?.user?.findFirst === 'function'
+              ? await client.user.findFirst({
+                  where: { id: reminder.salesId },
+                  select: { name: true },
+                })
+              : null;
+
+          for (const admin of superAdmins) {
+            const dedupeKey = `REPEAT_ESCALATION:${reminder.id}:${admin.id}`;
+            await createNotification(client, {
+              businessId: reminder.businessId,
+              userId: admin.id,
+              type: 'REPEAT_ESCALATION',
+              title: `⚠️ Eskalasi Repeat Order Terlambat: ${reminder.customer.name}`,
+              body: `Pelanggan ${reminder.customer.name} terlambat repeat order ${Math.abs(diff)} hari.\nProduk: ${productInfo}.\nSales penanggung jawab: ${sales?.name || 'Sales'}.\nBelum ada pesanan baru tercatat.`,
+              linkPath: `/customers/${reminder.customerId}`,
+              dedupeKey,
+            });
+          }
+
+          await client.reminder.updateMany({
+            where: { id: reminder.id, businessId: reminder.businessId },
+            data: { escalatedAt: now },
+          });
+
+          escalated++;
+        }
+      } catch {
+        // Isolasi kegagalan per item agar tidak menghentikan pemrosesan pengingat lainnya
       }
-    } catch {
-      // Isolasi kegagalan per item agar tidak menghentikan pemrosesan pengingat lainnya
     }
   }
 
-  return { scanned: reminders.length, notified, escalated };
+  return { scanned, notified, escalated };
 }
 
 /**
@@ -407,101 +442,112 @@ export async function scanInvoicesDue(
   client: TxClient = prisma
 ): Promise<{ scanned: number; notified: number }> {
   const wibDateStr = formatWibDate(now);
-  const invoices = await client.invoice.findMany({
-    where: {
-      status: InvoiceStatus.APPROVED,
-      deletedAt: null,
-    },
-  });
+  const businesses =
+    typeof client?.business?.findMany === 'function'
+      ? await client.business.findMany({ select: { id: true, name: true } })
+      : [{ id: '', name: 'Default' }];
 
-  const unpaidInvoices = invoices.filter(
-    (inv) => inv.paidAmount < inv.amount && inv.dueDate
-  );
-
-  const orderIds = Array.from(new Set(unpaidInvoices.map((i) => i.orderId)));
-  const orders =
-    orderIds.length > 0
-      ? await client.order.findMany({
-          where: {
-            id: { in: orderIds },
-            status: { not: OrderStatus.CANCELLED },
-            deletedAt: null,
-          },
-          include: { customer: true },
-        })
-      : [];
-  const orderMap = new Map(orders.map((o) => [o.id, o]));
-
+  let totalScanned = 0;
   let notified = 0;
 
-  for (const inv of unpaidInvoices) {
-    try {
-      if (!inv.dueDate) {
-        continue;
-      }
+  for (const b of businesses) {
+    const invWhere: Prisma.InvoiceWhereInput = {
+      status: InvoiceStatus.APPROVED,
+      deletedAt: null,
+      ...(b.id ? { businessId: b.id } : {}),
+    };
 
-      const ord = orderMap.get(inv.orderId);
-      if (!ord) {
-        continue;
-      }
+    const invoices = await client.invoice.findMany({
+      where: invWhere,
+    });
 
-      const diff = daysUntil(inv.dueDate, now);
-      const remainingAmount = inv.amount - inv.paidAmount;
-      const formattedAmount = `Rp ${Number(remainingAmount).toLocaleString('id-ID')}`;
-      const customerName = ord.customer.name;
-      const invNumber = inv.number || inv.id;
+    totalScanned += invoices.length;
 
-      if (diff === 3 || diff === 0) {
-        const tag = diff === 3 ? 'H-3' : 'H-0';
-        const dedupeKey = `INVOICE_DUE:${inv.id}:${tag}:${wibDateStr}`;
-        const title = `Pengingat Jatuh Tempo Faktur #${invNumber}`;
-        const body = `Faktur #${invNumber} untuk ${customerName} jatuh tempo ${diff === 3 ? '3 hari lagi (H-3)' : 'hari ini (H-0)'}.\nSisa tagihan: ${formattedAmount}.\nSilakan follow-up pembayaran ke pelanggan.`;
+    const unpaidInvoices = invoices.filter(
+      (inv) => inv.paidAmount < inv.amount && inv.dueDate
+    );
 
-        await createNotification(client, {
-          businessId: inv.businessId,
-          userId: ord.salesId,
-          type: 'INVOICE_DUE',
-          title,
-          body,
-          linkPath: `/invoices/${inv.id}`,
-          dedupeKey,
-        });
-        notified++;
-      } else if (diff < 0) {
-        const daysOverdue = Math.abs(diff);
-        // Terlambat: setiap 2 hari (hari terlambat genap)
-        if (daysOverdue % 2 === 0) {
-          const dedupeKey = `INVOICE_OVERDUE:${inv.id}:${daysOverdue}:${wibDateStr}`;
-          const title = `⚠️ Faktur Terlambat Bayar #${invNumber}`;
-          const body = `Faktur #${invNumber} untuk ${customerName} telah melewati jatuh tempo selama ${daysOverdue} hari.\nSisa tagihan: ${formattedAmount}.\nSegera tagih pembayaran ke pelanggan.`;
+    const orderIds = Array.from(new Set(unpaidInvoices.map((i) => i.orderId)));
+    const ordWhere: Prisma.OrderWhereInput = {
+      id: { in: orderIds },
+      status: { not: OrderStatus.CANCELLED },
+      deletedAt: null,
+      ...(b.id ? { businessId: b.id } : {}),
+    };
+
+    const orders =
+      orderIds.length > 0
+        ? await client.order.findMany({
+            where: ordWhere,
+            include: { customer: true },
+          })
+        : [];
+    const orderMap = new Map(orders.map((o) => [o.id, o]));
+
+    for (const inv of unpaidInvoices) {
+      try {
+        if (!inv.dueDate) {
+          continue;
+        }
+
+        const ord = orderMap.get(inv.orderId);
+        if (!ord) {
+          continue;
+        }
+
+        const diff = daysUntil(inv.dueDate, now);
+        const remainingAmount = inv.amount - inv.paidAmount;
+        const formattedAmount = `Rp ${Number(remainingAmount).toLocaleString('id-ID')}`;
+        const customerName = ord.customer.name;
+        const invNumber = inv.number || inv.id;
+
+        if (diff === 3 || diff === 0) {
+          const tag = diff === 3 ? 'H-3' : 'H-0';
+          const dedupeKey = `INVOICE_DUE:${inv.id}:${tag}:${wibDateStr}`;
+          const title = `Pengingat Jatuh Tempo Faktur #${invNumber}`;
+          const body = `Faktur #${invNumber} untuk ${customerName} jatuh tempo ${diff === 3 ? '3 hari lagi (H-3)' : 'hari ini (H-0)'}.\nSisa tagihan: ${formattedAmount}.\nSilakan follow-up pembayaran ke pelanggan.`;
 
           await createNotification(client, {
             businessId: inv.businessId,
             userId: ord.salesId,
-            type: 'INVOICE_OVERDUE',
+            type: 'INVOICE_DUE',
             title,
             body,
             linkPath: `/invoices/${inv.id}`,
             dedupeKey,
           });
           notified++;
-        }
-      }
-    } catch {
-      // Abaikan error per item
-    }
-  }
+        } else if (diff < 0) {
+          const daysOverdue = Math.abs(diff);
+          // Terlambat: setiap 2 hari (hari terlambat genap)
+          if (daysOverdue % 2 === 0) {
+            const dedupeKey = `INVOICE_OVERDUE:${inv.id}:${daysOverdue}:${wibDateStr}`;
+            const title = `⚠️ Faktur Terlambat Bayar #${invNumber}`;
+            const body = `Faktur #${invNumber} untuk ${customerName} telah melewati jatuh tempo selama ${daysOverdue} hari.\nSisa tagihan: ${formattedAmount}.\nSegera tagih pembayaran ke pelanggan.`;
 
-  // Senin 08:00 WIB: ringkasan piutang terlambat ke Super Admin
-  const wibDayOfWeek = new Date(now.getTime() + 7 * 3_600_000).getUTCDay();
-  if (wibDayOfWeek === 1) {
-    // Kelompokkan per usaha
-    const businesses = await client.business.findMany();
-    for (const b of businesses) {
+            await createNotification(client, {
+              businessId: inv.businessId,
+              userId: ord.salesId,
+              type: 'INVOICE_OVERDUE',
+              title,
+              body,
+              linkPath: `/invoices/${inv.id}`,
+              dedupeKey,
+            });
+            notified++;
+          }
+        }
+      } catch {
+        // Abaikan error per item
+      }
+    }
+
+    // Senin 08:00 WIB: ringkasan piutang terlambat ke Super Admin
+    const wibDayOfWeek = new Date(now.getTime() + 7 * 3_600_000).getUTCDay();
+    if (wibDayOfWeek === 1 && b.id) {
       try {
         const overdueInvoices = invoices.filter(
           (i) =>
-            i.businessId === b.id &&
             i.paidAmount < i.amount &&
             i.dueDate &&
             daysUntil(i.dueDate, now) < 0
@@ -542,7 +588,7 @@ export async function scanInvoicesDue(
     }
   }
 
-  return { scanned: invoices.length, notified };
+  return { scanned: totalScanned, notified };
 }
 
 /**
@@ -556,39 +602,51 @@ export async function scanCrmTasks(
 ): Promise<{ scanned: number; notified: number }> {
   const wibDateStr = formatWibDate(now);
   const nowDayIndex = wibDayIndex(now);
+  const businesses =
+    typeof client?.business?.findMany === 'function'
+      ? await client.business.findMany({ select: { id: true } })
+      : [{ id: '' }];
 
-  const tasks = await client.crmTask.findMany({
-    where: {
-      doneAt: null,
-    },
-    include: {
-      customer: true,
-    },
-  });
-
+  let totalScanned = 0;
   let notified = 0;
 
-  for (const task of tasks) {
-    try {
-      if (wibDayIndex(task.dueAt) === nowDayIndex) {
-        const dedupeKey = `CRM_TASK_DUE:${task.id}:${wibDateStr}`;
-        await createNotification(client, {
-          businessId: task.businessId,
-          userId: task.assignedToId,
-          type: 'CRM_TASK_DUE',
-          title: `Tugas CRM Hari Ini: ${task.title}`,
-          body: `Tugas follow-up untuk ${task.customer.name} dijadwalkan hari ini:\n"${task.title}".`,
-          linkPath: `/customers/${task.customerId}`,
-          dedupeKey,
-        });
-        notified++;
+  for (const b of businesses) {
+    const taskWhere: Prisma.CrmTaskWhereInput = {
+      doneAt: null,
+      ...(b.id ? { businessId: b.id } : {}),
+    };
+
+    const tasks = await client.crmTask.findMany({
+      where: taskWhere,
+      include: {
+        customer: true,
+      },
+    });
+
+    totalScanned += tasks.length;
+
+    for (const task of tasks) {
+      try {
+        if (wibDayIndex(task.dueAt) === nowDayIndex) {
+          const dedupeKey = `CRM_TASK_DUE:${task.id}:${wibDateStr}`;
+          await createNotification(client, {
+            businessId: task.businessId,
+            userId: task.assignedToId,
+            type: 'CRM_TASK_DUE',
+            title: `Tugas CRM Hari Ini: ${task.title}`,
+            body: `Tugas follow-up untuk ${task.customer.name} dijadwalkan hari ini:\n"${task.title}".`,
+            linkPath: `/customers/${task.customerId}`,
+            dedupeKey,
+          });
+          notified++;
+        }
+      } catch {
+        // Abaikan error per tugas
       }
-    } catch {
-      // Abaikan error per item
     }
   }
 
-  return { scanned: tasks.length, notified };
+  return { scanned: totalScanned, notified };
 }
 
 /**

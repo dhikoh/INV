@@ -494,6 +494,40 @@ export default function ProfilePage() {
         </form>
       </div>
 
+      {/* Akses Cepat Menu Sales (Mobile & Tablet) */}
+      {profile?.role === 'SALES' && (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 md:p-6">
+          <div className="mb-3">
+            <h3 className="text-base font-bold text-slate-900">
+              Akses Cepat Menu Sales
+            </h3>
+            <p className="text-xs text-slate-500">
+              Pintasan cepat untuk menu operasional lapangan pada layar ponsel
+            </p>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+            {[
+              { href: '/orders/new', label: 'Buat Pesanan' },
+              { href: '/invoices', label: 'Daftar Invoice' },
+              { href: '/receivables', label: 'Piutang Pelanggan' },
+              { href: '/catalogs', label: 'Katalog Produk' },
+              { href: '/products', label: 'Master Produk' },
+              { href: '/price-list', label: 'Daftar Harga' },
+              { href: '/reports/crm', label: 'Laporan CRM' },
+              { href: '/reminders', label: 'Pengingat Tagihan' },
+            ].map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className="min-h-[44px] px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-800 text-xs font-semibold flex items-center justify-center text-center transition-colors"
+              >
+                {item.label}
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Tautan Catatan Pembaruan */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 md:p-6 flex items-center justify-between">
         <div className="flex items-center gap-3">

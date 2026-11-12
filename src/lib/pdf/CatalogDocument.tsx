@@ -323,7 +323,7 @@ export function CatalogDocument({ data, logoDataUri }: CatalogDocumentProps) {
                     <td className="col-sku">{item.sku}</td>
                     <td className="col-unit">{item.unit}</td>
                     <td className="col-price">
-                      Rp {formatRupiah(item.price)}
+                      {formatRupiah(item.price)}
                     </td>
                   </tr>
                 );

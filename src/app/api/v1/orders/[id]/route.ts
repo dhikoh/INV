@@ -149,7 +149,7 @@ export const PATCH = withApi(
 
       // Hapus item lama, ganti dengan item snapshot baru
       await tx.orderItem.deleteMany({
-        where: { orderId: existing.id },
+        where: { orderId: existing.id, businessId },
       });
 
       const updatedOrder = await tx.order.update({
@@ -210,7 +210,7 @@ export const PATCH = withApi(
           action: 'ORDER_UPDATE',
           entityType: 'Order',
           entityId: updatedOrder.id,
-          summary: `Order ${updatedOrder.orderNo ?? updatedOrder.id} diperbarui menjadi Rp ${formatRupiah(snapshot.totals.grandTotal)}`,
+          summary: `Order ${updatedOrder.orderNo ?? updatedOrder.id} diperbarui menjadi ${formatRupiah(snapshot.totals.grandTotal)}`,
           before: {
             grandTotal: Number(existing.grandTotal),
             rev: existing.rev,
@@ -280,7 +280,7 @@ export const DELETE = withApi(
       });
 
       // Batalkan entri komisi jika ada
-      await reverseOrderCommission(tx, existing.id, 'Pesanan dihapus ke Tempat Sampah');
+      await reverseOrderCommission(tx, existing.id, businessId, 'Pesanan dihapus ke Tempat Sampah');
 
       await tx.auditLog.create({
         data: {

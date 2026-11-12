@@ -378,7 +378,9 @@ export default function AuditLogPage() {
                       {/* Summary & Reason */}
                       <td className="px-4 py-3.5 text-xs">
                         <div className="font-medium text-slate-800">
-                          {log.summary || '-'}
+                          {log.summary
+                            ? log.summary.replace(/Rp[\s\u00a0]+Rp/g, 'Rp')
+                            : '-'}
                         </div>
                         {log.reason && (
                           <div className="mt-1 text-[11px] italic text-amber-700 bg-amber-50 rounded px-1.5 py-0.5 inline-block">

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -148,7 +148,7 @@ interface InvoiceItemDto {
 interface ShipmentDto {
   id: string;
   orderId: string;
-  method: 'OWN_FLEET' | 'BUYER_PICKUP' | 'EXPEDITION';
+  method: 'OWN_FLEET' | 'EXPEDITION' | 'TRANSPORT_VENDOR';
   transporterId: string | null;
   trackingNo: string | null;
   driverName: string | null;
@@ -243,6 +243,12 @@ export default function OrderDetailPage() {
   } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const loadedIdRef = useRef<string | null>(null);
+  const currentUserRef = useRef<{
+    id: string;
+    role: 'SUPERADMIN' | 'SALES';
+    name: string;
+  } | null>(null);
 
   // Modal Hapus Draf
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -278,6 +284,7 @@ export default function OrderDetailPage() {
   // Riwayat & Modal Pembayaran
   const [payments, setPayments] = useState<PaymentItemDto[]>([]);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [payInvoiceId, setPayInvoiceId] = useState('');
   const [payAmount, setPayAmount] = useState('');
   const [payMethod, setPayMethod] = useState<'TRANSFER' | 'CASH' | 'CREDIT' | 'OTHER'>('TRANSFER');
   const [payDate, setPayDate] = useState(new Date().toISOString().split('T')[0]);
@@ -321,7 +328,7 @@ export default function OrderDetailPage() {
   // Data Pengiriman & Surat Jalan (Shipment)
   const [shipment, setShipment] = useState<ShipmentDto | null>(null);
   const [showShipmentModal, setShowShipmentModal] = useState(false);
-  const [shipMethod, setShipMethod] = useState<'OWN_FLEET' | 'BUYER_PICKUP' | 'EXPEDITION'>('OWN_FLEET');
+  const [shipMethod, setShipMethod] = useState<'OWN_FLEET' | 'EXPEDITION' | 'TRANSPORT_VENDOR'>('OWN_FLEET');
   const [shipTrackingNo, setShipTrackingNo] = useState('');
   const [shipDriverName, setShipDriverName] = useState('');
   const [shipVehiclePlate, setShipVehiclePlate] = useState('');
@@ -381,12 +388,15 @@ export default function OrderDetailPage() {
   const fetchOrderDetail = useCallback(async () => {
     if (!id) return;
     try {
-      setLoading(true);
+      if (loadedIdRef.current !== id) {
+        setLoading(true);
+      }
       setError(null);
 
+      const needMe = !currentUserRef.current;
       const [orderRes, meRes, paymentsRes, shipmentRes, creditNotesRes] = await Promise.all([
         fetch(`/api/v1/orders/${id}`),
-        fetch('/api/v1/auth/me'),
+        needMe ? fetch('/api/v1/auth/me') : Promise.resolve(null),
         fetch(`/api/v1/orders/${id}/payments`),
         fetch(`/api/v1/orders/${id}/shipment`),
         fetch(`/api/v1/orders/${id}/credit-notes`),
@@ -402,18 +412,25 @@ export default function OrderDetailPage() {
 
       const orderJson = await orderRes.json();
       setOrder(orderJson.data);
+      loadedIdRef.current = id;
 
-      if (meRes.ok) {
+      let resolvedUser = currentUserRef.current;
+      if (meRes?.ok) {
         const meJson = await meRes.json();
-        setCurrentUser(meJson.data.user);
-        if (meJson.data?.user?.role === 'SUPERADMIN') {
-          fetch(`/api/v1/orders/${id}/profit`)
-            .then((r) => (r.ok ? r.json() : null))
-            .then((pJson) => {
-              if (pJson?.data) setOrderProfit(pJson.data);
-            })
-            .catch(() => {});
+        resolvedUser = meJson.data?.user ?? null;
+        if (resolvedUser) {
+          currentUserRef.current = resolvedUser;
+          setCurrentUser(resolvedUser);
         }
+      }
+
+      if (resolvedUser?.role === 'SUPERADMIN') {
+        fetch(`/api/v1/orders/${id}/profit`)
+          .then((r) => (r.ok ? r.json() : null))
+          .then((pJson) => {
+            if (pJson?.data) setOrderProfit(pJson.data);
+          })
+          .catch(() => {});
       }
 
       if (paymentsRes.ok) {
@@ -635,6 +652,7 @@ export default function OrderDetailPage() {
       let res: Response;
       if (payFile) {
         const formData = new FormData();
+        if (payInvoiceId) formData.append('invoiceId', payInvoiceId);
         formData.append('amount', String(parsedAmount));
         formData.append('method', payMethod);
         formData.append('paidAt', payDate);
@@ -654,6 +672,7 @@ export default function OrderDetailPage() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
+            invoiceId: payInvoiceId || undefined,
             amount: parsedAmount,
             method: payMethod,
             paidAt: payDate,
@@ -671,6 +690,7 @@ export default function OrderDetailPage() {
 
       setSubmitSuccess('Pembayaran berhasil dicatat!');
       setShowPaymentModal(false);
+      setPayInvoiceId('');
       setPayAmount('');
       setPayRef('');
       setPayNotes('');
@@ -1187,6 +1207,34 @@ export default function OrderDetailPage() {
     0,
     order.grandTotal - (order.paidTotal || 0) - (order.creditTotal || 0)
   );
+  const unpaidApprovedInvoices = (order.invoices || []).filter(
+    (inv) => inv.status === 'APPROVED' && inv.amount > inv.paidAmount
+  );
+  const selectedPayInvoice = unpaidApprovedInvoices.find(
+    (inv) => inv.id === payInvoiceId
+  );
+  const maxAllowedPayment = selectedPayInvoice
+    ? Math.min(balanceDue, Math.max(0, selectedPayInvoice.amount - selectedPayInvoice.paidAmount))
+    : balanceDue;
+
+  const openPaymentModal = () => {
+    const preferredInvoice =
+      order.status === 'AWAITING_DP'
+        ? unpaidApprovedInvoices.find((inv) => inv.type === 'DP') || unpaidApprovedInvoices[0]
+        : order.status === 'AWAITING_FINAL_PAYMENT'
+          ? unpaidApprovedInvoices.find((inv) => inv.type === 'FINAL') || unpaidApprovedInvoices[0]
+          : unpaidApprovedInvoices[0];
+
+    const defaultAmount = preferredInvoice
+      ? Math.min(balanceDue, Math.max(0, preferredInvoice.amount - preferredInvoice.paidAmount))
+      : balanceDue;
+
+    setPayInvoiceId(preferredInvoice?.id || '');
+    setPayAmount(String(defaultAmount));
+    setPayError(null);
+    setShowPaymentModal(true);
+  };
+
   const canRecordPayment =
     !isDraftOrRevision &&
     !isPendingApproval &&
@@ -1708,11 +1756,7 @@ export default function OrderDetailPage() {
               {canRecordPayment && (
                 <button
                   type="button"
-                  onClick={() => {
-                    setPayAmount(String(balanceDue));
-                    setPayError(null);
-                    setShowPaymentModal(true);
-                  }}
+                  onClick={openPaymentModal}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 hover:bg-indigo-100 text-xs font-semibold transition-colors"
                 >
                   <CreditCard className="w-3.5 h-3.5" />
@@ -1925,8 +1969,8 @@ export default function OrderDetailPage() {
                     <p className="font-semibold text-slate-800 mt-0.5">
                       {shipment.method === 'OWN_FLEET'
                         ? 'Armada Sendiri'
-                        : shipment.method === 'BUYER_PICKUP'
-                        ? 'Ambil Sendiri di Toko'
+                        : shipment.method === 'TRANSPORT_VENDOR'
+                        ? 'Vendor Angkutan / Truk'
                         : 'Ekspedisi / Kurir Luar'}
                     </p>
                   </div>
@@ -2220,21 +2264,33 @@ export default function OrderDetailPage() {
                             )}
                           </div>
 
-                          {isSuperAdmin && !isVoided && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setSelectedVoidCreditNote(cn);
-                                setVoidCreditNoteReason('');
-                                setVoidCreditNoteError(null);
-                                setShowVoidCreditNoteModal(true);
-                              }}
-                              className="px-2.5 py-1 rounded border border-rose-300 text-rose-700 hover:bg-rose-50 text-xs font-semibold transition-colors"
-                              title="Batalkan Nota Kredit Ini"
+                          <div className="flex items-center gap-2">
+                            <a
+                              href={`/api/v1/credit-notes/${cn.id}/pdf`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-2.5 py-1 rounded border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 text-xs font-semibold transition-colors"
+                              title="Cetak / Unduh PDF Nota Kredit Ini"
                             >
-                              Void
-                            </button>
-                          )}
+                              Cetak PDF
+                            </a>
+
+                            {isSuperAdmin && !isVoided && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedVoidCreditNote(cn);
+                                  setVoidCreditNoteReason('');
+                                  setVoidCreditNoteError(null);
+                                  setShowVoidCreditNoteModal(true);
+                                }}
+                                className="px-2.5 py-1 rounded border border-rose-300 text-rose-700 hover:bg-rose-50 text-xs font-semibold transition-colors"
+                                title="Batalkan Nota Kredit Ini"
+                              >
+                                Void
+                              </button>
+                            )}
+                          </div>
                         </div>
                       </div>
 
@@ -2410,11 +2466,7 @@ export default function OrderDetailPage() {
               {canRecordPayment && (
                 <button
                   type="button"
-                  onClick={() => {
-                    setPayAmount(String(balanceDue));
-                    setPayError(null);
-                    setShowPaymentModal(true);
-                  }}
+                  onClick={openPaymentModal}
                   className="w-full mt-3 py-2 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold flex items-center justify-center gap-1.5 shadow-sm transition-colors"
                 >
                   <CreditCard className="w-4 h-4" />
@@ -3121,6 +3173,39 @@ export default function OrderDetailPage() {
                 </span>
               </div>
 
+              {unpaidApprovedInvoices.length > 0 && (
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Alokasi Faktur
+                  </label>
+                  <select
+                    value={payInvoiceId}
+                    onChange={(e) => {
+                      const nextId = e.target.value;
+                      setPayInvoiceId(nextId);
+                      const nextInv = unpaidApprovedInvoices.find((inv) => inv.id === nextId);
+                      if (nextInv) {
+                        const rem = Math.min(balanceDue, Math.max(0, nextInv.amount - nextInv.paidAmount));
+                        setPayAmount(String(rem));
+                      } else {
+                        setPayAmount(String(balanceDue));
+                      }
+                    }}
+                    className="w-full text-xs p-2.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-800 bg-white"
+                  >
+                    {unpaidApprovedInvoices.map((inv) => {
+                      const rem = Math.max(0, inv.amount - inv.paidAmount);
+                      return (
+                        <option key={inv.id} value={inv.id}>
+                          {inv.number || `Faktur #${inv.id.slice(-6)}`} ({inv.type === 'DP' ? 'DP' : 'Pelunasan'} - Sisa {formatRupiah(rem)})
+                        </option>
+                      );
+                    })}
+                    <option value="">Pembayaran Umum Pesanan (Tanpa Faktur Khusus)</option>
+                  </select>
+                </div>
+              )}
+
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
                   Nominal Pembayaran (Rp) <span className="text-rose-500">*</span>
@@ -3128,13 +3213,18 @@ export default function OrderDetailPage() {
                 <input
                   type="number"
                   min="1"
-                  max={balanceDue}
+                  max={maxAllowedPayment}
                   value={payAmount}
                   onChange={(e) => setPayAmount(e.target.value)}
                   placeholder="Contoh: 500000"
                   className="w-full text-xs p-2.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-800 font-semibold"
                   required
                 />
+                {selectedPayInvoice && (
+                  <span className="text-[11px] text-slate-500 mt-1 block">
+                    Maksimal sesuai sisa faktur terpilih: {formatRupiah(maxAllowedPayment)}
+                  </span>
+                )}
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -3651,33 +3741,33 @@ export default function OrderDetailPage() {
                   value={shipMethod}
                   onChange={(e) =>
                     setShipMethod(
-                      e.target.value as 'OWN_FLEET' | 'BUYER_PICKUP' | 'EXPEDITION'
+                      e.target.value as 'OWN_FLEET' | 'EXPEDITION' | 'TRANSPORT_VENDOR'
                     )
                   }
                   className="w-full text-xs p-2.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-800"
                 >
                   <option value="OWN_FLEET">Armada Sendiri (Kurir Internal)</option>
-                  <option value="BUYER_PICKUP">Ambil Sendiri di Tempat (Pickup)</option>
                   <option value="EXPEDITION">Ekspedisi / Logistik Pihak Ketiga</option>
+                  <option value="TRANSPORT_VENDOR">Vendor Angkutan / Truk Eksternal</option>
                 </select>
               </div>
 
-              {shipMethod === 'EXPEDITION' && (
+              {(shipMethod === 'EXPEDITION' || shipMethod === 'TRANSPORT_VENDOR') && (
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Nomor Resi / AWB
+                    Nomor Resi / AWB / Surat Muat
                   </label>
                   <input
                     type="text"
                     value={shipTrackingNo}
                     onChange={(e) => setShipTrackingNo(e.target.value)}
-                    placeholder="Contoh: JNE-0123456789"
+                    placeholder="Contoh: JNE-0123456789 atau TRUK-FUSO-01"
                     className="w-full text-xs p-2.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-800 font-mono"
                   />
                 </div>
               )}
 
-              {shipMethod === 'OWN_FLEET' && (
+              {(shipMethod === 'OWN_FLEET' || shipMethod === 'TRANSPORT_VENDOR') && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">

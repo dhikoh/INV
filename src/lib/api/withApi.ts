@@ -5,7 +5,7 @@ import { DomainError, isDomainError, fromDb } from '../domain/money';
 import { requireContext, Ctx } from '../auth/context';
 import { assertSameOrigin } from '../auth/origin';
 import { clearSessionCookie } from '../auth/session';
-import { checkUserRateLimit } from '../auth/rateLimit';
+import { checkUserRateLimit, checkUserReadRateLimit } from '../auth/rateLimit';
 import { logger } from '../logger';
 
 export type Out = {
@@ -138,13 +138,18 @@ export function withApi<B = undefined, Q = undefined>(
         allowPasswordChange: opts.allowPasswordChange,
       });
 
-      // Token bucket rate limiting (Seksi 16.1): 120 req/menit (20 untuk upload)
+      // Token bucket rate limiting (Seksi 16.1): mutasi/umum 120 req/menit (20 upload), baca GET/HEAD 600 req/menit
       if (
         ctx?.user?.id &&
         (process.env.NODE_ENV !== 'test' ||
           process.env.TEST_RATE_LIMIT === 'true')
       ) {
-        checkUserRateLimit(ctx.user.id, opts.isUpload);
+        const isRead = req.method === 'GET' || req.method === 'HEAD';
+        if (isRead && !opts.isUpload) {
+          checkUserReadRateLimit(ctx.user.id);
+        } else {
+          checkUserRateLimit(ctx.user.id, opts.isUpload);
+        }
       }
 
       const params = route?.params ? await route.params : {};

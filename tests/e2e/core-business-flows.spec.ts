@@ -6,9 +6,15 @@ test.use({
 
 test.describe('E2E Audit: Alur Bisnis Inti, Approval UI & Status Lingkungan (E3, E4, E5)', () => {
   test('Super Admin login via form UI: mendeteksi kegagalan koneksi database jika PostgreSQL lokal mati (AUD-OPS-002)', async ({ page }) => {
+    const saUsername = process.env.E2E_SUPERADMIN_USERNAME || process.env.SEED_SUPERADMIN_USERNAME || 'superadmin';
+    const saPassword = process.env.E2E_SUPERADMIN_PASSWORD || process.env.SEED_SUPERADMIN_PASSWORD;
+    if (!saPassword) {
+      throw new Error('Wajib setel E2E_SUPERADMIN_PASSWORD atau SEED_SUPERADMIN_PASSWORD pada environment (.env)');
+    }
+
     await page.goto('/login');
-    await page.fill('input[type="text"], input[name="username"]', 'superadmin');
-    await page.fill('input[type="password"]', 'bismillahbento');
+    await page.fill('input[type="text"], input[name="username"]', saUsername);
+    await page.fill('input[type="password"]', saPassword);
     await page.click('button[type="submit"]');
 
     // Menunggu respon API auth
@@ -21,6 +27,9 @@ test.describe('E2E Audit: Alur Bisnis Inti, Approval UI & Status Lingkungan (E3,
       // Jika database offline (AUD-OPS-002), server merespon 500 ECONNREFUSED
       console.log('Login API Response Status:', response.status());
       expect([200, 500]).toContain(response.status());
+      if (response.status() === 200) {
+        await expect(page).not.toHaveURL(/\/login/, { timeout: 10000 });
+      }
     } else {
       console.log('Login request tidak selesai / timeout koneksi database');
     }

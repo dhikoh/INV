@@ -493,7 +493,7 @@ export async function createCreditNote(
   });
 
   // Rekalkulasi komisi pesanan jika ada retur barang
-  await recalculateOrderCommission(tx, order.id);
+  await recalculateOrderCommission(tx, order.id, businessId);
 
   return formatCreditNoteDto(creditNote, order, order.customer, isSuperAdmin, orderItemsMap);
 }
@@ -704,7 +704,7 @@ export async function voidCreditNote(
   });
 
   // Rekalkulasi komisi setelah pembatalan nota kredit
-  await recalculateOrderCommission(tx, order.id);
+  await recalculateOrderCommission(tx, order.id, businessId);
 
   const orderItemsMap = new Map(order.items.map((oi) => [oi.id, oi]));
   return formatCreditNoteDto(updatedCn, order, order.customer, true, orderItemsMap);

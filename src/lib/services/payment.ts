@@ -232,7 +232,61 @@ export async function maybeComplete(
     });
 
     // Otomatisasi pengingat repeat order (Seksi 13.1 & 19.6 T4.4)
-    await updateRemindersForCompletedOrder(tx, order.id);
+    await updateRemindersForCompletedOrder(tx, order.id, businessId);
+  }
+}
+
+/**
+ * Menjaga transisi status DP pesanan (`AWAITING_DP <-> IN_PROCESS`) berdasarkan
+ * pencairan faktur DP maupun total pembayaran terverifikasi pesanan.
+ */
+async function syncDpOrderTransition(
+  tx: TxClient,
+  orderId: string,
+  businessId: string,
+  orderStatus: OrderStatus,
+  paidTotal: bigint
+): Promise<void> {
+  if (
+    orderStatus !== OrderStatus.AWAITING_DP &&
+    orderStatus !== OrderStatus.IN_PROCESS
+  ) {
+    return;
+  }
+
+  const dpInvoice = await tx.invoice.findFirst({
+    where: {
+      orderId,
+      businessId,
+      type: InvoiceType.DP,
+      status: InvoiceStatus.APPROVED,
+      deletedAt: null,
+    },
+  });
+
+  if (!dpInvoice) {
+    return;
+  }
+
+  const isDpSatisfied =
+    dpInvoice.paidAmount >= dpInvoice.amount || paidTotal >= dpInvoice.amount;
+
+  if (orderStatus === OrderStatus.AWAITING_DP && isDpSatisfied) {
+    await tx.order.updateMany({
+      where: { id: orderId, businessId },
+      data: {
+        status: OrderStatus.IN_PROCESS,
+        rev: { increment: 1 },
+      },
+    });
+  } else if (orderStatus === OrderStatus.IN_PROCESS && !isDpSatisfied) {
+    await tx.order.updateMany({
+      where: { id: orderId, businessId },
+      data: {
+        status: OrderStatus.AWAITING_DP,
+        rev: { increment: 1 },
+      },
+    });
   }
 }
 
@@ -429,32 +483,13 @@ export async function createPayment(
 
   if (isAutoVerify) {
     // 7a. Jika langsung VERIFIED: hitung ulang total dari sumbernya
-    await recalculateOrderPayments(tx, order.id, businessId);
+    const { paidTotal } = await recalculateOrderPayments(tx, order.id, businessId);
 
     // Cek transisi status order jika AWAITING_DP
-    if (order.status === OrderStatus.AWAITING_DP) {
-      const dpInvoice = await tx.invoice.findFirst({
-        where: {
-          orderId: order.id,
-          businessId,
-          type: InvoiceType.DP,
-          status: InvoiceStatus.APPROVED,
-          deletedAt: null,
-        },
-      });
-
-      if (dpInvoice && dpInvoice.paidAmount >= dpInvoice.amount) {
-        await tx.order.updateMany({
-          where: { id: order.id, businessId },
-          data: {
-            status: OrderStatus.IN_PROCESS,
-            rev: { increment: 1 },
-          },
-        });
-      }
-    }
+    await syncDpOrderTransition(tx, order.id, businessId, order.status, paidTotal);
 
     await maybeComplete(tx, ctx, order.id);
+    await evaluateOrderCommission(tx, order.id, businessId);
 
     await tx.auditLog.create({
       data: {
@@ -606,36 +641,16 @@ export async function verifyPayment(
   });
 
   // Hitung ulang paidTotal dan paidAmount dari seluruh pembayaran VERIFIED
-  await recalculateOrderPayments(tx, order.id, businessId);
+  const { paidTotal } = await recalculateOrderPayments(tx, order.id, businessId);
 
   // Transisi status order jika saat ini AWAITING_DP dan DP telah lunas
-  if (order.status === OrderStatus.AWAITING_DP) {
-    const dpInvoice = await tx.invoice.findFirst({
-      where: {
-        orderId: order.id,
-        businessId,
-        type: InvoiceType.DP,
-        status: InvoiceStatus.APPROVED,
-        deletedAt: null,
-      },
-    });
-
-    if (dpInvoice && dpInvoice.paidAmount >= dpInvoice.amount) {
-      await tx.order.updateMany({
-        where: { id: order.id, businessId },
-        data: {
-          status: OrderStatus.IN_PROCESS,
-          rev: { increment: 1 },
-        },
-      });
-    }
-  }
+  await syncDpOrderTransition(tx, order.id, businessId, order.status, paidTotal);
 
   // Evaluasi penyelesaian pesanan
   await maybeComplete(tx, ctx, order.id);
 
   // Evaluasi komisi pesanan (ON_DP_PAID atau ON_FULL_PAID)
-  await evaluateOrderCommission(tx, order.id);
+  await evaluateOrderCommission(tx, order.id, businessId);
 
   // Audit log verifikasi pembayaran
   await tx.auditLog.create({
@@ -880,7 +895,7 @@ export async function voidPayment(
   });
 
   // Hitung ulang pembayaran dari sumbernya (VERIFIED receipts minus refunds)
-  await recalculateOrderPayments(tx, order.id, businessId);
+  const { paidTotal } = await recalculateOrderPayments(tx, order.id, businessId);
 
   // Evaluasi pembalikan status pesanan (Seksi 9.2)
   // Ambil data order terkini setelah recalculate
@@ -890,26 +905,13 @@ export async function voidPayment(
 
   if (freshOrder) {
     if (freshOrder.status === OrderStatus.IN_PROCESS) {
-      // Periksa apakah invoice DP menjadi belum lunas
-      const dpInvoice = await tx.invoice.findFirst({
-        where: {
-          orderId: order.id,
-          businessId,
-          type: InvoiceType.DP,
-          status: InvoiceStatus.APPROVED,
-          deletedAt: null,
-        },
-      });
-
-      if (dpInvoice && dpInvoice.paidAmount < dpInvoice.amount) {
-        await tx.order.updateMany({
-          where: { id: order.id, businessId },
-          data: {
-            status: OrderStatus.AWAITING_DP,
-            rev: { increment: 1 },
-          },
-        });
-      }
+      await syncDpOrderTransition(
+        tx,
+        order.id,
+        businessId,
+        freshOrder.status,
+        paidTotal
+      );
     } else if (freshOrder.status === OrderStatus.COMPLETED) {
       const balanceDue =
         freshOrder.grandTotal - freshOrder.paidTotal - freshOrder.creditTotal;

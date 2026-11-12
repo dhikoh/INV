@@ -53,6 +53,20 @@ vi.mock('@/lib/db', () => ({
         }
         return inv;
       }),
+      updateMany: vi.fn(async ({ where, data }: { where: { id: string; businessId?: string }; data: any }) => {
+        const matched = mockInvoices.filter(
+          (i) => i.id === where.id && (!where.businessId || i.businessId === where.businessId)
+        );
+        for (const inv of matched) {
+          if (data.printedCount?.increment) {
+            inv.printedCount = (inv.printedCount || 0) + data.printedCount.increment;
+          }
+          if (data.lastPrintedAt) {
+            inv.lastPrintedAt = data.lastPrintedAt;
+          }
+        }
+        return { count: matched.length };
+      }),
     },
     shipment: {
       findFirst: vi.fn(async ({ where }: { where: Record<string, any> }) => {
@@ -151,7 +165,7 @@ describe('T3.5: Mesin Cetak PDF, 5 Desain Tema, dan Surat Jalan (Seksi 14 & 17.3
   };
 
   describe('1. Jaminan Anti-Bocor (Zero-Leakage Guarantee) pada Snapshot & HTML', () => {
-    it('dummy snapshot dan semua tema invoice tidak memuat informasi rahasia internal', () => {
+    it('dummy snapshot dan semua tema invoice tidak memuat informasi rahasia internal', async () => {
       const themes: InvoiceTheme[] = [
         'PROFESIONAL',
         'FAMILY',
@@ -172,7 +186,7 @@ describe('T3.5: Mesin Cetak PDF, 5 Desain Tema, dan Surat Jalan (Seksi 14 & 17.3
         const snapshot = getDummySnapshot(theme);
         assertNoSecretKeys(snapshot);
 
-        const html = renderReactToHtml(
+        const html = await renderReactToHtml(
           React.createElement(InvoiceDocument, { snapshot })
         );
 
@@ -185,7 +199,7 @@ describe('T3.5: Mesin Cetak PDF, 5 Desain Tema, dan Surat Jalan (Seksi 14 & 17.3
       }
     });
 
-    it('Surat Jalan (DeliveryNoteDocument) DILARANG memuat harga, biaya, atau diskon', () => {
+    it('Surat Jalan (DeliveryNoteDocument) DILARANG memuat harga, biaya, atau diskon', async () => {
       const deliveryData: DeliveryNoteData = {
         deliveryNo: 'SJ/2026/04/0001',
         orderNumber: 'ORD/2026/04/0001',
@@ -226,7 +240,7 @@ describe('T3.5: Mesin Cetak PDF, 5 Desain Tema, dan Surat Jalan (Seksi 14 & 17.3
         notes: 'Hati-hati basah.',
       };
 
-      const html = renderReactToHtml(
+      const html = await renderReactToHtml(
         React.createElement(DeliveryNoteDocument, { data: deliveryData })
       );
 
@@ -271,10 +285,10 @@ describe('T3.5: Mesin Cetak PDF, 5 Desain Tema, dan Surat Jalan (Seksi 14 & 17.3
   });
 
   describe('3. Watermark Dokumen (Draf, Batal, Lunas, Contoh)', () => {
-    it('merender watermark diagonal yang tepat sesuai kondisi', () => {
+    it('merender watermark diagonal yang tepat sesuai kondisi', async () => {
       const snapshot = getDummySnapshot('PROFESIONAL');
 
-      const drafHtml = renderReactToHtml(
+      const drafHtml = await renderReactToHtml(
         React.createElement(InvoiceDocument, {
           snapshot,
           watermark: 'PRATINJAU, MENUNGGU PERSETUJUAN',
@@ -282,7 +296,7 @@ describe('T3.5: Mesin Cetak PDF, 5 Desain Tema, dan Surat Jalan (Seksi 14 & 17.3
       );
       expect(drafHtml).toContain('PRATINJAU, MENUNGGU PERSETUJUAN');
 
-      const batalHtml = renderReactToHtml(
+      const batalHtml = await renderReactToHtml(
         React.createElement(InvoiceDocument, {
           snapshot,
           watermark: 'BATAL',
@@ -290,7 +304,7 @@ describe('T3.5: Mesin Cetak PDF, 5 Desain Tema, dan Surat Jalan (Seksi 14 & 17.3
       );
       expect(batalHtml).toContain('BATAL');
 
-      const lunasHtml = renderReactToHtml(
+      const lunasHtml = await renderReactToHtml(
         React.createElement(InvoiceDocument, {
           snapshot,
           watermark: 'LUNAS',
@@ -298,7 +312,7 @@ describe('T3.5: Mesin Cetak PDF, 5 Desain Tema, dan Surat Jalan (Seksi 14 & 17.3
       );
       expect(lunasHtml).toContain('LUNAS');
 
-      const contohHtml = renderReactToHtml(
+      const contohHtml = await renderReactToHtml(
         React.createElement(InvoiceDocument, {
           snapshot,
           watermark: 'CONTOH',

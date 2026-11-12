@@ -56,12 +56,13 @@ export async function recordLoginAttempt(
 }
 
 // =========================================================================
-// Pembatasan Umum & Upload (Seksi 16.1): Token Bucket di Memori
-// 120 permintaan/menit per user, dan 20 permintaan/menit untuk endpoint upload
+// Pembatasan Umum, Baca & Upload (Seksi 16.1): Token Bucket di Memori
+// Mutasi/Umum: 120 req/menit per user, Upload: 20 req/menit, Baca (GET/HEAD): 600 req/menit
 // =========================================================================
 
 export const GENERAL_RATE_LIMIT_PER_MINUTE = 120;
 export const UPLOAD_RATE_LIMIT_PER_MINUTE = 20;
+export const READ_RATE_LIMIT_PER_MINUTE = 600;
 
 interface TokenBucket {
   tokens: number;
@@ -72,15 +73,12 @@ interface TokenBucket {
 
 const userBuckets = new Map<string, TokenBucket>();
 
-export function checkUserRateLimit(
-  userId: string,
-  isUpload: boolean = false
+function consumeTokenBucket(
+  key: string,
+  capacity: number,
+  limitMessage: string
 ): void {
-  const capacity = isUpload
-    ? UPLOAD_RATE_LIMIT_PER_MINUTE
-    : GENERAL_RATE_LIMIT_PER_MINUTE;
   const refillRatePerSec = capacity / 60;
-  const key = `${userId}:${isUpload ? 'upload' : 'general'}`;
   const now = Date.now();
 
   let bucket = userBuckets.get(key);
@@ -103,16 +101,37 @@ export function checkUserRateLimit(
   bucket.lastRefill = now;
 
   if (bucket.tokens < 1) {
-    throw new DomainError(
-      'RATE_LIMITED',
-      isUpload
-        ? 'Batas unggah berkas terlampaui (maksimal 20 per menit). Coba lagi beberapa saat lagi.'
-        : 'Batas permintaan terlampaui (maksimal 120 per menit). Coba lagi beberapa saat lagi.',
-      429
-    );
+    throw new DomainError('RATE_LIMITED', limitMessage, 429);
   }
 
   bucket.tokens -= 1;
+}
+
+export function checkUserRateLimit(
+  userId: string,
+  isUpload: boolean = false
+): void {
+  const capacity = isUpload
+    ? UPLOAD_RATE_LIMIT_PER_MINUTE
+    : GENERAL_RATE_LIMIT_PER_MINUTE;
+  const key = `${userId}:${isUpload ? 'upload' : 'general'}`;
+  const limitMessage = isUpload
+    ? 'Batas unggah berkas terlampaui (maksimal 20 per menit). Coba lagi beberapa saat lagi.'
+    : 'Batas permintaan terlampaui (maksimal 120 per menit). Coba lagi beberapa saat lagi.';
+
+  consumeTokenBucket(key, capacity, limitMessage);
+}
+
+/**
+ * Token bucket terpisah untuk permintaan baca (`GET`/`HEAD`) agar navigasi
+ * cepat di UI tidak menguras kuota mutasi (Seksi 16.1).
+ */
+export function checkUserReadRateLimit(userId: string): void {
+  consumeTokenBucket(
+    `${userId}:read`,
+    READ_RATE_LIMIT_PER_MINUTE,
+    'Batas permintaan baca terlampaui (maksimal 600 per menit). Coba lagi beberapa saat lagi.'
+  );
 }
 
 export function resetUserRateLimits(): void {

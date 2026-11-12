@@ -1,11 +1,11 @@
 # RINGKASAN EKSEKUTIF AUDIT KESIAPAN PELUNCURAN OMNICAT
 
 # KEPUTUSAN AKHIR: ✅ GO (DIREKOMENDASIKAN UNTUK PELUNCURAN RESMI)
-**Tanggal Evaluasi**: 10 November 2026  
+**Tanggal Evaluasi**: 10 November 2026 (Diverifikasi Ulang Final: 12 November 2026)  
 **Auditor**: Tim Audit Independen QA & Software Engineering  
 **Aplikasi**: OmniCat (Sistem Order, CRM & Invoice Multi-Usaha)  
-**Branch Kerja**: `fix/pra-launching`  
-**Head Commit Pasca-Remediasi**: `663564e` (dan dokumentasi terkait)  
+**Branch Kerja**: `main` (lanjutan `fix/pra-launching`)  
+**Basis Commit**: `83465c4` + pembaruan siap-rilis (Nota Kredit PDF, Standalone Fix, Sanitasi Env E2E)  
 
 ---
 
@@ -31,14 +31,15 @@ Seluruh **6 Blocker Utama (3 S1 Kritis & 3 S2 Tinggi)** yang sebelumnya memicu k
 
 ## 3. Bukti Mutlak Gerbang Kualitas (Quality Gates)
 
-Kesiapan peluncuran didukung oleh hasil eksekusi pengujian nyata (bukan sekadar analisis dokumen):
+Kesiapan peluncuran didukung oleh hasil eksekusi pengujian nyata (diperbarui pasca-audit final **12 November 2026** pada branch `main`):
 
-- **Pengujian Unit & Integrasi (Vitest)**: **77/77 berkas tes lulus, 668/668 pengujian lulus 100%**.
-- **Pengujian Antarmuka Pengguna (Playwright E2E)**: **35/35 skenario peramban Chromium lulus 100%**, mencakup login Super Admin/Sales, alur pesanan, invoice PDF, tema preview, serta kesiapan PWA offline.
-- **Kompilasi Rilis Produksi (Next.js Standalone Build)**: **Sukses terkompilasi, 83/83 rute statis & dinamis dihasilkan sempurna**.
+- **Pengujian Unit & Integrasi (Vitest)**: **95/95 berkas tes lulus, 801/801 pengujian lulus 100%** (termasuk `credit-note-pdf.test.ts`, `commission-tiers-ui.test.ts`, dan `rate-limit.test.ts`).
+- **Pengujian Resmi E2E (Playwright `playwright test`)**: **50/50 skenario peramban Chromium lulus 100%** (`core-business-flows`, `sales-journey`, dan `ui-crawler-and-routes` di viewport Desktop & Mobile `360px`).
+- **Audit Interaktif Bi-Direksional Browser (Staging Lokal)**: **0 temuan gagal** pada seluruh **12 rute Sales**, **22 rute Admin**, skenario Order/DP/Pelunasan/`TRANSPORT_VENDOR`/Nota Kredit PDF/`Void`/Komisi/Revisi/Katalog PDF/PO/CRM/DataTransfer Dry-Run/Export ZIP/`/tg/*`.
+- **Kompilasi Rilis Produksi (Next.js Standalone Build)**: **Sukses terkompilasi, 83 rute statis & dinamis** lengkap dengan sinkronisasi aset & biner `sharp` (`scripts/prepare-standalone.js`).
 - **Analisis Tipe TypeScript**: **0 kesalahan (`tsc --noEmit` strict mode)**.
 - **Kepatuhan Linter ESLint**: **0 peringatan, 0 kesalahan**.
-- **Isolasi Tenant AST Checker**: **100% lulus (seluruh pemanggilan model tenant di API terlindungi klausul `businessId`)**.
+- **Isolasi Tenant AST Checker**: **100% lulus (`tests/unit/no-unscoped-lookups.test.ts`)**.
 
 ---
 

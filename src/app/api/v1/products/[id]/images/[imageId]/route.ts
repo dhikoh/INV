@@ -23,6 +23,7 @@ export const PATCH = withApi(
       where: {
         id: imageId,
         productId,
+        businessId: ctx.businessId || undefined,
       },
     });
 
@@ -35,6 +36,7 @@ export const PATCH = withApi(
         // Lepas status utama dari foto lain pada produk ini
         await tx.productImage.updateMany({
           where: {
+            businessId: image.businessId,
             productId,
             id: { not: imageId },
             isPrimary: true,
@@ -89,6 +91,7 @@ export const DELETE = withApi(
       where: {
         id: imageId,
         productId,
+        businessId: ctx.businessId || undefined,
       },
     });
 
@@ -104,7 +107,7 @@ export const DELETE = withApi(
       // Jika foto yang dihapus adalah foto utama, jadikan foto berikutnya yang tersisa sebagai utama
       if (image.isPrimary) {
         const remaining = await tx.productImage.findFirst({
-          where: { productId },
+          where: { businessId: image.businessId, productId },
           orderBy: { sortOrder: 'asc' },
         });
 

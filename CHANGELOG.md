@@ -6,6 +6,24 @@ dan proyek ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Added
+
+- **Cetak & Token Unduh PDF Nota Kredit (`CREDIT_NOTE_PDF`) & Akses Cepat Sales Mobile**:
+  - Menambahkan endpoint resmi `GET /api/v1/credit-notes/:id/pdf` beserta generator JSX (`src/lib/pdf/CreditNoteDocument.tsx`, `src/lib/pdf/creditNotePdf.ts`), dukungan token unduh bertanda tangan `/api/v1/downloads` -> `/api/v1/dl/[token]` untuk tipe `CREDIT_NOTE_PDF`, watermark pembatalan (`VOID`), dan tombol `"Cetak PDF"` di halaman detail pesanan `src/app/(app)/orders/[id]/page.tsx` dengan isolasi peran serta zero-leakage HPP (`cogsReversed` dirahasiakan dari Sales).
+  - Menambahkan kartu `"Akses Cepat Menu Sales"` pada `src/app/(app)/profile/page.tsx` untuk mempermudah akses cepat menu operasional Sales pada perangkat mobile/tablet.
+  - Menambahkan suite pengujian integrasi `tests/integration/credit-note-pdf.test.ts` serta pembaruan `tests/unit/route-inventory.test.ts` dan `docs/BLUEPRINT.md`.
+- **Skrip Persiapan Standalone Build & Optimasi Binary `sharp`**:
+  - Menambahkan `scripts/prepare-standalone.js` dan skrip `package.json` (`postbuild`, `build:clean`, `start:standalone`) guna menyinkronkan `.next/static` dan `public`, memperbaiki symlink direktori `.next/standalone` menjadi junction di Windows, serta menautkan biner `@img/sharp-*` agar fitur upload/proses gambar berjalan mulus di runtime standalone.
+
+### Fixed & Changed
+
+- **Sanitasi Kredensial E2E & Pengujian Otomatis (Zero Hardcoded Secret Fallback)**:
+  - Mengubah `tests/e2e/core-business-flows.spec.ts`, `playwright.config.ts`, dan `scripts/generate-bentocat-export.ts` agar membaca kredensial pengujian murni dari variabel environment (`E2E_SUPERADMIN_PASSWORD`, `E2E_SALES_PASSWORD`, `SEED_SUPERADMIN_PASSWORD`, `BENTOCAT_INITIAL_PASSWORD`) yang terdokumentasi di `.env.example`.
+- **Pengetatan Isolasi Multi-Tenant, Rate Limit, & Layanan Transaksi Inti**:
+  - Mengunci cakupan `businessId` pada endpoint dan layanan inti (`commission.ts`, `credit-note.ts`, `profit.ts`, `payment.ts`, `reminder.ts`, `purchase-order.ts`, `invoice.ts`, `fileService.ts`, `vendor-ledger.ts`, `snapshot.ts`, `downloadToken.ts`, `downloads/route.ts`, `invoices/[id]/pdf/route.ts`) serta memperkuat pengecekan AST `tests/unit/no-unscoped-lookups.test.ts`.
+  - Memisahkan token bucket pembatas laju permintaan baca (`READ_RATE_LIMIT_PER_MINUTE` 600 req/menit) pada `src/lib/auth/rateLimit.ts` & `src/lib/api/withApi.ts` beserta penyesuaian tes `tests/unit/rate-limit.test.ts`.
+  - Menyempurnakan fallback cetak HTML (`renderPrintableHtmlResponse`), dukungan `TRANSPORT_VENDOR` & penanganan modal/form pada `orders/[id]/page.tsx`, `purchase-orders/[id]/page.tsx`, `OrderForm.tsx`, `payments/page.tsx`, `settings/business/page.tsx`, `audit/page.tsx`, konfigurasi `next.config.ts` (`serverExternalPackages`, `NEXT_STANDALONE`), `tsconfig.json`, `scripts/clean-next.js`, dan `.gitignore`.
+
 ### Fixed
 
 - **Resolusi Duplikasi Rute Pembayaran Komisi & Kanonikalisasi Endpoint (NAV-012)**:

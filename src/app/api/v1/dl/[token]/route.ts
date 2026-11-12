@@ -5,12 +5,15 @@ import { env } from '@/lib/env';
 import { toErrorResponse } from '@/lib/api/withApi';
 import { DomainError } from '@/lib/domain/money';
 import { Role, InvoiceStatus } from '@prisma/client';
+import type { Ctx } from '@/lib/auth/context';
 import { verifyDownloadToken } from '@/lib/pdf/downloadToken';
 import { buildInvoiceSnapshot, InvoiceSnapshot } from '@/lib/pdf/snapshot';
 import { InvoiceDocument } from '@/lib/pdf/InvoiceDocument';
 import { DeliveryNoteDocument, DeliveryNoteData } from '@/lib/pdf/DeliveryNoteDocument';
 import { renderReactToPdf } from '@/lib/pdf/engine';
 import { getLogoDataUri } from '@/lib/pdf/logo';
+import { generateCatalogPdf } from '@/lib/services/catalog';
+import { prepareCreditNotePdf } from '@/lib/pdf/creditNotePdf';
 
 /**
  * GET /api/v1/dl/:token
@@ -45,12 +48,14 @@ export async function GET(
       throw new DomainError('UNAUTHENTICATED', 'Pengguna tidak ditemukan atau non-aktif', 401);
     }
 
+    const scopedBusinessId = user.businessId ?? payload.businessId;
+
     // 3. Evaluasi hak akses dan sajikan dokumen sesuai tipe
     if (payload.type === 'INVOICE_PDF') {
       const invoice = await prisma.invoice.findFirst({
         where: {
           id: payload.id,
-          ...(user.businessId ? { businessId: user.businessId } : {}),
+          ...(scopedBusinessId ? { businessId: scopedBusinessId } : {}),
           deletedAt: null,
         },
         include: {
@@ -122,6 +127,7 @@ export async function GET(
           snapshot = invoice.snapshot as unknown as InvoiceSnapshot;
         } else {
           snapshot = await buildInvoiceSnapshot(prisma, invoice.id, {
+            businessId: invoice.businessId,
             number: invoice.number,
             issueDate: invoice.issueDate ?? undefined,
             dueDate: invoice.dueDate ?? undefined,
@@ -141,6 +147,7 @@ export async function GET(
           snapshot = invoice.snapshot as unknown as InvoiceSnapshot;
         } else {
           snapshot = await buildInvoiceSnapshot(prisma, invoice.id, {
+            businessId: invoice.businessId,
             number: invoice.number,
             theme: invoice.theme ?? undefined,
           });
@@ -163,9 +170,9 @@ export async function GET(
 
       const pdfBuffer = await renderReactToPdf(element);
 
-      // Perbarui log audit dan counter cetak
-      await prisma.invoice.update({
-        where: { id: invoice.id },
+      // Perbarui log audit dan counter cetak dengan tenant scoping
+      await prisma.invoice.updateMany({
+        where: { id: invoice.id, businessId: invoice.businessId },
         data: {
           printedCount: { increment: 1 },
           lastPrintedAt: new Date(),
@@ -201,7 +208,7 @@ export async function GET(
       const order = await prisma.order.findFirst({
         where: {
           id: payload.id,
-          ...(user.businessId ? { businessId: user.businessId } : {}),
+          ...(scopedBusinessId ? { businessId: scopedBusinessId } : {}),
           deletedAt: null,
         },
         include: {
@@ -301,6 +308,70 @@ export async function GET(
         headers: {
           'Content-Type': 'application/pdf',
           'Content-Disposition': `inline; filename="${safeFilename}"`,
+          'Cache-Control': 'private, no-store',
+        },
+      });
+    }
+
+    if (payload.type === 'CATALOG_PDF') {
+      if (!scopedBusinessId) {
+        throw new DomainError(
+          'BAD_REQUEST',
+          'Konteks unit usaha tidak ditemukan pada tautan unduh katalog',
+          400
+        );
+      }
+
+      const dlCtx: Ctx = {
+        user: {
+          id: user.id,
+          role: user.role,
+          name: user.name,
+          businessId: user.businessId,
+        },
+        role: user.role,
+        businessId: scopedBusinessId,
+        sessionId: 'download-token',
+        ip: null,
+      };
+
+      const { buffer, filename } = await generateCatalogPdf(dlCtx, payload.id);
+
+      return new NextResponse(new Uint8Array(buffer), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/pdf',
+          'Content-Disposition': `inline; filename="${filename}"`,
+          'Cache-Control': 'private, no-store',
+        },
+      });
+    }
+
+    if (payload.type === 'CREDIT_NOTE_PDF') {
+      if (!scopedBusinessId) {
+        throw new DomainError(
+          'BAD_REQUEST',
+          'Konteks unit usaha tidak ditemukan pada tautan unduh nota kredit',
+          400
+        );
+      }
+
+      const { element, filename } = await prepareCreditNotePdf({
+        userId: user.id,
+        role: user.role,
+        businessId: scopedBusinessId,
+        strictUserBusinessId: user.businessId,
+        creditNoteId: payload.id,
+        sourceLabel: 'token',
+      });
+
+      const pdfBuffer = await renderReactToPdf(element);
+
+      return new NextResponse(new Uint8Array(pdfBuffer), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/pdf',
+          'Content-Disposition': `inline; filename="${filename}"`,
           'Cache-Control': 'private, no-store',
         },
       });

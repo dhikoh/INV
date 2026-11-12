@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -70,6 +70,25 @@ interface PurchaseOrderDetail {
   items: PoItem[];
 }
 
+function extractApiError(payload: unknown, fallback: string): string {
+  if (payload && typeof payload === 'object') {
+    const obj = payload as { error?: { message?: string }; message?: string };
+    if (obj.error?.message) return obj.error.message;
+    if (obj.message) return obj.message;
+  }
+  return fallback;
+}
+
+function ModalErrorBanner({ message }: { message: string | null }) {
+  if (!message) return null;
+  return (
+    <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-800 text-xs flex items-start gap-2">
+      <AlertTriangle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+      <span className="font-medium">{message}</span>
+    </div>
+  );
+}
+
 export default function PurchaseOrderDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -77,6 +96,7 @@ export default function PurchaseOrderDetailPage() {
 
   const [po, setPo] = useState<PurchaseOrderDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const loadedIdRef = useRef<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -109,15 +129,18 @@ export default function PurchaseOrderDetailPage() {
 
   const fetchDetail = useCallback(async () => {
     try {
-      setLoading(true);
+      if (loadedIdRef.current !== id) {
+        setLoading(true);
+      }
       setError(null);
       const res = await fetch(`/api/v1/purchase-orders/${id}`);
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.message || 'Gagal memuat detail Purchase Order');
+        throw new Error(extractApiError(errData, 'Gagal memuat detail Purchase Order'));
       }
       const data = await res.json();
       setPo(data.data);
+      loadedIdRef.current = id;
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Terjadi kesalahan sistem');
     } finally {
@@ -141,10 +164,10 @@ export default function PurchaseOrderDetailPage() {
       const res = await fetch(`/api/v1/purchase-orders/${id}/order`, {
         method: 'POST',
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        throw new Error(data.message || 'Gagal mengubah status PO menjadi Dipesan');
+        throw new Error(extractApiError(data, 'Gagal mengubah status PO menjadi Dipesan'));
       }
 
       setActionSuccess(`Purchase Order resmi diterbitkan dengan nomor ${data.data.poNo}`);
@@ -176,6 +199,7 @@ export default function PurchaseOrderDetailPage() {
       })
       .filter((it) => it.maxQty > 0);
 
+    setActionError(null);
     setReceiveItems(initialItems);
     setReceiveNotes('');
     setShowReceiveModal(true);
@@ -211,9 +235,9 @@ export default function PurchaseOrderDetailPage() {
         body: JSON.stringify(payload),
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(data.message || 'Gagal memproses penerimaan barang');
+        throw new Error(extractApiError(data, 'Gagal memproses penerimaan barang'));
       }
 
       setActionSuccess('Penerimaan barang berhasil dicatat dan stok fisik bertambah.');
@@ -230,6 +254,7 @@ export default function PurchaseOrderDetailPage() {
   function handleOpenPaymentModal() {
     if (!po) return;
     const unpaid = Math.max(0, po.total - po.paidTotal);
+    setActionError(null);
     setPayAmount(unpaid > 0 ? unpaid : po.total);
     setPayDate(new Date().toISOString().slice(0, 10));
     setPayMethod('TRANSFER');
@@ -268,9 +293,9 @@ export default function PurchaseOrderDetailPage() {
         body: JSON.stringify(payload),
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(data.message || 'Gagal mencatat pembayaran vendor');
+        throw new Error(extractApiError(data, 'Gagal mencatat pembayaran vendor'));
       }
 
       setActionSuccess(`Pembayaran sebesar ${formatRupiah(payAmount)} berhasil dicatat pada buku vendor.`);
@@ -303,9 +328,9 @@ export default function PurchaseOrderDetailPage() {
         body: JSON.stringify({ reason: cancelReason }),
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(data.message || 'Gagal membatalkan PO');
+        throw new Error(extractApiError(data, 'Gagal membatalkan PO'));
       }
 
       setActionSuccess('Purchase Order berhasil dibatalkan.');
@@ -448,7 +473,10 @@ export default function PurchaseOrderDetailPage() {
           {isDraft && (
             <button
               type="button"
-              onClick={() => setShowOrderModal(true)}
+              onClick={() => {
+                setActionError(null);
+                setShowOrderModal(true);
+              }}
               className="min-h-[44px] px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold flex items-center gap-2 shadow-sm transition-colors"
             >
               <Send className="w-4 h-4" />
@@ -485,6 +513,7 @@ export default function PurchaseOrderDetailPage() {
             <button
               type="button"
               onClick={() => {
+                setActionError(null);
                 setCancelReason('');
                 setShowCancelModal(true);
               }}
@@ -814,6 +843,7 @@ export default function PurchaseOrderDetailPage() {
             </div>
 
             <div className="p-4 space-y-3 text-sm text-slate-600">
+              <ModalErrorBanner message={actionError} />
               <p>
                 Apakah Anda yakin ingin menerbitkan PO ini ke vendor{' '}
                 <strong>{po.vendor?.name}</strong>?
@@ -871,6 +901,7 @@ export default function PurchaseOrderDetailPage() {
             </div>
 
             <form onSubmit={handleReceiveGoods} className="p-4 space-y-4">
+              <ModalErrorBanner message={actionError} />
               <p className="text-xs text-slate-600">
                 Masukkan kuantitas fisik riil yang diterima di gudang saat ini. Stok fisik produk akan bertambah otomatis.
               </p>
@@ -995,6 +1026,7 @@ export default function PurchaseOrderDetailPage() {
             </div>
 
             <form onSubmit={handleRecordPayment} className="p-4 space-y-3">
+              <ModalErrorBanner message={actionError} />
               <div>
                 <label className="block text-xs font-medium text-slate-700 mb-1">
                   Vendor
@@ -1121,6 +1153,7 @@ export default function PurchaseOrderDetailPage() {
             </div>
 
             <form onSubmit={handleCancelPo} className="p-4 space-y-3">
+              <ModalErrorBanner message={actionError} />
               <p className="text-xs text-slate-600">
                 Pembatalan PO hanya dapat dilakukan jika belum ada barang yang diterima di gudang.
               </p>

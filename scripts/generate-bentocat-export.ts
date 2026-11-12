@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
@@ -16,7 +17,15 @@ export const OWASP_ARGON2_OPTIONS: argon2.HashOptions = {
 async function main() {
   console.log('===> Memulai pembuatan berkas transfer data resmi BentoCat Premium Cat Litter...');
 
-  const diniaHash = await argon2.hash('bismillahbento', OWASP_ARGON2_OPTIONS);
+  const initialSalesPassword =
+    process.env.BENTOCAT_INITIAL_PASSWORD || process.env.E2E_SALES_PASSWORD;
+  if (!initialSalesPassword) {
+    throw new Error(
+      'Wajib setel BENTOCAT_INITIAL_PASSWORD atau E2E_SALES_PASSWORD pada environment / .env'
+    );
+  }
+
+  const diniaHash = await argon2.hash(initialSalesPassword, OWASP_ARGON2_OPTIONS);
   const now = new Date();
 
   // 1. Business
@@ -60,7 +69,7 @@ async function main() {
   // 3. Users (Dinia - Sales Historis [Nonaktif] & BentoCat - Sales Baru [Aktif])
   const diniaId = 'usr_dinia_sales_01';
   const bentoSalesId = 'usr_bentocat_sales_02';
-  const bentoHash = await argon2.hash('bismillahbento', OWASP_ARGON2_OPTIONS);
+  const bentoHash = await argon2.hash(initialSalesPassword, OWASP_ARGON2_OPTIONS);
 
   const users = [
     {

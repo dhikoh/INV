@@ -38,7 +38,7 @@ export const POST = withApi(
     // 1. Validasi hak akses dan status dokumen (persis seperti endpoint unduh PDF langsung)
     if (body.type === 'INVOICE_PDF') {
       const invoice = await prisma.invoice.findFirst({
-        where: { id: body.id, deletedAt: null },
+        where: { id: body.id, businessId, deletedAt: null },
       });
 
       if (!invoice) {
@@ -76,7 +76,7 @@ export const POST = withApi(
       }
     } else if (body.type === 'DELIVERY_NOTE_PDF') {
       const order = await prisma.order.findFirst({
-        where: { id: body.id, deletedAt: null },
+        where: { id: body.id, businessId, deletedAt: null },
       });
 
       if (!order) {
@@ -96,7 +96,7 @@ export const POST = withApi(
       }
     } else if (body.type === 'CREDIT_NOTE_PDF') {
       const cn = await prisma.creditNote.findFirst({
-        where: { id: body.id, voidedAt: null },
+        where: { id: body.id, businessId, voidedAt: null },
       });
 
       if (!cn) {
@@ -116,7 +116,7 @@ export const POST = withApi(
       }
     } else if (body.type === 'CATALOG_PDF') {
       const catalog = await prisma.catalog.findFirst({
-        where: { id: body.id, deletedAt: null },
+        where: { id: body.id, businessId, deletedAt: null },
       });
 
       if (!catalog) {
@@ -134,6 +134,7 @@ export const POST = withApi(
         type: body.type,
         id: body.id,
         userId: ctx.user.id,
+        businessId,
       },
       env.APP_SECRET,
       300

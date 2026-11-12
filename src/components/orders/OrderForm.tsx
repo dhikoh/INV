@@ -468,23 +468,31 @@ export function OrderForm({
     );
   };
 
-  // Simpan / Kirim formulir
-  const handleSubmitForm = async () => {
-    setFormError(null);
-
+  const validateOrderForm = (): string | null => {
     if (!customerId) {
-      setFormError('Silakan pilih pelanggan terlebih dahulu.');
-      return;
+      return 'Silakan pilih pelanggan terlebih dahulu.';
     }
 
     if (items.length === 0) {
-      setFormError('Pesanan harus memiliki minimal satu baris produk.');
-      return;
+      return 'Pesanan harus memiliki minimal satu baris produk.';
     }
 
     // Validasi alasan di bawah minimal bila ada
     if (hasBelowMin && (!belowMinReason || belowMinReason.trim().length < 5)) {
-      setFormError('Pesanan memuat harga di bawah batas minimal. Alasan bisnis wajib diisi minimal 5 karakter.');
+      return 'Pesanan memuat harga di bawah batas minimal. Alasan bisnis wajib diisi minimal 5 karakter.';
+    }
+
+    return null;
+  };
+
+  // Simpan / Kirim formulir
+  const handleSubmitForm = async () => {
+    setFormError(null);
+
+    const validationError = validateOrderForm();
+    if (validationError) {
+      setShowConfirmModal(false);
+      setFormError(validationError);
       return;
     }
 
@@ -543,6 +551,7 @@ export function OrderForm({
       const json = await res.json();
 
       if (!res.ok) {
+        setShowConfirmModal(false);
         if (res.status === 409) {
           setFormError('Data pesanan telah diperbarui pengguna lain (stale lock). Muat ulang halaman.');
         } else {
@@ -555,6 +564,7 @@ export function OrderForm({
       const savedId = json.data.id;
       router.push(`/orders/${savedId}`);
     } catch {
+      setShowConfirmModal(false);
       setFormError('Terjadi kesalahan jaringan saat menyimpan pesanan.');
     } finally {
       setSubmitting(false);
@@ -900,7 +910,7 @@ export function OrderForm({
                                 [{p.source}] {p.label} (
                                 {p.type === 'PERCENT'
                                   ? `${(p.valueBps || 0) / 100}%`
-                                  : `Rp ${formatRupiah(p.valueAmount || 0)}/unit`}
+                                  : `${formatRupiah(p.valueAmount || 0)}/unit`}
                                 )
                               </option>
                             ))}
@@ -918,7 +928,7 @@ export function OrderForm({
 
                         {previewLine && (
                           <div className="text-slate-600 font-medium">
-                            Subtotal: Rp {formatRupiah(previewLine.lineNet)}
+                            Subtotal: {formatRupiah(previewLine.lineNet)}
                           </div>
                         )}
                       </div>
@@ -1071,7 +1081,7 @@ export function OrderForm({
                 <div className="flex items-center justify-between text-slate-600">
                   <span>Subtotal Barang</span>
                   <span className="font-semibold text-slate-900">
-                    Rp {formatRupiah(previewTotals.subtotal)}
+                    {formatRupiah(previewTotals.subtotal)}
                   </span>
                 </div>
 
@@ -1079,7 +1089,7 @@ export function OrderForm({
                   <div className="flex items-center justify-between text-emerald-600">
                     <span>Total Diskon</span>
                     <span className="font-semibold">
-                      - Rp {formatRupiah(previewTotals.discountTotal)}
+                      -{formatRupiah(previewTotals.discountTotal)}
                     </span>
                   </div>
                 )}
@@ -1087,14 +1097,14 @@ export function OrderForm({
                 <div className="flex items-center justify-between text-slate-600">
                   <span>Barang Bersih</span>
                   <span className="font-semibold text-slate-900">
-                    Rp {formatRupiah(previewTotals.goodsNet)}
+                    {formatRupiah(previewTotals.goodsNet)}
                   </span>
                 </div>
 
                 <div className="flex items-center justify-between text-slate-600">
                   <span>Ongkir Ditagihkan</span>
                   <span className="font-semibold text-slate-900">
-                    Rp {formatRupiah(previewTotals.shippingCharge)}
+                    {formatRupiah(previewTotals.shippingCharge)}
                   </span>
                 </div>
 
@@ -1102,7 +1112,7 @@ export function OrderForm({
                   <div className="flex items-center justify-between text-slate-600">
                     <span>PPN Usaha</span>
                     <span className="font-semibold text-slate-900">
-                      Rp {formatRupiah(previewTotals.ppnAmount)}
+                      {formatRupiah(previewTotals.ppnAmount)}
                     </span>
                   </div>
                 )}
@@ -1110,7 +1120,7 @@ export function OrderForm({
                 <div className="pt-3 border-t border-slate-200 flex items-center justify-between">
                   <span className="font-bold text-slate-900">Grand Total</span>
                   <span className="font-bold text-lg text-indigo-700">
-                    Rp {formatRupiah(previewTotals.grandTotal)}
+                    {formatRupiah(previewTotals.grandTotal)}
                   </span>
                 </div>
 
@@ -1118,12 +1128,12 @@ export function OrderForm({
                   <div className="p-3 bg-indigo-50/60 rounded-lg space-y-1 text-xs">
                     <div className="flex items-center justify-between text-indigo-900 font-semibold">
                       <span>Uang Muka (DP {dpBps / 100}%)</span>
-                      <span>Rp {formatRupiah(previewTotals.dpAmount)}</span>
+                      <span>{formatRupiah(previewTotals.dpAmount)}</span>
                     </div>
                     <div className="flex items-center justify-between text-slate-600">
                       <span>Sisa Pelunasan</span>
                       <span>
-                        Rp {formatRupiah(previewTotals.grandTotal - previewTotals.dpAmount)}
+                        {formatRupiah(previewTotals.grandTotal - previewTotals.dpAmount)}
                       </span>
                     </div>
                   </div>
@@ -1150,7 +1160,15 @@ export function OrderForm({
             <div className="pt-3 border-t border-slate-100 space-y-2">
               <button
                 type="button"
-                onClick={() => setShowConfirmModal(true)}
+                onClick={() => {
+                  const validationError = validateOrderForm();
+                  if (validationError) {
+                    setFormError(validationError);
+                    return;
+                  }
+                  setFormError(null);
+                  setShowConfirmModal(true);
+                }}
                 disabled={submitting || !customerId || items.length === 0}
                 className="w-full py-2.5 px-4 rounded-xl bg-indigo-600 text-white font-semibold text-sm hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition shadow-sm min-h-[44px] flex items-center justify-center gap-2"
               >
@@ -1192,13 +1210,13 @@ export function OrderForm({
                 <div className="flex justify-between text-slate-400">
                   <span>Omzet Pendapatan</span>
                   <span className="text-slate-200">
-                    Rp {formatRupiah(profitSimulation.revenue)}
+                    {formatRupiah(profitSimulation.revenue)}
                   </span>
                 </div>
                 <div className="flex justify-between text-slate-400">
                   <span>Total HPP Modal</span>
                   <span className="text-slate-200">
-                    Rp {formatRupiah(profitSimulation.cogs)}
+                    {formatRupiah(profitSimulation.cogs)}
                   </span>
                 </div>
                 <div className="flex justify-between text-slate-400 pt-2 border-t border-slate-800">
@@ -1208,7 +1226,7 @@ export function OrderForm({
                       profitSimulation.profit >= 0 ? 'text-emerald-400' : 'text-rose-400'
                     }`}
                   >
-                    Rp {formatRupiah(profitSimulation.profit)}
+                    {formatRupiah(profitSimulation.profit)}
                   </span>
                 </div>
               </div>
@@ -1227,7 +1245,7 @@ export function OrderForm({
             <p className="text-sm text-slate-600">
               Apakah Anda yakin ingin menyimpan pesanan ini untuk{' '}
               <strong>{selectedCustomer?.name}</strong> dengan total nilai{' '}
-              <strong>Rp {formatRupiah(previewTotals?.grandTotal || 0)}</strong>?
+              <strong>{formatRupiah(previewTotals?.grandTotal || 0)}</strong>?
             </p>
 
             {hasBelowMin && (

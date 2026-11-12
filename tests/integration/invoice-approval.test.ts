@@ -909,6 +909,7 @@ describe('T3.2: Persetujuan, Penolakan, dan Alokasi Nomor Faktur (Invoice Approv
       const tx = (await import('@/lib/db')).prisma as unknown as TxClient;
 
       const snapshot = await buildInvoiceSnapshot(tx, invoice.id, {
+        businessId: invoice.businessId,
         number: 'TEROBOS/INV/08/11/2026/0001-DP',
         theme: InvoiceTheme.PROFESIONAL,
       });

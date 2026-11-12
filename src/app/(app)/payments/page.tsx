@@ -158,7 +158,7 @@ export default function PaymentsPage() {
       {/* Header Halaman */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-xl md:text-2xl font-bold text-slate-900 tracking-tight">
               Verifikasi Pembayaran
             </h1>
@@ -230,16 +230,16 @@ export default function PaymentsPage() {
                 className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 sm:p-5 hover:border-slate-300 transition-colors space-y-3"
               >
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2 min-w-0">
                     <Link
                       href={`/orders/${p.orderId}`}
-                      className="font-bold text-indigo-600 hover:text-indigo-800 text-sm flex items-center gap-1 group"
+                      className="font-bold text-indigo-600 hover:text-indigo-800 text-sm flex items-center gap-1 group max-w-full"
                     >
-                      <span>{p.orderNo || `Order #${p.orderId.slice(-6)}`}</span>
-                      <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+                      <span className="break-all">{p.orderNo || `Order #${p.orderId.slice(-6)}`}</span>
+                      <ArrowRight className="w-3.5 h-3.5 shrink-0 group-hover:translate-x-0.5 transition-transform" />
                     </Link>
                     <StatusBadge status={p.status} />
-                    <span className="text-xs px-2 py-0.5 rounded font-semibold bg-slate-100 text-slate-700">
+                    <span className="text-xs px-2 py-0.5 rounded font-semibold bg-slate-100 text-slate-700 shrink-0">
                       {p.method}
                     </span>
                   </div>

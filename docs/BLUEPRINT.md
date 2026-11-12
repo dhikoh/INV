@@ -289,6 +289,7 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
 | `GET`      | `/api/v1/orders/:id/credit-notes` | Super Admin, Sales | Daftar seluruh nota kredit untuk pesanan tertentu (isolasi sales) |
 | `GET`      | `/api/v1/credit-notes`         | Super Admin, Sales | Daftar global nota kredit dengan filter pencarian, pelanggan, pesanan, dan penyelesaian |
 | `GET`      | `/api/v1/credit-notes/:id`     | Super Admin, Sales | Detail nota kredit (jaminan anti-bocor cogsReversed/costReversed dirahasiakan dari Sales) |
+| `GET`      | `/api/v1/credit-notes/:id/pdf` | Super Admin, Sales | Unduh/cetak berkas PDF Nota Kredit resmi (isolasi sales, watermark void, bebas bocor HPP) |
 | `POST`     | `/api/v1/credit-notes/:id/void` | Super Admin        | Pembatalan (void) nota kredit (alasan min 5 karakter, rollback settlement & stok fisik VOID_REVERSAL) |
 | `GET`      | `/api/v1/customers/:id/credit-balance` | Super Admin, Sales | Ringkasan saldo deposit kredit pelanggan dan riwayat mutasi kredit |
 | `GET`      | `/api/v1/orders/:id/profit`    | Super Admin        | Rincian profitabilitas pesanan (goodsRevenue, cogs, shippingSubsidy, extraCosts, profit, marginBps, Zero-Leakage) |
@@ -454,9 +455,10 @@ Semua endpoint bisnis berada di `/api/v1/*` dan mewajibkan otorisasi via `requir
 
 - `pnpm lint`: Memastikan kebersihan sintaks ESLint tanpa `any`, tanpa `console.log`, dan tanpa `dangerouslySetInnerHTML`.
 - `pnpm typecheck`: Memastikan kesesuaian tipe data TypeScript Strict (`tsc --noEmit`) tanpa `@ts-ignore`.
-- `pnpm test`: Menjalankan 77 test files Vitest (668 pengujian unit domain dan integrasi database).
-- `pnpm test:e2e`: Menjalankan 35 skenario pengujian Playwright E2E testing (alur order, invoice, theme preview, PWA).
-- `pnpm build`: Memastikan Next.js App Router standalone build sukses (83 rute statis & dinamis).
+- `pnpm test`: Menjalankan 95 test files Vitest (801 pengujian unit domain dan integrasi).
+- `pnpm test:e2e`: Menjalankan 50 skenario pengujian Playwright E2E testing (alur bisnis inti, approval UI, & crawler desktop/mobile).
+- `pnpm build` / `pnpm build:clean`: Memastikan Next.js App Router standalone build sukses (83 rute statis & dinamis) beserta sinkronisasi aset standalone dan biner `sharp` (`scripts/prepare-standalone.js`).
+- `pnpm start:standalone`: Menjalankan bundle `.next/standalone/server.js` secara langsung setelah persiapan symlink/junction standalone.
 
 ### 6. Ekspor & Impor Data Portabel (ADR 0008)
 

@@ -115,6 +115,7 @@ export async function GET(
         snapshot = invoice.snapshot as unknown as InvoiceSnapshot;
       } else {
         snapshot = await buildInvoiceSnapshot(prisma, invoice.id, {
+          businessId: invoice.businessId,
           number: invoice.number,
           issueDate: invoice.issueDate ?? undefined,
           dueDate: invoice.dueDate ?? undefined,
@@ -135,6 +136,7 @@ export async function GET(
     } else if (invoice.status === InvoiceStatus.PENDING_APPROVAL) {
       // Pratinjau draf invoice sebelum disetujui
       snapshot = await buildInvoiceSnapshot(prisma, invoice.id, {
+        businessId: invoice.businessId,
         number: null,
         theme: invoice.theme ?? undefined,
       });
@@ -145,6 +147,7 @@ export async function GET(
         snapshot = invoice.snapshot as unknown as InvoiceSnapshot;
       } else {
         snapshot = await buildInvoiceSnapshot(prisma, invoice.id, {
+          businessId: invoice.businessId,
           number: invoice.number,
           theme: invoice.theme ?? undefined,
         });
@@ -170,8 +173,8 @@ export async function GET(
 
     // Update counter cetak dan log audit jika cetak faktur resmi
     if (isNormalPrint) {
-      await prisma.invoice.update({
-        where: { id: invoice.id },
+      await prisma.invoice.updateMany({
+        where: { id: invoice.id, businessId: invoice.businessId },
         data: {
           printedCount: { increment: 1 },
           lastPrintedAt: new Date(),
@@ -193,7 +196,7 @@ export async function GET(
 
     // Jika parameter format=html diminta secara eksplisit, kirim halaman cetak HTML interaktif
     if (format === 'html' || format === 'print') {
-      const html = renderReactToHtml(element);
+      const html = await renderReactToHtml(element);
       const printableHtml = html.replace(
         '</body>',
         `<script>window.addEventListener('DOMContentLoaded', () => { window.print(); });</script></body>`
@@ -213,7 +216,7 @@ export async function GET(
     } catch {
       // Fallback anggun: jika headless browser Chromium di server belum terkonfigurasi / spawn error / timeout / memory issue,
       // kembalikan tampilan dokumen HTML dengan auto-print agar pengguna tetap dapat mencetak faktur tanpa kegagalan (500)
-      const html = renderReactToHtml(element);
+      const html = await renderReactToHtml(element);
       const printableHtml = html.replace(
         '</body>',
         `<script>window.addEventListener('DOMContentLoaded', () => { window.print(); });</script></body>`

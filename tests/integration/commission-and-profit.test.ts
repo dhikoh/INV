@@ -575,7 +575,7 @@ describe('T3.7: Profit dan Komisi Sales (Integration Tests)', () => {
     order.paidTotal = order.grandTotal;
 
     // Pemicu evaluasi komisi awal (Laba awal: 975.000 - 600.000 = 375.000. Komisi 10% = 37.500)
-    const commEntry = await evaluateOrderCommission(mockTx as any, order.id);
+    const commEntry = await evaluateOrderCommission(mockTx as any, order.id, businessId);
     expect(commEntry).not.toBeNull();
     expect(commEntry?.status).toBe(CommissionStatus.EARNED);
     expect(Number(commEntry?.amount)).toBe(37500);
@@ -622,7 +622,7 @@ describe('T3.7: Profit dan Komisi Sales (Integration Tests)', () => {
     // Baru bayar DP (belum lunas)
     orderA.paidTotal = orderA.dpAmount; // 292.500 < 975.000
 
-    const commA = await evaluateOrderCommission(mockTx as any, orderA.id);
+    const commA = await evaluateOrderCommission(mockTx as any, orderA.id, businessId);
     expect(commA).toBeNull(); // Belum lunas -> belum berhak komisi
 
     // Skenario B: Business setting ON_DP_PAID
@@ -631,7 +631,7 @@ describe('T3.7: Profit dan Komisi Sales (Integration Tests)', () => {
 
     orderB.paidTotal = orderB.dpAmount; // DP terpenuhi
 
-    const commB = await evaluateOrderCommission(mockTx as any, orderB.id);
+    const commB = await evaluateOrderCommission(mockTx as any, orderB.id, businessId);
     expect(commB).not.toBeNull();
     expect(commB?.status).toBe(CommissionStatus.EARNED);
     expect(Number(commB?.amount)).toBe(37500);
@@ -646,7 +646,7 @@ describe('T3.7: Profit dan Komisi Sales (Integration Tests)', () => {
     const order1 = createTestOrder({ id: 'ord_rev_1' });
     order1.paidTotal = order1.grandTotal;
 
-    const c1 = await evaluateOrderCommission(mockTx as any, order1.id);
+    const c1 = await evaluateOrderCommission(mockTx as any, order1.id, businessId);
     expect(Number(c1?.amount)).toBe(19500);
 
     // Mode 2: FIXED_PER_ORDER (Rp 50.000 flat)
@@ -655,7 +655,7 @@ describe('T3.7: Profit dan Komisi Sales (Integration Tests)', () => {
     const order2 = createTestOrder({ id: 'ord_fixed_1' });
     order2.paidTotal = order2.grandTotal;
 
-    const c2 = await evaluateOrderCommission(mockTx as any, order2.id);
+    const c2 = await evaluateOrderCommission(mockTx as any, order2.id, businessId);
     expect(Number(c2?.amount)).toBe(50000);
 
     // Mode 3: TIERED_BY_TARGET
@@ -707,7 +707,7 @@ describe('T3.7: Profit dan Komisi Sales (Integration Tests)', () => {
     });
     order3.paidTotal = order3.grandTotal;
 
-    const c3 = await evaluateOrderCommission(mockTx as any, order3.id);
+    const c3 = await evaluateOrderCommission(mockTx as any, order3.id, businessId);
     expect(c3).not.toBeNull();
     // 85% achievement matches tier_2 (>= 80% minAchievementBps) with 10% rate
     expect(c3?.rateBps).toBe(1000);
@@ -727,7 +727,7 @@ describe('T3.7: Profit dan Komisi Sales (Integration Tests)', () => {
     const order = createTestOrder({ id: 'ord_override_1' });
     order.paidTotal = order.grandTotal;
 
-    const comm = await evaluateOrderCommission(mockTx as any, order.id);
+    const comm = await evaluateOrderCommission(mockTx as any, order.id, businessId);
     // Menggunakan 20% dari laba (375.000) = 75.000, bukan 2% omzet (19.500)
     expect(comm?.mode).toBe(CommissionMode.PERCENT_OF_PROFIT);
     expect(comm?.rateBps).toBe(2000);
@@ -742,7 +742,7 @@ describe('T3.7: Profit dan Komisi Sales (Integration Tests)', () => {
     order.paidTotal = order.grandTotal;
 
     // Komisi awal: 10% dari 375.000 = 37.500
-    await evaluateOrderCommission(mockTx as any, order.id);
+    await evaluateOrderCommission(mockTx as any, order.id, businessId);
     let comm = mockCommissionEntries.find((c) => c.orderId === order.id);
     expect(Number(comm?.amount)).toBe(37500);
 
@@ -759,14 +759,14 @@ describe('T3.7: Profit dan Komisi Sales (Integration Tests)', () => {
     };
     mockCreditNotes.push(cn);
 
-    await recalculateOrderCommission(mockTx as any, order.id);
+    await recalculateOrderCommission(mockTx as any, order.id, businessId);
     comm = mockCommissionEntries.find((c) => c.orderId === order.id);
     expect(Number(comm?.amount)).toBe(29500);
     expect(Number(comm?.basisAmount)).toBe(295000);
 
     // Batalkan (Void) Nota Kredit: laba dan komisi kembali normal
     cn.voidedAt = new Date();
-    await recalculateOrderCommission(mockTx as any, order.id);
+    await recalculateOrderCommission(mockTx as any, order.id, businessId);
     comm = mockCommissionEntries.find((c) => c.orderId === order.id);
     expect(Number(comm?.amount)).toBe(37500);
   });
@@ -776,7 +776,7 @@ describe('T3.7: Profit dan Komisi Sales (Integration Tests)', () => {
     const order = createTestOrder({ id: 'ord_paid_1' });
     order.paidTotal = order.grandTotal;
 
-    await evaluateOrderCommission(mockTx as any, order.id);
+    await evaluateOrderCommission(mockTx as any, order.id, businessId);
     let comm = mockCommissionEntries.find((c) => c.orderId === order.id);
     expect(comm?.status).toBe(CommissionStatus.EARNED);
 
@@ -806,12 +806,12 @@ describe('T3.7: Profit dan Komisi Sales (Integration Tests)', () => {
       createdById: superAdminId,
       createdAt: new Date(),
     });
-    await recalculateOrderCommission(mockTx as any, order.id);
+    await recalculateOrderCommission(mockTx as any, order.id, businessId);
     comm = mockCommissionEntries.find((c) => c.orderId === order.id);
     expect(Number(comm?.amount)).toBe(37500); // Tetap 37.500
 
     // Saat pesanan dibatalkan / dihapus, status komisi menjadi REVERSED
-    await reverseOrderCommission(mockTx as any, order.id, 'Pesanan dibatalkan');
+    await reverseOrderCommission(mockTx as any, order.id, businessId, 'Pesanan dibatalkan');
     comm = mockCommissionEntries.find((c) => c.orderId === order.id);
     expect(comm?.status).toBe(CommissionStatus.REVERSED);
     expect(comm?.reversedAt).not.toBeNull();

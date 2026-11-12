@@ -709,11 +709,11 @@ export default function BusinessSettingsPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 w-full sm:w-auto min-w-0">
           <select
             value={selectedId}
             onChange={(e) => setSelectedId(e.target.value)}
-            className="h-10 px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="h-10 min-w-0 flex-1 sm:flex-initial sm:max-w-xs px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             {businesses.map((b) => (
               <option key={b.id} value={b.id}>
@@ -725,7 +725,7 @@ export default function BusinessSettingsPage() {
           <button
             type="button"
             onClick={() => setShowAddBiz(true)}
-            className="h-10 px-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold flex items-center gap-1.5 transition-colors shadow-sm"
+            className="h-10 px-3 shrink-0 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold flex items-center gap-1.5 transition-colors shadow-sm"
           >
             <Plus className="w-4 h-4" />
             <span className="hidden sm:inline">Usaha Baru</span>
@@ -1114,7 +1114,7 @@ export default function BusinessSettingsPage() {
                 <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
                   Tema Invoice PDF
                 </label>
-                <div className="flex gap-2">
+                <div className="flex flex-col sm:flex-row gap-2">
                   <select
                     value={formData.invoiceTheme || 'PROFESIONAL'}
                     onChange={(e) =>
@@ -1123,7 +1123,7 @@ export default function BusinessSettingsPage() {
                         e.target.value as BusinessDetail['invoiceTheme']
                       )
                     }
-                    className="flex-1 h-11 px-3.5 bg-slate-50 border border-slate-300 rounded-lg text-sm font-semibold text-slate-900"
+                    className="w-full sm:flex-1 min-w-0 h-11 px-3.5 bg-slate-50 border border-slate-300 rounded-lg text-sm font-semibold text-slate-900"
                   >
                     <option value="PROFESIONAL">Profesional (Standar Korporat Bersih)</option>
                     <option value="FAMILY">Family (Hangat & Bersahabat)</option>
@@ -1136,7 +1136,7 @@ export default function BusinessSettingsPage() {
                       href={`/api/v1/businesses/${business.id}/invoice-preview?theme=${formData.invoiceTheme || 'PROFESIONAL'}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 px-3.5 h-11 bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 rounded-lg text-xs font-semibold transition-colors"
+                      className="inline-flex items-center justify-center gap-1.5 px-3.5 h-11 shrink-0 bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 rounded-lg text-xs font-semibold transition-colors"
                       title="Pratinjau PDF Desain Tema Terpilih"
                     >
                       <span>Pratinjau PDF</span>
