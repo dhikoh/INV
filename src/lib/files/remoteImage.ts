@@ -128,6 +128,45 @@ export function isForbiddenIp(ip: string): boolean {
 }
 
 /**
+ * Mengubah URL tautan pratinjau web umum (seperti Google Drive / Dropbox)
+ * menjadi URL berkas biner langsung (direct download stream).
+ */
+export function normalizeDirectMediaUrl(rawUrl: string): string {
+  try {
+    const trimmed = rawUrl.trim();
+    const url = new URL(trimmed);
+
+    // 1. Google Drive: /file/d/:id/view... atau /open?id=:id
+    if (url.hostname === 'drive.google.com' || url.hostname === 'docs.google.com') {
+      let fileId: string | null = null;
+      const fileMatch = url.pathname.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+      if (fileMatch) {
+        fileId = fileMatch[1];
+      } else if (url.searchParams.has('id')) {
+        fileId = url.searchParams.get('id');
+      }
+
+      if (fileId) {
+        return `https://drive.usercontent.google.com/download?id=${fileId}&export=download`;
+      }
+    }
+
+    // 2. Dropbox: dl=0 -> raw=1
+    if (url.hostname === 'www.dropbox.com' || url.hostname === 'dropbox.com') {
+      if (url.searchParams.get('dl') === '0' || !url.searchParams.has('raw')) {
+        url.searchParams.delete('dl');
+        url.searchParams.set('raw', '1');
+        return url.toString();
+      }
+    }
+
+    return trimmed;
+  } catch {
+    return rawUrl;
+  }
+}
+
+/**
  * Validasi awal URL sebelum membuat koneksi:
  * - Wajib protokol https:
  * - Dilarang membawa kredensial (user:pass@)
@@ -193,7 +232,8 @@ export async function fetchRemoteImage(
     );
   }
 
-  const parsedUrl = validateTargetUrl(targetUrl);
+  const effectiveUrl = redirectCount === 0 ? normalizeDirectMediaUrl(targetUrl) : targetUrl;
+  const parsedUrl = validateTargetUrl(effectiveUrl);
 
   return new Promise((resolve, reject) => {
     let settled = false;
@@ -209,18 +249,55 @@ export async function fetchRemoteImage(
     };
 
     // Custom DNS lookup untuk mencegah DNS rebinding saat pembentukan koneksi TLS
+    // Mendukung baik single IP callback maupun happy-eyeballs multiple IP array ({ all: true }) di Node.js
     const customLookup = (
       hostname: string,
-      _opts: dns.LookupOptions,
-      callback: (err: NodeJS.ErrnoException | null, address: string, family: number) => void
+      options:
+        | dns.LookupOptions
+        | ((
+            err: NodeJS.ErrnoException | null,
+            address: string | dns.LookupAddress[],
+            family?: number
+          ) => void),
+      cb?: (
+        err: NodeJS.ErrnoException | null,
+        address: string | dns.LookupAddress[],
+        family?: number
+      ) => void
     ) => {
-      dns.lookup(hostname, { all: false }, (err, address, family) => {
-        if (err) return callback(err, address, family);
-        if (isForbiddenIp(address)) {
-          const forbiddenErr = new Error('FORBIDDEN_IP_DESTINATION');
-          return callback(forbiddenErr, address, family);
+      const opts = (typeof options === 'function' ? {} : options) || {};
+      const callback = (typeof options === 'function' ? options : cb)!;
+
+      dns.lookup(
+        hostname,
+        { ...opts, all: true },
+        (
+          err: NodeJS.ErrnoException | null,
+          addressOrAddresses?: string | dns.LookupAddress[],
+          family?: number
+        ) => {
+        if (err) return callback(err, '');
+
+        let list: dns.LookupAddress[] = [];
+        if (Array.isArray(addressOrAddresses)) {
+          list = addressOrAddresses;
+        } else if (typeof addressOrAddresses === 'string') {
+          list = [{ address: addressOrAddresses, family: family || 4 }];
         }
-        return callback(null, address, family);
+
+        for (const item of list) {
+          if (isForbiddenIp(item.address)) {
+            const forbiddenErr = new Error('FORBIDDEN_IP_DESTINATION');
+            return callback(forbiddenErr, '');
+          }
+        }
+
+        if (opts.all) {
+          return callback(null, list);
+        }
+
+        const first = list[0] || { address: '', family: 4 };
+        return callback(null, first.address, first.family);
       });
     };
 
@@ -251,10 +328,17 @@ export async function fetchRemoteImage(
 
         if (res.statusCode !== 200) {
           req.destroy();
+          const isGoogleDrive =
+            parsedUrl.hostname.includes('google.com') ||
+            parsedUrl.hostname.includes('googleusercontent.com');
+          const hint =
+            isGoogleDrive && (res.statusCode === 404 || res.statusCode === 403)
+              ? ' (Pastikan link Google Drive disetel ke "Siapa saja yang memiliki link" / Public)'
+              : '';
           return safeReject(
             new DomainError(
               'VALIDATION_ERROR',
-              `Server asal mengembalikan status HTTP ${res.statusCode}`,
+              `Server asal mengembalikan status HTTP ${res.statusCode}${hint}`,
               422
             )
           );

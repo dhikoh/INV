@@ -1,5 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { isForbiddenIp, fetchRemoteImage } from '@/lib/files/remoteImage';
+import {
+  isForbiddenIp,
+  fetchRemoteImage,
+  normalizeDirectMediaUrl,
+} from '@/lib/files/remoteImage';
 import { DomainError } from '@/lib/domain/money';
 import https from 'node:https';
 import http from 'node:http';
@@ -144,6 +148,28 @@ describe('Fase 5: Ambil Gambar dari URL & Pertahanan SSRF (Seksi 9 & 10.G)', () 
         code: 'VALIDATION_ERROR',
         status: 422,
       });
+    });
+
+    it('menormalisasi tautan pratinjau Google Drive & Dropbox menjadi tautan biner langsung', () => {
+      // 1. Google Drive /file/d/:id/view
+      expect(
+        normalizeDirectMediaUrl('https://drive.google.com/file/d/1R6ADbYwF1uN2F1eVm07wh_Indnli4U-yom/view?usp=sharing')
+      ).toBe('https://drive.usercontent.google.com/download?id=1R6ADbYwF1uN2F1eVm07wh_Indnli4U-yom&export=download');
+
+      // 2. Google Drive /open?id=:id
+      expect(
+        normalizeDirectMediaUrl('https://drive.google.com/open?id=abc123xyz')
+      ).toBe('https://drive.usercontent.google.com/download?id=abc123xyz&export=download');
+
+      // 3. Dropbox dl=0 -> raw=1
+      expect(
+        normalizeDirectMediaUrl('https://www.dropbox.com/s/sample/cat.png?dl=0')
+      ).toBe('https://www.dropbox.com/s/sample/cat.png?raw=1');
+
+      // 4. URL gambar biasa tidak diubah
+      expect(
+        normalizeDirectMediaUrl('https://example.com/images/cat.jpg')
+      ).toBe('https://example.com/images/cat.jpg');
     });
   });
 
