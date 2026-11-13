@@ -8,6 +8,14 @@ dan proyek ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- **4 Template Visual Katalog, Mode Promo, Identitas Sales & Proteksi Serah Terima Pelanggan**:
+  - **Profil Usaha & Branding PDF**: Menambahkan kolom `website`, `tagline`, dan `instagram` pada profil usaha dengan toggle konfigurasi penampilan di dokumen PDF.
+  - **4 Template Visual Katalog**: Mendukung 4 tata letak visual (`TABLE`, `PROMO_GRID`, `HERO_SALE`, `EDITORIAL`), opsi masa berlaku promo (`NONE` / `PERIOD`), penanda coret harga pokok, dan stempel badge kustom.
+  - **Kebijakan Anti-Fraud Katalog PDF**: Menyembunyikan rekening bank pada katalog penawaran resmi, membatasi kontak hanya ke Sales penanggung jawab, serta penyematan kode QR verifikasi publik langsung ke `/verify/:token`.
+  - **Identitas Lengkap Sales & Berkas KTP**: Menambahkan field nomor telepon, NIK 16 digit tervalidasi, alamat domisili, kontak darurat, catatan identitas, serta endpoint upload dan tinjau berkas KTP aman (`POST/DELETE /api/v1/users/:id/ktp`) yang terisolasi khusus Super Admin.
+  - **Wizard Proteksi Deaktivasi Akun Sales**: Mencegah penonaktifan akun Sales yang memiliki pelanggan aktif tanpa serah terima (`409 HANDOVER_REQUIRED`), dengan opsi pengalihan pelanggan, pesanan terbuka, reminder aktif, dan tugas CRM ke Sales pengganti.
+  - **Suite Pengujian Unit**: Menambahkan `tests/unit/catalog-promo-and-pdf.test.ts` (9 pengujian), `tests/unit/sales-identity-and-handover.test.ts` (5 pengujian), dan simulasi impor integritas BentoCat `tests/unit/transfer/bentocat-import.test.ts`.
+
 - **Fase 1–5 Peningkatan Anti-Fraud, Verifikasi QR Publik, Revisi `IN_PROCESS`, Pengiriman Parsial Multi-Kloter, & Pembayaran Kolektif**:
   - **Fase 1 — Proforma Non-Faktur, Pembatalan Resmi Ber-DP, & Kebijakan Pembayaran Sales (`20261112000004_phase1_proforma_antifraud`)**:
     - Menambahkan endpoint & cetak PDF **Proforma Order** (`GET /api/v1/orders/:id/proforma/pdf`) yang tidak memajukan `DocumentCounter`, menyembunyikan rekening bank secara default (`showBankOnProforma = false`), dan menampilkan disclaimer hukum (`paymentLegalNotice`, template bawaan dapat diubah Super Admin).
@@ -34,6 +42,11 @@ dan proyek ini mengikuti [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   - Menambahkan `scripts/prepare-standalone.js` dan skrip `package.json` (`postbuild`, `build:clean`, `start:standalone`) guna menyinkronkan `.next/static` dan `public`, memperbaiki symlink direktori `.next/standalone` menjadi junction di Windows, serta menautkan biner `@img/sharp-*` agar fitur upload/proses gambar berjalan mulus di runtime standalone.
 
 ### Fixed & Changed
+
+- **Perbaikan Unggah Foto Produk & Penanganan Body Kosong `withApi`**:
+  - **Dukungan Key FormData Ganda (`/images`)**: Memperbaiki `POST /api/v1/products/:id/images` (`src/app/api/v1/products/[id]/images/route.ts`) agar mendukung key field `'files'` maupun `'images'` (baik multiple array maupun fallback single file), serta menyelaraskan input pengiriman dari antarmuka halaman produk `src/app/(app)/products/page.tsx` untuk mencegah error 422 (`Minimal 1 file foto produk wajib diunggah`).
+  - **Penanganan Body Opsional `withApi`**: Memperbarui parser body pada wrapper `src/lib/api/withApi.ts` agar memeriksa keberadaan teks body sebelum `JSON.parse()`. Hal ini mencegah kegagalan HTTP 400 (`JSON tidak valid`) pada request POST tanpa payload saat skema body didefinisikan opsional (`z.optional()`).
+  - **Pembaruan Suite Pengujian**: Menambahkan skenario uji form foto ganda pada `tests/integration/products.test.ts` dan mock relasi pelanggan pada `tests/integration/users.test.ts`.
 
 - **Penutupan Backlog Pemeliharaan Audit (`AUD-PERF-001`, `AUD-DUP-002`, `AUD-DUP-003`, `AUD-DUP-004`), Kompatibilitas `Uint8Array`, & Kebersihan Linter Menyeluruh**:
   - **`AUD-PERF-001` (Anti-N+1 Antrean Pembayaran)**: Mengoptimalkan `GET /api/v1/payments` (`src/app/api/v1/payments/route.ts`) dengan batch query `findMany` konstan (`O(1)`) untuk `order`, `customer`, `user`, dan `invoice` batch alokasi beserta pengujian `tests/unit/payments-queue-batch.test.ts`.

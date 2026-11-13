@@ -156,9 +156,15 @@ export function withApi<B = undefined, Q = undefined>(
 
       let body = undefined as B;
       if (opts.body) {
-        const json = await req.json().catch(() => {
-          throw new DomainError('BAD_REQUEST', 'JSON tidak valid', 400);
-        });
+        const text = await req.text().catch(() => '');
+        let json = undefined;
+        if (text && text.trim().length > 0) {
+          try {
+            json = JSON.parse(text);
+          } catch {
+            throw new DomainError('BAD_REQUEST', 'JSON tidak valid', 400);
+          }
+        }
         body = opts.body.parse(json);
       }
 

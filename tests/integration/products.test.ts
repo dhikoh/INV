@@ -848,6 +848,50 @@ describe('Katalog Produk & Kategori (T1.5 & Seksi 10.3)', () => {
       expect(json.error.message).toContain('Maksimal 8 foto per produk');
     });
 
+    it('mendukung form data dengan field key "images" maupun "files" dan menolak bila kosong (422)', async () => {
+      // 1. Uji form kosong -> minimal 1 file wajib
+      const emptyForm = new FormData();
+      const emptyReq = new NextRequest(
+        `${APP_URL}/api/v1/products/prod_img_test/images`,
+        {
+          method: 'POST',
+          headers: { origin: APP_URL },
+          body: emptyForm,
+        }
+      );
+      const resEmpty = await uploadImagesHandler(emptyReq, {
+        params: Promise.resolve({ id: 'prod_img_test' }),
+      });
+      expect(resEmpty.status).toBe(422);
+      const emptyJson = await resEmpty.json();
+      expect(emptyJson.error.message).toContain('Minimal 1 file foto produk wajib diunggah');
+
+      // 2. Uji key 'images' berhasil diproses dan mengembalikan 201
+      const pngBase64 =
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+      const file = new Blob([Buffer.from(pngBase64, 'base64')], {
+        type: 'image/png',
+      });
+      const imagesForm = new FormData();
+      imagesForm.append('images', file, 'foto.png');
+      imagesForm.append('images', file, 'foto2.png');
+
+      const imagesReq = new NextRequest(
+        `${APP_URL}/api/v1/products/prod_img_test/images`,
+        {
+          method: 'POST',
+          headers: { origin: APP_URL },
+          body: imagesForm,
+        }
+      );
+      const resImages = await uploadImagesHandler(imagesReq, {
+        params: Promise.resolve({ id: 'prod_img_test' }),
+      });
+      expect(resImages.status).toBe(201);
+      const imagesJson = await resImages.json();
+      expect(imagesJson.data.length).toBe(2);
+    });
+
     it('mengubah foto utama (isPrimary) via PATCH', async () => {
       productImages.push(
         {

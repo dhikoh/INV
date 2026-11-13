@@ -266,6 +266,19 @@ vi.mock('@/lib/db', () => ({
         return log;
       }),
     },
+    customer: {
+      findMany: vi.fn(async () => []),
+      updateMany: vi.fn(async () => ({ count: 0 })),
+    },
+    reminder: {
+      updateMany: vi.fn(async () => ({ count: 0 })),
+    },
+    crmTask: {
+      updateMany: vi.fn(async () => ({ count: 0 })),
+    },
+    order: {
+      updateMany: vi.fn(async () => ({ count: 0 })),
+    },
     $transaction: vi.fn(async (cb: (tx: unknown) => Promise<unknown>) => {
       const { prisma } = await import('@/lib/db');
       return cb(prisma);

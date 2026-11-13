@@ -167,12 +167,14 @@ Total Endpoint Handlers: 170
 | 159 | `POST` | `/api/v1/users/[id]/deactivate` | `src/app/api/v1/users/[id]/deactivate/route.ts` | `SUPERADMIN` | users/page.tsx | permissions.test.ts, users.test.ts | **Terhubung Penuh** |
 | 160 | `POST` | `/api/v1/users/[id]/reset-password` | `src/app/api/v1/users/[id]/reset-password/route.ts` | `SUPERADMIN` | users/page.tsx | permissions.test.ts, users.test.ts | **Terhubung Penuh** |
 | 161 | `GET` | `/api/v1/users/[id]` | `src/app/api/v1/users/[id]/route.ts` | `SUPERADMIN` | - | approval-and-invoice-ui.test.ts, business.test.ts | **Yatim (Tanpa Pemanggil UI)** |
-| 162 | `PATCH` | `/api/v1/users/[id]` | `src/app/api/v1/users/[id]/route.ts` | `SUPERADMIN` | - | approval-and-invoice-ui.test.ts, business.test.ts | **Yatim (Tanpa Pemanggil UI)** |
+| 162 | `PATCH` | `/api/v1/users/[id]` | `src/app/api/v1/users/[id]/route.ts` | `SUPERADMIN` | users/page.tsx | approval-and-invoice-ui.test.ts, business.test.ts, sales-identity-and-handover.test.ts | **Terhubung Penuh** |
 | 163 | `DELETE` | `/api/v1/users/[id]` | `src/app/api/v1/users/[id]/route.ts` | `SUPERADMIN` | - | approval-and-invoice-ui.test.ts, business.test.ts | **Yatim (Tanpa Pemanggil UI)** |
-| 164 | `GET` | `/api/v1/vendors` | `src/app/api/v1/vendors/route.ts` | `SUPERADMIN` | new/page.tsx, purchase-orders/page.tsx, [id]/page.tsx | permissions.test.ts, purchase-orders.test.ts | **Terhubung Penuh** |
-| 165 | `POST` | `/api/v1/vendors` | `src/app/api/v1/vendors/route.ts` | `SUPERADMIN` | new/page.tsx, purchase-orders/page.tsx, [id]/page.tsx | permissions.test.ts, purchase-orders.test.ts | **Terhubung Penuh** |
-| 166 | `POST` | `/api/v1/vendors/[id]/payments` | `src/app/api/v1/vendors/[id]/payments/route.ts` | `SUPERADMIN` | [id]/page.tsx, payments/page.tsx, AppShell.tsx | payments.test.ts, permissions.test.ts | **Terhubung Penuh** |
-| 167 | `GET` | `/api/v1/vendors/[id]` | `src/app/api/v1/vendors/[id]/route.ts` | `SUPERADMIN` | - | approval-and-invoice-ui.test.ts, business.test.ts | **Yatim (Tanpa Pemanggil UI)** |
-| 168 | `PATCH` | `/api/v1/vendors/[id]` | `src/app/api/v1/vendors/[id]/route.ts` | `SUPERADMIN` | - | approval-and-invoice-ui.test.ts, business.test.ts | **Yatim (Tanpa Pemanggil UI)** |
-| 169 | `DELETE` | `/api/v1/vendors/[id]` | `src/app/api/v1/vendors/[id]/route.ts` | `SUPERADMIN` | - | approval-and-invoice-ui.test.ts, business.test.ts | **Yatim (Tanpa Pemanggil UI)** |
-| 170 | `GET` | `/api/v1/vendors/[id]/transactions` | `src/app/api/v1/vendors/[id]/transactions/route.ts` | `SUPERADMIN` | [id]/page.tsx | permissions.test.ts | **Terhubung Penuh** |
+| 164 | `POST` | `/api/v1/users/[id]/ktp` | `src/app/api/v1/users/[id]/ktp/route.ts` | `SUPERADMIN` | users/page.tsx | sales-identity-and-handover.test.ts | **Terhubung Penuh** |
+| 165 | `DELETE` | `/api/v1/users/[id]/ktp` | `src/app/api/v1/users/[id]/ktp/route.ts` | `SUPERADMIN` | users/page.tsx | sales-identity-and-handover.test.ts | **Terhubung Penuh** |
+| 166 | `GET` | `/api/v1/vendors` | `src/app/api/v1/vendors/route.ts` | `SUPERADMIN` | new/page.tsx, purchase-orders/page.tsx, [id]/page.tsx | permissions.test.ts, purchase-orders.test.ts | **Terhubung Penuh** |
+| 167 | `POST` | `/api/v1/vendors` | `src/app/api/v1/vendors/route.ts` | `SUPERADMIN` | new/page.tsx, purchase-orders/page.tsx, [id]/page.tsx | permissions.test.ts, purchase-orders.test.ts | **Terhubung Penuh** |
+| 168 | `POST` | `/api/v1/vendors/[id]/payments` | `src/app/api/v1/vendors/[id]/payments/route.ts` | `SUPERADMIN` | [id]/page.tsx, payments/page.tsx, AppShell.tsx | payments.test.ts, permissions.test.ts | **Terhubung Penuh** |
+| 169 | `GET` | `/api/v1/vendors/[id]` | `src/app/api/v1/vendors/[id]/route.ts` | `SUPERADMIN` | - | approval-and-invoice-ui.test.ts, business.test.ts | **Yatim (Tanpa Pemanggil UI)** |
+| 170 | `PATCH` | `/api/v1/vendors/[id]` | `src/app/api/v1/vendors/[id]/route.ts` | `SUPERADMIN` | - | approval-and-invoice-ui.test.ts, business.test.ts | **Yatim (Tanpa Pemanggil UI)** |
+| 171 | `DELETE` | `/api/v1/vendors/[id]` | `src/app/api/v1/vendors/[id]/route.ts` | `SUPERADMIN` | - | approval-and-invoice-ui.test.ts, business.test.ts | **Yatim (Tanpa Pemanggil UI)** |
+| 172 | `GET` | `/api/v1/vendors/[id]/transactions` | `src/app/api/v1/vendors/[id]/transactions/route.ts` | `SUPERADMIN` | [id]/page.tsx | permissions.test.ts | **Terhubung Penuh** |

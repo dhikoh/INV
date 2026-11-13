@@ -536,7 +536,7 @@ export default function ProductsPage() {
       setUploadingImages(true);
       const formData = new FormData();
       for (const f of files) {
-        formData.append('images', f);
+        formData.append('files', f);
       }
 
       const res = await fetch(`/api/v1/products/${editingProduct.id}/images`, {

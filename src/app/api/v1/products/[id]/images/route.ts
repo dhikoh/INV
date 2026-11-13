@@ -30,18 +30,22 @@ export const POST = withApi(
       throw new DomainError('BAD_REQUEST', 'Form data tidak valid', 400);
     });
 
-    const files = formData.getAll('files');
+    // Dukung key 'files' maupun 'images' (baik multiple maupun single)
+    const rawFiles = [
+      ...formData.getAll('files'),
+      ...formData.getAll('images'),
+    ];
     const validFiles: (Blob | File)[] = [];
 
-    for (const f of files) {
+    for (const f of rawFiles) {
       if (typeof f !== 'string' && f && typeof f.arrayBuffer === 'function') {
         validFiles.push(f);
       }
     }
 
     if (validFiles.length === 0) {
-      // Periksa fallback single file
-      const single = formData.get('file');
+      // Periksa fallback single file ('file' atau 'image')
+      const single = formData.get('file') || formData.get('image');
       if (typeof single !== 'string' && single && typeof single.arrayBuffer === 'function') {
         validFiles.push(single);
       }
